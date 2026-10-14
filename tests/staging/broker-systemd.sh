@@ -161,6 +161,7 @@ wait_result 33333333333333333333333333333333 success
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
+systemctl stop linux-panel-update.path
 note 'Stage migration from LEGACY already-installed immutable worker/service'
 # Historical real installer snapshot from a known public main revision.
 LEGACY=cdc48a38d7e89298bd410fe78611f98e03c786f4
