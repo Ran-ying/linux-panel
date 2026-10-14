@@ -103,7 +103,7 @@ sudo bash scripts/install.sh \
 --public-origin https://panel.example.com
 ```
 
-注意：**上面最后一行只是参数示例，必须追加到安装命令，不能单独执行**。`PANEL_PUBLIC_ORIGIN` 是浏览器真实访问源，用于 Host/Origin、Cookie 与 OAuth 验证；**它不是监听地址**。代理必须转发原始 Host、HTTPS scheme 和所有 Web/MCP/OAuth 路径，并负责 TLS 与登录限流。Linux Panel 不会去发现或修改代理配置。
+注意：**上面最后一行只是参数示例，必须追加到安装命令，不能单独执行**。`PANEL_PUBLIC_ORIGIN` 是浏览器真实访问源，用于 Host/Origin、Cookie 与 OAuth 验证；**它不是监听地址**。代理必须转发原始 Host、HTTPS scheme 和所有 Web/MCP/OAuth 路径，并负责 TLS 与登录限流。Linux Panel 不会去发现或修改代理配置。 如果是**面板已安装后**才接入域名/HTTPS，请按[第 6 节](#6-已安装面板接入自有反向代理不重新安装)修改并验证 Origin，无需重新运行安装器。
 
 ### 4.2 全 IPv4 接口监听（受信任网络或自管入口）
 
@@ -219,7 +219,87 @@ sudo systemctl enable --now linux-panel.service
 
 可按需在 `panel.env` 中设置 `PANEL_PUBLIC_ORIGIN=https://真实域名`，但这只是**应用安全校验所用的 Origin**，不负责实现 HTTPS。没有代理时，建议本机/SSH 隧道访问；对外访问由操作者自行管理。
 
-## 6. Web 面板中的监听 Action
+## 6. 已安装面板接入自有反向代理（不重新安装）
+
+本节专门针对**已经完成首次安装、后续才配置自有域名或 HTTPS 入口**的情况。不要再次运行 `install.sh`，也不需要修改面板的监听地址或开放 `4188` 端口。Linux Panel 只提供 HTTP 服务，反向代理和 TLS 由管理员自行配置，可使用 Nginx、Caddy、Traefik 或其他网关；**面板安装器不会发现、安装、修改、测试或重载这些代理**。
+
+### 6.1 先准备好用户自己的 HTTPS 入口
+
+以下所有域名均为**通用占位符**，不是任何使用者的实际部署信息：
+
+- 公网浏览器访问源（Origin）：`https://panel.example.com`。
+- 面板后端：`http://127.0.0.1:4188`（保持默认回环监听）。
+- 代理须转发根路径、`/api/*`、`/oauth/*`、`/.well-known/*` 和 `/mcp`；保留浏览器请求中的原始 `Host`，并正确传递外层 HTTPS 信息。
+- 代理或网关负责有效证书、HTTPS、限流和公网暴露面控制；不能把原始明文 HTTP 端口直接暴露到互联网。若使用 CDN，真实客户 IP 的信任边界也由代理管理员单独配置，切勿无条件信任客户端传来的 `X-Forwarded-For`。
+
+在代理侧完成配置检查与证书验收后，再修改 Linux Panel 的 Origin。具体 Nginx/Certbot/Cloudflare 命令均属于使用者自己的运维，不是本项目的安装步骤或依赖。
+
+### 6.2 更新已安装实例的公开 Origin
+
+**Origin 用于校验浏览器 `Host`、请求 `Origin` 以及 Cookie/OAuth 安全策略，不是 HTTP 监听地址。** 必须填写浏览器实际打开的 HTTPS Origin，格式为 `https://panel.example.com`；如果浏览器使用非默认端口，还应包含端口。不要添加末尾斜杠、URL 路径或多条重复定义。
+
+```bash
+# 1. 先确认 Linux Panel 仍在本机端口运行
+sudo systemctl is-active linux-panel.service
+sudo ss -lntp '( sport = :4188 )'
+
+# 2. 仅备份 Linux Panel 自己的配置文件（不要编辑源代码）
+sudo cp -a -- /etc/linux-panel/panel.env \
+  "/etc/linux-panel/panel.env.backup.$(date +%Y%m%d-%H%M%S)"
+
+# 3. 用管理员编辑器修改，确保只有一条 PANEL_PUBLIC_ORIGIN 定义
+sudoedit /etc/linux-panel/panel.env
+```
+
+在 `/etc/linux-panel/panel.env` 中设置：
+
+```ini
+PANEL_PUBLIC_ORIGIN=https://panel.example.com
+```
+
+只需修改此变量；**保留** `PANEL_LISTEN_HOST=127.0.0.1`、`PANEL_LISTEN_PORT=4188` 和 `PANEL_DATA_DIR` 原有值。保存后检查 Origin 是否恰好一条（不要输出文件中的其他潜在敏感配置）：
+
+```bash
+sudo grep -n '^PANEL_PUBLIC_ORIGIN=' /etc/linux-panel/panel.env
+
+# 4. 显式重启 Linux Panel，读取更新后的 systemd EnvironmentFile
+sudo systemctl restart linux-panel.service
+sudo systemctl is-active linux-panel.service
+```
+
+这次重启**只影响 Linux Panel**，不会重启 Nginx 或其他服务。若已启用 MCP/OAuth，短暂重启会中断进行中的请求，请选择合适的维护窗口。
+
+### 6.3 验证 Host、HTTPS 和浏览器登录
+
+```bash
+# 本机检查：生产环境会严格校验 Host，不能省略这个头
+curl -i -H 'Host: panel.example.com' \
+  http://127.0.0.1:4188/api/auth/status
+
+# 外部 HTTPS 入口：应返回 HTTP 200 和初始化状态 JSON
+curl -i https://panel.example.com/api/auth/status
+
+# 检查服务日志（遇到故障时）
+sudo journalctl -u linux-panel.service -n 80 --no-pager
+```
+
+随后在浏览器打开 `https://panel.example.com`，实际验证登录、退出，以及按需启用的 OAuth/MCP 回调。`/api/auth/status` 的 HTTP 200 只证明基础路由可达，**不能证明登录、权限或 OAuth 全链路已通过**。
+
+典型故障判断：
+
+| 现象 | 重点检查 |
+| --- | --- |
+| `403 Origin not allowed` | `PANEL_PUBLIC_ORIGIN` 是否等于浏览器地址栏的实际 scheme、主机和端口；是否意外重复定义；是否已重启面板 |
+| `421 Unrecognized public host` | 自有代理是否保留了浏览器 `Host`，且它与 Origin 的主机和端口完全一致；本机 `curl` 是否忘记 `-H 'Host: …'` |
+| HTTPS/证书错误，CDN 526 | 检查用户侧网关到源站的证书链与 TLS 模式；这不是通过改面板监听地址解决的问题 |
+| CDN 522/连接失败、502/504 | 检查 DNS、源站防火墙、代理 upstream 是否指向正确回环端口，及 `linux-panel.service` 状态 |
+| OAuth/MCP 连接失败 | 确认代理没有遗漏 `/oauth/*`、`/.well-known/*`、`/mcp`；并核查授权和 MCP 策略是否单独开启 |
+
+**回退**：如果 Origin 配错导致无法登录，可以在 VPS 本地编辑 `/etc/linux-panel/panel.env` 恢复上一个正确值（或从步骤 2 的备份恢复），然后只重启 `linux-panel.service`。不要清空 `/var/lib/linux-panel`、覆盖管理员状态、删除证书或重装整个面板。
+
+---
+
+## 7. Web 面板中的监听 Action
 
 - `panel.listener.status`：只读查看**当前运行**与**已保存（下次启动）**的监听地址/端口和待确认申请。仅 Web 暴露，MCP 不提供更改接口。
 - `panel.listener.request`：提交主机地址+端口变更申请，15 分钟内由同一登录管理员在 Web 重新输入密码确认；启用 TOTP 的账户还需新验证码。
@@ -236,7 +316,7 @@ curl -i http://127.0.0.1:4888/api/auth/status
 
 **服务重启后改用新端口访问**。如无法启动，不要删 `/var/lib/linux-panel`；用 `journalctl -u linux-panel.service -n 80` 分析，并核对保存的监听设置/端口冲突。未来若增加在线“应用配置”动作，必须先设计可回滚的独立服务重启机制，避免锁死管理入口。
 
-## 7. 验收及以后更新
+## 8. 验收及以后更新
 
 ```bash
 sudo systemctl status linux-panel.service --no-pager
