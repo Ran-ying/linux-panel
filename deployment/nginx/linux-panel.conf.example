@@ -10,7 +10,8 @@ limit_req_zone $binary_remote_addr zone=lp_login:10m rate=5r/m;
 server {
     listen 80;
     server_name linux.example.com;
-    return 301 https://$host$request_uri;
+    # Redirect only to the configured canonical host, not a user-supplied Host.
+    return 301 https://linux.example.com$request_uri;
 }
 
 server {
