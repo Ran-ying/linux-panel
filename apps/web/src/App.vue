@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import ActionCard from './components/ActionCard.vue';
+import UpdateManager from './components/UpdateManager.vue';
 import LoginPanel from './components/LoginPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import { buildModuleNavigation } from './module-navigation.js';
@@ -140,12 +141,15 @@ onMounted(async () => {
           <h2>{{ activeGroup.name }}</h2>
           <p>本模块共有 {{ activeGroup.actions.length }} 个可用操作，以下按顺序展示。</p>
         </div>
-        <div v-if="activeGroup.actions.length" class="action-flow">
-          <ActionCard v-for="action in activeGroup.actions" :key="action.id"
-            :action="action" :presentation="presentations[action.id] ?? null"
+        <UpdateManager v-if="activeGroup.id === 'panel'" :csrf="session.csrf"
+          @unauthorized="signOutLocally" />
+        <div v-if="activeGroup.actions.some(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.'))"
+          class="action-flow">
+          <ActionCard v-for="action in activeGroup.actions.filter(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.'))"
+            :key="action.id" :action="action" :presentation="presentations[action.id] ?? null"
             :csrf="session.csrf" @unauthorized="signOutLocally" />
         </div>
-        <section v-else class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>
+        <section v-else-if="activeGroup.id !== 'panel'" class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>
       </div>
     </div>
     <footer>v0.5：TOTP 可选，MCP 和更新权限默认关闭；更新 Action 必须额外获得 Web 批准。</footer>
