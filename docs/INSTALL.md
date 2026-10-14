@@ -52,6 +52,47 @@ sudo bash scripts/install.sh --preflight --domain panel-test.example.com \
 而是提供现有的正确证书，安装器会验证并避免覆盖同名网站。
 **预检通过不等于批准安装**；共享主机仍应在变更窗口及备份就绪后执行。
 
+## 0a. 共享主机：显式环境准备辅助脚本
+
+完成只读预检后，若 BLOCK 报告 Node.js 18 或内存余量不足，**不要替换已有 Node 或停止现有服务**。
+新辅助脚本 `scripts/prepare-host.sh` 默认只展示准备计划；只有明确加上 `--apply` 才会修改服务器。
+它**不会被 install.sh 自动调用**。
+
+先只读检查、查看准备计划：
+
+```bash
+bash scripts/prepare-host.sh --check
+bash scripts/prepare-host.sh --install-node
+bash scripts/prepare-host.sh --create-swap 1024
+```
+
+按需独立准备 Node.js 24（当前固定 v24.21.0，官方 nodejs.org HTTPS 下载并用官方 SHA256 清单验证；
+只支持 Linux x86_64、aarch64）：
+
+```bash
+sudo bash scripts/prepare-host.sh --install-node --apply
+/opt/node24/bin/node -v
+PATH=/opt/node24/bin:$PATH /opt/node24/bin/npm -v
+node -v  # 原系统 Node 保持不变
+```
+
+只有确认 VPS 有足够空间、磁盘 I/O 延迟可接受、允许交换页落盘后，才按需创建 **1 GiB** Swap：
+
+```bash
+sudo bash scripts/prepare-host.sh --create-swap 1024 --apply
+swapon --show
+```
+
+Swap 固定使用 `/swapfile-linux-panel`，仅支持 ext4/XFS，权限 0600，启用后写入
+`/etc/fstab` 持久化且留存独立备份。已有文件、磁盘不足（必须剩余至少 2 GiB）
+或不支持的文件系统均拒绝处理。Swap **不是 RAM 扩容**：遇到大量缺页，可能影响 TURN/实时服务延迟；
+应优先扩容 RAM 或把构建任务移到 CI。不要在业务繁忙时直接执行写入操作。
+
+随后重新执行第一节的 `--preflight`，为 Node 24 加上
+`--node-bin /opt/node24/bin/node`。通过后再决定是否正式安装。
+当前 `install.sh` 仍需在目标机执行 npm 构建，低内存主机可能很慢；
+不能把预检通过理解为真实构建与 Broker 已验收。
+
 ## A. 完整手动部署
 
 ### 1. 基础软件
@@ -61,7 +102,7 @@ sudo apt update
 sudo apt install -y ca-certificates curl git nginx certbot
 ```
 
-安装 **系统级 Node.js 24 LTS**（不要使用 root 私有的 NVM）。如果发行版不提供 Node 24，可以使用 NodeSource，**先审查下载的安装脚本**：
+在独立空机器上可安装 **系统级 Node.js 24 LTS**（不要使用 root 私有的 NVM）。**共享主机有 Node.js/PM2 服务时，优先使用上面的独立 Node24 辅助脚本。不要安装 NodeSource 系统包替换现有 Node。**如果发行版不提供 Node 24，可以使用 NodeSource，**先审查下载的安装脚本**：
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource-24.sh

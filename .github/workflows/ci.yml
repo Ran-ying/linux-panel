@@ -17,7 +17,10 @@ jobs:
           cache: npm
       - name: Validate deploy script syntax
         run: |
-          bash -n scripts/install.sh scripts/install-preflight.sh scripts/update.sh scripts/install-update-broker.sh scripts/update-worker.sh
+          bash -n scripts/install.sh scripts/install-preflight.sh scripts/prepare-host.sh scripts/update.sh scripts/install-update-broker.sh scripts/update-worker.sh
+          bash scripts/prepare-host.sh --help
+          bash scripts/prepare-host.sh --check
+          bash scripts/prepare-host.sh --install-node
           bash scripts/install.sh --help
           bash scripts/install.sh --preflight --domain ci.example.invalid --no-nginx
       - name: Install dependencies
