@@ -21,6 +21,9 @@ test('updater disabled unless explicitly opted in',async t=>{
   const store=new StateStore(join(root,'state.json'));
   const controller=createUpdateController({store,root,auth:new AuthService(store),enabled:false});
   await assert.rejects(controller.request({userId:'u',clientId:'c'}),{statusCode:404});
+  const status=await controller.status();
+  assert.equal(status.brokerEnabled,false);
+  assert.equal(status.pending,null);
 });
 test('MCP may only propose the pinned origin/main SHA; approval requires Web password and optional TOTP',async t=>{
   const dir=await mkdtemp(join(tmpdir(),'lp-update-'));

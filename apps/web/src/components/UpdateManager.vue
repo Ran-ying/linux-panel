@@ -31,7 +31,7 @@ async function refresh(){
   try {
     const payload=await call('/api/actions/panel.update.status/execute',{input:{}});
     update.value=payload.result;
-    enabled.value=true;
+    enabled.value=payload.result.brokerEnabled===true;
     const factor=await fetch('/api/auth/totp');
     if(factor.status===401)emit('unauthorized');
     if(factor.ok)totpRequired.value=(await factor.json()).enabled===true;
@@ -64,7 +64,7 @@ function request(){
     sha.value='';
     inspection.value=null;
     message.value=value.status==='up_to_date'?'当前 SHA 已是目标版本':'更新申请已创建';
-  },'更新申请已提交，请独立核对并批准');
+  },'申请已处理；若需部署，请核对并批准待处理提交');
 }
 function cancel(){
   if(!update.value?.pending || update.value.pending.approved)return;
@@ -99,15 +99,15 @@ onMounted(refresh);
     <p class="muted small">平台级维护功能，不依赖 MCP 是否启用。所有检查和申请经由统一 ActionEngine；只有 Web 管理员可独立审批。TOTP 完全可选。</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="message" role="status" class="notice success-notice">{{ message }}</p>
-    <p v-if="!enabled" class="notice">受限更新 Broker 尚未启用。需先由管理员安全安装，不可绕过旧版 systemd 限制。Web/MCP 均不能直接执行 root 更新。</p>
-    <template v-else>
+    <p v-if="!enabled" class="notice">受限更新 Broker 尚未启用。仍可只读检查 Git 更新，但不能申请或执行部署；不可绕过旧版 systemd 隔离要求。</p>
+    <template>
       <label for="panel-target-sha">目标完整 Git SHA（可选）</label>
       <input id="panel-target-sha" v-model.trim="sha" :disabled="busy"
         maxlength="40" spellcheck="false" autocapitalize="off" autocomplete="off"
         placeholder="留空以查询 origin/main，私有仓库可填完整 SHA"/>
       <div class="toolbar">
         <button type="button" :disabled="busy || checking" @click="check">检查更新</button>
-        <button type="button" class="primary" :disabled="busy || checking || !!update?.pending" @click="request">申请更新</button>
+        <button type="button" class="primary" :disabled="!enabled || busy || checking || !!update?.pending" @click="request">申请更新</button>
       </div>
       <p v-if="inspection">
         检查结果：{{ inspection.status === 'up_to_date' ? '已经是目标版本' : '存在候选更新' }}
@@ -140,7 +140,7 @@ onMounted(refresh);
           </template>
           <p v-else class="muted small">未启用 TOTP：管理员密码是唯一的二次确认因素。</p>
           <div class="toolbar">
-            <button type="button" class="primary" :disabled="busy || checking || !password || !exactConfirmed || (totpRequired && !code)"
+            <button type="button" class="primary" :disabled="!enabled || busy || checking || !password || !exactConfirmed || (totpRequired && !code)"
               @click="approve">独立批准并触发更新</button>
             <button type="button" :disabled="busy || checking" @click="cancel">撤销申请</button>
           </div>

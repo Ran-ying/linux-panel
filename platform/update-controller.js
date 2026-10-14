@@ -30,7 +30,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     return {from,target};
   };
   const check=async({targetSha}={})=>{
-    ensure();
+    // Safe read-only check even before the root Broker has been installed.
     const {from,target}=await revisions(targetSha);
     return {status:from===target?'up_to_date':'update_available',
       currentSha:from,targetSha:target,source:targetSha===undefined?'origin_main':'supplied_sha'};
@@ -44,14 +44,13 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     } catch(e) {if(e.code==='ENOENT')return null;throw e;}
   };
   const status=async()=>{
-    ensure();
     const state=await store.snapshot();
     const record=state.updateRequest;
     const lastResult=await readResult();
     // A completed broker result supersedes a previously approved proposal.
     // It must not appear to be queued forever or block subsequent updates.
     const finished=record?.approved===true && lastResult?.id===record.id;
-    return {pending:record && record.expiresAt>Date.now() && !finished?
+    return {brokerEnabled:enabled,pending:record && record.expiresAt>Date.now() && !finished?
       {id:record.id,from:record.from,target:record.target,createdAt:record.createdAt,
         expiresAt:new Date(record.expiresAt).toISOString(),approved:record.approved===true}:null,
       lastResult};
@@ -108,7 +107,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     return {ok:true,id,target:pending.target,status:'queued'};
   };
   const cancel=async({identity,id})=>{
-    ensure();
+    // Revocation must remain possible even if the operator disables the Broker.
     if(!ID.test(id??''))throw error('Invalid update request ID');
     await store.mutate(state=>{
       const q=state.updateRequest;

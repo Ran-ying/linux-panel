@@ -13,6 +13,7 @@ export function registerUpdateActions(registry, controller) {
     exposure: { web: true, mcp: false },
     inputSchema: {type:'object',properties:{},additionalProperties:false},
     outputSchema: {type:'object',properties:{
+      brokerEnabled:{type:'boolean'},
       pending:{type:['object','null'],properties:{
         id:{type:'string'},from:{type:'string'},target:{type:'string'},
         createdAt:{type:'string'},expiresAt:{type:'string'},approved:{type:'boolean'}
@@ -20,7 +21,7 @@ export function registerUpdateActions(registry, controller) {
       lastResult:{type:['object','null'],properties:{
         id:{type:'string'},sha:{type:'string'},status:{type:'string'},at:{type:'string'}
       },required:['id','sha','status','at'],additionalProperties:false}
-    },required:['pending','lastResult'],additionalProperties:false},
+    },required:['brokerEnabled','pending','lastResult'],additionalProperties:false},
     createPlan:async()=>[{type:'local-state',description:'读取面板更新申请和只读更新状态，不执行任何更新'}],
     execute:async()=>controller.status()
   });

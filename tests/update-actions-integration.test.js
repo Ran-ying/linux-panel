@@ -54,6 +54,7 @@ test('registered update Actions are available through Web discovery and validate
   const status=await app.inject({method:'POST',url:'/api/actions/panel.update.status/execute',
     headers:{cookie,'x-panel-csrf':csrf,origin},payload:{input:{}}});
   assert.equal(status.statusCode,200,status.body);
+  assert.equal(status.json().result.brokerEnabled,true);
   assert.equal(status.json().result.pending.id,response.json().result.id);
   assert.equal(status.json().result.lastResult,null);
   const check=await app.inject({method:'POST',url:'/api/actions/panel.update.check/execute',
