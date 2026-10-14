@@ -33,87 +33,12 @@ export function registerUpdateActions(registry, controller) {
     permission: 'panel:read',
     exposure: {web:true,mcp:false},
     inputSchema:{type:'object',additionalProperties:false,properties:{
-      targetSha:{type:'string',pattern:'^[a-f0-9]{40},
-    title: '申请更新 Linux Panel',
-    description: '申请将 Linux Panel 更新到受信任的 origin/main 指定提交；必须由管理员在 Web 中另外确认。私有仓库可填写最新完整 Git SHA。',
-    explain: '这是非执行性写 Action：只创建有时效的更新申请，不直接拉取代码、重启服务或运行 root 命令。MCP 另需 panel:update Scope 及更新开关。',
-    kind: 'write',
-    executionPolicy: 'proposal-only',
-    permission: 'panel:update',
-    exposure: {web:true,mcp:true},
-    inputSchema:{type:'object',additionalProperties:false,properties:{
       targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'}
-    }},
-    outputSchema:{type:'object',properties:{
-      status:{type:'string',enum:['up_to_date','approval_required']},
-      sha:{type:'string'},id:{type:'string'},from:{type:'string'},
-      target:{type:'string'},expiresAt:{type:'string'},instructions:{type:'string'}
-    },required:['status'],additionalProperties:false},
-    createPlan:async()=>[{type:'approval-proposal',description:'只检查可信 main 的提交并生成待人工批准的申请，实际部署必须单独批准'}],
-    execute:async(input,context)=>{
-      if(typeof context.userId!=='string'||!context.userId) {
-        throw Object.assign(new Error('Unauthorized update proposal'),{statusCode:403});
-      }
-      return controller.request({userId:context.userId,clientId:context.clientId??'web',targetSha:input.targetSha});
-    }
-  });
-}
-}
     }},
     outputSchema:{type:'object',properties:{
       status:{type:'string',enum:['up_to_date','update_available']},
-      currentSha:{type:'string',pattern:'^[a-f0-9]{40},
-    title: '申请更新 Linux Panel',
-    description: '申请将 Linux Panel 更新到受信任的 origin/main 指定提交；必须由管理员在 Web 中另外确认。私有仓库可填写最新完整 Git SHA。',
-    explain: '这是非执行性写 Action：只创建有时效的更新申请，不直接拉取代码、重启服务或运行 root 命令。MCP 另需 panel:update Scope 及更新开关。',
-    kind: 'write',
-    executionPolicy: 'proposal-only',
-    permission: 'panel:update',
-    exposure: {web:true,mcp:true},
-    inputSchema:{type:'object',additionalProperties:false,properties:{
-      targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'}
-    }},
-    outputSchema:{type:'object',properties:{
-      status:{type:'string',enum:['up_to_date','approval_required']},
-      sha:{type:'string'},id:{type:'string'},from:{type:'string'},
-      target:{type:'string'},expiresAt:{type:'string'},instructions:{type:'string'}
-    },required:['status'],additionalProperties:false},
-    createPlan:async()=>[{type:'approval-proposal',description:'只检查可信 main 的提交并生成待人工批准的申请，实际部署必须单独批准'}],
-    execute:async(input,context)=>{
-      if(typeof context.userId!=='string'||!context.userId) {
-        throw Object.assign(new Error('Unauthorized update proposal'),{statusCode:403});
-      }
-      return controller.request({userId:context.userId,clientId:context.clientId??'web',targetSha:input.targetSha});
-    }
-  });
-}
-},
-      targetSha:{type:'string',pattern:'^[a-f0-9]{40},
-    title: '申请更新 Linux Panel',
-    description: '申请将 Linux Panel 更新到受信任的 origin/main 指定提交；必须由管理员在 Web 中另外确认。私有仓库可填写最新完整 Git SHA。',
-    explain: '这是非执行性写 Action：只创建有时效的更新申请，不直接拉取代码、重启服务或运行 root 命令。MCP 另需 panel:update Scope 及更新开关。',
-    kind: 'write',
-    executionPolicy: 'proposal-only',
-    permission: 'panel:update',
-    exposure: {web:true,mcp:true},
-    inputSchema:{type:'object',additionalProperties:false,properties:{
-      targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'}
-    }},
-    outputSchema:{type:'object',properties:{
-      status:{type:'string',enum:['up_to_date','approval_required']},
-      sha:{type:'string'},id:{type:'string'},from:{type:'string'},
-      target:{type:'string'},expiresAt:{type:'string'},instructions:{type:'string'}
-    },required:['status'],additionalProperties:false},
-    createPlan:async()=>[{type:'approval-proposal',description:'只检查可信 main 的提交并生成待人工批准的申请，实际部署必须单独批准'}],
-    execute:async(input,context)=>{
-      if(typeof context.userId!=='string'||!context.userId) {
-        throw Object.assign(new Error('Unauthorized update proposal'),{statusCode:403});
-      }
-      return controller.request({userId:context.userId,clientId:context.clientId??'web',targetSha:input.targetSha});
-    }
-  });
-}
-},
+      currentSha:{type:'string',pattern:'^[a-f0-9]{40}$'},
+      targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'},
       verifiedRemote:{type:'boolean'}
     },required:['status','currentSha','targetSha','verifiedRemote'],additionalProperties:false},
     createPlan:async()=>[{type:'git-read',description:'读取本地 HEAD 和主分支 SHA，不修改仓库'}],
