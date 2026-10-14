@@ -37,7 +37,7 @@ test('invalid listener address and privileged port fail before installation',()=
 test('existing proxy flags no longer impact installer',()=>{
   const r=run('--preflight','--no-nginx');
   assert.equal(r.status,1);
-  assert.match(r.stderr,/Unknown option --no-nginx/);
+  assert.match(r.stderr,/Unknown option: --no-nginx/);
   const text=readFileSync(script,'utf8');
   assert.doesNotMatch(text,/nginx\s+-t|systemctl reload nginx|\/etc\/nginx/);
 });
