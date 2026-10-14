@@ -54,7 +54,8 @@ test('MCP may only propose the pinned origin/main SHA; approval needs browser pa
   const trigger=join(dir,'trigger'),result=join(dir,'result');
   const ctrl=createUpdateController({store,auth,root:repo,enabled:true,
     triggerPath:trigger,resultPath:result});
-  const response=await ctrl.request({userId:identity.user.id,clientId:'client-test'});
+  await assert.rejects(ctrl.request({userId:identity.user.id,clientId:'client-test',targetSha:'not-a-sha'}),{statusCode:400});
+  const response=await ctrl.request({userId:identity.user.id,clientId:'client-test',targetSha:target});
   assert.deepEqual({from:response.from,target:response.target,status:response.status},
     {from:initial,target,status:'approval_required'});
   await assert.rejects(ctrl.request({userId:identity.user.id,clientId:'client-test'}),{statusCode:409});

@@ -15,6 +15,7 @@ const forbidden = () => Object.assign(new Error('Insufficient permissions'), { s
 export class AuthService {
   #failures = new Map();
   #accountFailures = new Map();
+  #stepUpFailures = new Map();
   constructor(store) { this.store = store; }
 
   async isInitialized() {
@@ -154,6 +155,19 @@ export class AuthService {
 
 
   async verifyStepUp(identity,password,code) {
+    const key=identity.session.id;
+    const now=Date.now();
+    for(const [id,times] of this.#stepUpFailures){
+      const fresh=times.filter(t=>now-t<LOGIN_WINDOW);
+      if(fresh.length)this.#stepUpFailures.set(id,fresh);
+      else this.#stepUpFailures.delete(id);
+    }
+    if(this.#stepUpFailures.size>=MAX_FAILURE_KEYS && !this.#stepUpFailures.has(key))
+      throw Object.assign(new Error('Step-up capacity exceeded'),{statusCode:429});
+    const attempts=this.#stepUpFailures.get(key)??[];
+    if(attempts.length>=5)throw Object.assign(new Error('Too many verification attempts'),{statusCode:429});
+    // Charge each attempt (including password verification) to limit online guessing.
+    this.#stepUpFailures.set(key,[...attempts,now]);
     const user=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
     if(!user?.totp?.enabled || !await verifyPassword(password,user.passwordHash))
       throw forbidden();
@@ -165,6 +179,7 @@ export class AuthService {
       current.totp.lastCounter=counter;
       addAudit(state,'auth.stepup.verified',identity.user.id);
     });
+    this.#stepUpFailures.delete(key);
   }
 
   async totpStatus(identity) {

@@ -1,7 +1,6 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
-import { join } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { addAudit } from '../../platform/state-store.js';
 import { mcpPolicy } from '../../platform/mcp-policy.js';
@@ -36,7 +35,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
         expiresAt:new Date(record.expiresAt).toISOString(),approved:record.approved===true}:null,
       lastResult:await readResult()};
   };
-  const request=async({userId,clientId})=>{
+  const request=async({userId,clientId,targetSha})=>{
     const state=await store.snapshot();
     await ensure(state);
     if(state.updateRequest?.approved && state.updateRequest.expiresAt>Date.now())
@@ -45,11 +44,14 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     // No shell, branch, URL or revision arguments accepted from an AI client.
     // Git remote must be provisioned and trusted separately by the operator.
     const opts={timeout:15000,maxBuffer:4096,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}};
-    const [{stdout:remote},{stdout:current}]=await Promise.all([
-      execFile('git',['-C',root,'ls-remote','--exit-code','origin','refs/heads/main'],opts),
-      execFile('git',['-C',root,'rev-parse','HEAD'],opts)
-    ]);
-    const target=remote.trim().split(/\s+/)[0],from=current.trim();
+    if (targetSha !== undefined && !SHA.test(targetSha)) throw error('Invalid target Git SHA');
+    const {stdout:current}=await execFile('git',['-C',root,'rev-parse','HEAD'],opts);
+    const from=current.trim();
+    // When the repo is private, the Web process deliberately lacks GitHub credentials.
+    // An AI client can supply the exact full SHA it read from the GitHub connector.
+    // The separate broker later verifies it equals the trusted remote HEAD.
+    const target=targetSha ?? (await execFile('git',['-C',root,'ls-remote','--exit-code','origin','refs/heads/main'],opts))
+      .stdout.trim().split(/\s+/)[0];
     if(!SHA.test(target)||!SHA.test(from))throw error('Invalid Git commit identity',502);
     if(target===from) return {status:'up_to_date',sha:from};
     const record={id:randomBytes(16).toString('hex'),from,target,createdAt:new Date().toISOString(),

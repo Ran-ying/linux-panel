@@ -16,8 +16,11 @@ record(){
   local status="$1"
   printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$RESULT"
   chmod 0600 "$RESULT"
+  chown linuxpanel:linuxpanel "$RESULT"
 }
 [[ "$#" -eq 0 && "$EUID" -eq 0 ]] || exit 2
+exec 9> "$STATE/update-worker.lock"
+flock -n 9 || exit 0
 [[ -f "$MARKER" && ! -L "$MARKER" && ! -e "$PROCESSING" ]] || exit 0
 mv -- "$MARKER" "$PROCESSING"
 trap 'rm -f -- "$PROCESSING"' EXIT
@@ -65,6 +68,15 @@ rollback(){
 }
 if ! build;then rollback;exit 1;fi
 if ! systemctl start linux-panel.service || ! systemctl is-active --quiet linux-panel.service;then
+  rollback
+  exit 1
+fi
+# Probe a protected-host-compatible public status endpoint after restart.
+ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' /etc/linux-panel/panel.env | tail -n 1)"
+HOST="${ORIGIN#https://}"
+if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]] ||
+   ! curl --silent --show-error --fail --max-time 8 -H "Host: $HOST" \
+    http://127.0.0.1:4188/api/auth/status >/dev/null;then
   rollback
   exit 1
 fi

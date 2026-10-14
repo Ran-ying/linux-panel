@@ -7,13 +7,14 @@ Wants=network-online.target
 Type=oneshot
 User=root
 Group=root
+Environment=PATH=/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/local/libexec/linux-panel-update-worker
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/opt/linux-panel /var/lib/linux-panel
+ReadWritePaths=/opt/linux-panel /var/lib/linux-panel /var/lib/linux-panel-updater
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID
 RestrictSUIDSGID=true
 TimeoutStartSec=900

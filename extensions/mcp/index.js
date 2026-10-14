@@ -53,8 +53,8 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     if (process.env.PANEL_UPDATER_ENABLED === '1' &&
         mcpPolicy(snapshot).allowUpdates === true && permitted.has('panel:update')) {
       server.registerTool('panel.update.request', {
-        description:'Propose updating Linux Panel to the latest fixed origin/main commit. Requires separate Web approval; never executes changes by itself.',
-        inputSchema:z.object({}).strict(),
+        description:'Propose updating Linux Panel only to the fixed origin/main commit (optional targetSha for private repos). Requires separate Web approval; never executes changes by itself.',
+        inputSchema:z.object({targetSha:z.string().regex(/^[0-9a-f]{40}$/).optional()}).strict(),
         annotations:{readOnlyHint:false,destructiveHint:false}
       },async(_input,ctx)=>{
         const verified=ctx.http?.authInfo??authInfo;
@@ -63,7 +63,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
            !mcpPolicy(await store.snapshot()).allowUpdates)
           return {isError:true,content:[{type:'text',text:'Not authorized for update proposals'}]};
         try {
-          const result=await updates.request({userId:live.userId,clientId:live.clientId});
+          const result=await updates.request({userId:live.userId,clientId:live.clientId,targetSha:_input.targetSha});
           return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result};
         }catch(e){return {isError:true,content:[{type:'text',text:e.message}]};}
       });
