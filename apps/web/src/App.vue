@@ -92,7 +92,7 @@ onMounted(async () => {
   <LoginPanel v-else-if="!session" :initialized="initialized" @signed-in="signIn" />
   <main v-else class="layout">
     <header>
-      <div class="eyebrow">LINUX PANEL / V0.3</div>
+      <div class="eyebrow">LINUX PANEL / V0.4</div>
       <div class="header-row">
         <h1>{{ settings.panelName || 'Linux Panel' }}</h1>
         <div class="account-area">
@@ -136,6 +136,6 @@ onMounted(async () => {
         <section v-else class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>
       </div>
     </div>
-    <footer>v0.3 身份认证与内置设置开发版；尚未开放 OAuth/MCP，禁止未经安全验收直接公网部署。</footer>
+    <footer>v0.4 开发阶段：MCP 扩展默认关闭。OAuth 完成前，MCP 拒绝所有客户端访问。</footer>
   </main>
 </template>

@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { ActionRegistry } from '../../../core/action-registry.js';
 import { ActionEngine } from '../../../core/action-engine.js';
 import { ModuleManager } from '../../../core/module-manager.js';
@@ -56,6 +57,18 @@ export async function createApp({
   const engine = new ActionEngine(registry);
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
   const secure = production || publicOrigin.startsWith('https://');
+  // Optional transport extensions are a separate lifecycle from business Actions.
+  // Old v0.3 state remains valid and MCP starts disabled. Auth is platform-owned.
+  const mcpPath = resolve(root, 'extensions/mcp/index.js');
+  if (existsSync(mcpPath)) {
+    const { registerMcpExtension } = await import(pathToFileURL(mcpPath).href);
+    await registerMcpExtension(app, {
+      store, auth, registry, engine,
+      // No OAuth code exists at v0.4.1: all /mcp requests fail closed.
+      authorizeBearer: null,
+      resourceUrl: publicOrigin ? publicOrigin + '/mcp' : null
+    });
+  }
 
   app.addHook('onRequest', async (request, reply) => {
     const path = request.url.split('?')[0];

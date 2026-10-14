@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue';
+import McpSettings from './McpSettings.vue';
 
 const props = defineProps({
   csrf: { type: String, required: true },
@@ -163,9 +164,6 @@ onMounted(reload);
       <p v-if="!audit.length" class="muted">暂无审计记录</p>
     </section>
 
-    <section class="settings-section">
-      <h3>MCP 扩展</h3>
-      <p class="muted">MCP 扩展与 OAuth 授权将在 v0.4 实现；当前没有对外开放 MCP 接口。</p>
-    </section>
+    <McpSettings :csrf="csrf" />
   </div>
 </template>

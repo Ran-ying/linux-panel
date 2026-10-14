@@ -1,6 +1,3 @@
-import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
-import { toNodeHandler } from '@modelcontextprotocol/node';
-import * as z from 'zod/v4';
 import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy, forbidden } from '../../platform/mcp-policy.js';
 
 /**
@@ -24,7 +21,14 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     return { policy };
   });
 
-  const handler = createMcpHandler(({ authInfo } = {}) => {
+  // Lazy-loading avoids breaking an existing v0.3 deployment when the optional
+  // extension's separate npm dependencies have not yet been installed.
+  let nodePromise;
+  const getNodeHandler = () => (nodePromise ??= (async () => {
+    const [{ createMcpHandler, McpServer }, { toNodeHandler }, z] = await Promise.all([
+      import('@modelcontextprotocol/server'), import('@modelcontextprotocol/node'), import('zod/v4')
+    ]);
+    const handler = createMcpHandler(({ authInfo } = {}) => {
     const server = new McpServer({ name: 'linux-panel', version: '0.4.0' });
     // Always register only the actions advertised for MCP. Runtime handler
     // rechecks the policy so revoking a grant or a tool applies immediately.
@@ -49,7 +53,8 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     }
     return server;
   });
-  const node = toNodeHandler(handler);
+    return toNodeHandler(handler);
+  })().catch(error => { nodePromise = undefined; throw error; }));
 
   app.all('/mcp', async (request, reply) => {
     const state = await store.snapshot();
@@ -61,6 +66,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     }
     // MCP SDK sees AuthInfo attached directly to raw incoming Node request.
     request.raw.auth = verified;
+    const node = await getNodeHandler();
     reply.hijack();
     await node(request.raw, reply.raw, request.body);
   });
