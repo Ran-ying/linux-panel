@@ -10,6 +10,11 @@ const props = defineProps({
 const emit = defineEmits(['signed-out', 'settings-changed']);
 const settings = ref({ panelName: 'Linux Panel', language: 'zh-CN', theme: 'dark' });
 const sessions = ref([]);
+const totpInfo=ref({enabled:false,recoveryCodesRemaining:0});
+const totpSetup=ref(null);
+const recoveryCodes=ref([]);
+const totpPassword=ref('');
+const totpCode=ref('');
 const audit = ref([]);
 const currentPassword = ref('');
 const newPassword = ref('');
@@ -33,14 +38,16 @@ async function request(url, options = {}) {
 
 async function reload() {
   try {
-    const [cfg, list, events] = await Promise.all([
+    const [cfg, list, events, factors] = await Promise.all([
       request('/api/panel/settings'),
       request('/api/auth/sessions'),
-      request('/api/panel/audit')
+      request('/api/panel/audit'),
+      request('/api/auth/totp')
     ]);
     settings.value = cfg.settings;
     sessions.value = list.sessions;
     audit.value = events.events;
+    totpInfo.value=factors;
     emit('settings-changed', cfg.settings);
   } catch (cause) { error.value = cause.message; }
 }
@@ -96,6 +103,25 @@ function revokeSession(id, current) {
   }, '会话已撤销');
 }
 
+async function startTotp(){
+  return execute(async()=>{
+    totpSetup.value=await request('/api/auth/totp/setup',{method:'POST',body:JSON.stringify({currentPassword:totpPassword.value})});
+    totpPassword.value='';
+  },'在认证器中添加密钥，并输入当前验证码确认');
+}
+async function enableTotp(){
+  return execute(async()=>{
+    const value=await request('/api/auth/totp/enable',{method:'POST',body:JSON.stringify({code:totpCode.value})});
+    recoveryCodes.value=value.recoveryCodes;
+    totpSetup.value=null;totpCode.value='';await reload();
+  },'双因素认证已启用；请离线保存恢复码（只显示一次）');
+}
+async function disableTotp(){
+  return execute(async()=>{
+    await request('/api/auth/totp/disable',{method:'POST',body:JSON.stringify({currentPassword:totpPassword.value,code:totpCode.value})});
+    totpPassword.value='';totpCode.value='';recoveryCodes.value=[];await reload();
+  },'双因素认证已关闭');
+}
 onMounted(reload);
 </script>
 
@@ -133,6 +159,26 @@ onMounted(reload);
       </form>
     </section>
 
+    <section class="settings-section">
+      <h3>双因素认证（TOTP）</h3>
+      <p>当前状态：{{ totpInfo.enabled?'已启用':'未启用' }}；恢复码剩余 {{ totpInfo.recoveryCodesRemaining }} 个。</p>
+      <label for="totp-password">当前密码</label>
+      <input id="totp-password" v-model="totpPassword" type="password" autocomplete="current-password" />
+      <template v-if="totpSetup">
+        <p class="muted small">请在认证器中手动输入以下一次性密钥；确认后将不再显示：</p>
+        <code>{{ totpSetup.secret }}</code>
+      </template>
+      <label for="totp-code">6 位验证码或一次性恢复码</label>
+      <input id="totp-code" v-model.trim="totpCode" autocomplete="one-time-code" />
+      <button v-if="!totpInfo.enabled && !totpSetup" type="button" :disabled="busy" @click="startTotp">验证密码并开始绑定</button>
+      <button v-if="totpSetup" type="button" :disabled="busy" @click="enableTotp">确认并启用 TOTP</button>
+      <button v-if="totpInfo.enabled" type="button" :disabled="busy" @click="disableTotp">验证密码和验证码后关闭</button>
+      <div v-if="recoveryCodes.length" class="notice" role="status">
+        <strong>一次性恢复码：请立即离线保存，离开后不会再次展示</strong>
+        <div v-for="code in recoveryCodes" :key="code"><code>{{ code }}</code></div>
+        <button type="button" @click="recoveryCodes=[]">我已保存，隐藏恢复码</button>
+      </div>
+    </section>
     <section class="settings-section">
       <div class="section-heading"><h3>登录会话</h3><button type="button" @click="reload">刷新</button></div>
       <p v-if="!sessions.length" class="muted">没有有效会话</p>
