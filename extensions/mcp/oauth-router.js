@@ -162,8 +162,14 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     // Client-supplied display names are UNVERIFIED. Show its exact callback origin.
     const redirectHost=new URL(request.query.redirect_uri).origin;
     const scopeLabels=scopes.map(s=>`<li><code>${escapeHtml(s)}</code>${s===OFFLINE_SCOPE?'（允许连接在 Access Token 到期后继续刷新）':''}</li>`).join('');
-    reply.type('text/html; charset=utf-8').header('Cache-Control','no-store');
-    return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Linux Panel · MCP 授权</title></head>
+    // The app globally uses Referrer-Policy: no-referrer, which causes browsers
+    // to send Origin: null on ordinary navigation-mode HTML form POSTs.
+    // For this OAuth consent document alone, origin sends a canonical Origin
+    // while limiting Referer to the public origin (not the OAuth query string).
+    // Keep the strict Origin/CSRF checks on POST unchanged.
+    reply.type('text/html; charset=utf-8').header('Cache-Control','no-store')
+      .header('Referrer-Policy','origin');
+    return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="referrer" content="origin"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Linux Panel · MCP 授权</title></head>
 <body><main><h1>授权 MCP 客户端</h1><p>当前用户：${escapeHtml(identity.user.username)}</p>
 <p>客户端自称：<strong>${escapeHtml(client.name)}</strong>（名称未经验证）</p>
 <p>客户端 ID：<code>${escapeHtml(client.id)}</code></p>
