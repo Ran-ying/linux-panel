@@ -126,7 +126,7 @@ queue(){
 }
 wait_result(){
  local id="$1" status="$2"
- for i in $(seq 1 360);do
+ for i in $(seq 1 75);do
   if [[ -f "$RESULT" ]] && grep -Fq '"id":"'"$id"'"' "$RESULT";then
    grep -Fq '"status":"'"$status"'"' "$RESULT" ||
     fail "Unexpected result: $(cat "$RESULT")"
@@ -188,6 +188,8 @@ done
 systemctl reset-failed linux-panel-update.service || true
 # Simulate systemd boot recovery without rebooting the ephemeral CI runner.
 systemctl start linux-panel-update-recover.service
+note 'Boot recovery unit returned; examining exact transaction result'
+[[ -f "$RESULT" ]] && cat "$RESULT" || true
 wait_result 44444444444444444444444444444444 rolled_back
 [[ "$(head_now)" == "$OLD" ]] || fail 'Recovery did not restore old Git revision'
 wait_healthy || fail 'Recovery failed to restart healthy Web'
