@@ -10,7 +10,7 @@ export function registerUpdateActions(registry, controller) {
     explain: '从平台状态库读取审批记录和 root 执行器只读结果；不会运行 Git/npm 或更改系统。',
     kind: 'read',
     permission: 'panel:read',
-    exposure: { web: true, mcp: false },
+    exposure: { web: true, mcp: true },
     inputSchema: {type:'object',properties:{},additionalProperties:false},
     outputSchema: {type:'object',properties:{
       brokerEnabled:{type:'boolean'},

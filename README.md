@@ -13,7 +13,7 @@
 - Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
 - MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
 - Git + systemd + 独立非 root 服务账户。只提供可配置的 HTTP 监听端口，Nginx/Caddy/HTTPS/防火墙完全由管理员自行管理。
-- **面板更新是标准 Action**：`panel.update.status`（只读）、`panel.update.check`（只读检查）、`panel.update.request`（创建申请），Web 和 MCP 走同一个 Action Engine；后者需 Web 管理员独立确认密码（TOTP 若已启用则额外验证），由受限 systemd Broker 进行实际更新（首次安装须管理员处理）。
+- **面板更新是受限 Action**：`panel.update.status`（Web/MCP 可授权只读）、`panel.update.check`（Web 只读检查）、`panel.update.request`（Web/MCP 申请，需 Web 管理员审批）、`panel.update.execute`（MCP 独立高权限直接排队）。Web 也支持核对 SHA 后一次确认。MCP 直接执行必须显式开启独立策略并重新授权 `panel:update:execute`，旧只读/申请授权不会自动升级；所有执行仍经隔离 systemd Broker，真实更新与故障回滚验收未完成前默认关闭。
 
 ## 安装（不依赖 Nginx）
 
