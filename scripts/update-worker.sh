@@ -14,7 +14,8 @@ RESULT=/var/lib/linux-panel-update-status/result.json
 EXPECTED_REMOTE=/etc/linux-panel/update-source
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
-as_updater(){ /usr/sbin/runuser -u "$USER" -- /usr/bin/env PATH=/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
+## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
+as_updater(){ /usr/sbin/runuser -u "$USER" -- /usr/bin/env PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
   local status="$1" tmp
   tmp="$(mktemp "$ROOT_BACKUP/.update-result.XXXXXXXX")"
