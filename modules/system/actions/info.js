@@ -3,13 +3,36 @@ import os from 'node:os';
 export default {
   id: 'system.info',
   title: '读取系统基本信息',
-  description: '使用 Node.js 标准库读取本机 CPU、内存、运行时间和操作系统信息。',
+  description: '使用 Node.js 标准库读取当前主机信息（Mac 本地运行时不是 VPS）。',
   kind: 'read',
   permission: 'system:read',
   exposure: { web: true, mcp: true },
   inputSchema: { type: 'object', additionalProperties: false, properties: {} },
-  explain: 'os 模块在当前 Node.js 进程所在主机上读取系统信息。在 MacBook 本地运行时返回 Mac 的信息，不是 VPS 的信息。',
-  createPlan: async () => [{ description: '调用 Node.js os.platform(), os.release(), os.totalmem() 等只读接口', type: 'node-api' }],
+  outputSchema: {
+    type: 'object',
+    required: ['hostname', 'platform', 'release', 'arch', 'cpuCount', 'totalMemoryBytes', 'freeMemoryBytes', 'uptimeSeconds', 'nodeVersion'],
+    properties: {
+      hostname: { type: 'string' }, platform: { type: 'string' }, release: { type: 'string' },
+      arch: { type: 'string' }, cpuCount: { type: 'integer', minimum: 1 },
+      totalMemoryBytes: { type: 'number', minimum: 0 }, freeMemoryBytes: { type: 'number', minimum: 0 },
+      uptimeSeconds: { type: 'number', minimum: 0 }, nodeVersion: { type: 'string' }
+    },
+    additionalProperties: false
+  },
+  presentation: {
+    type: 'metrics',
+    fields: [
+      { key: 'hostname', label: '主机名' },
+      { key: 'platform', label: '操作系统' },
+      { key: 'arch', label: '架构' },
+      { key: 'cpuCount', label: '可用并行度', format: 'integer' },
+      { key: 'totalMemoryBytes', label: '物理内存', format: 'bytes' },
+      { key: 'uptimeSeconds', label: '系统运行时间', format: 'duration' },
+      { key: 'nodeVersion', label: 'Node.js 版本' }
+    ]
+  },
+  explain: 'os 模块读取当前 Node.js 进程所在主机。availableParallelism 是进程可使用的并行度，不等同于物理 CPU 核心数。',
+  createPlan: async () => [{ type: 'node-api', description: '调用 os.platform(), os.totalmem(), os.uptime() 等 Node.js 只读 API' }],
   execute: async () => ({
     hostname: os.hostname(),
     platform: os.platform(),

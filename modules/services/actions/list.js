@@ -3,25 +3,67 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+/** Preserve the full description; handle systemctl failure bullet prefix. */
+export function parseSystemctlLines(stdout) {
+  const services = [];
+  const unparsedLines = [];
+  for (const line of stdout.split('\n').map(s => s.trim()).filter(Boolean)) {
+    const cleaned = line.replace(/^●\s+/, '');
+    const match = cleaned.match(/^(\S+\.service)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/);
+    if (!match) {
+      unparsedLines.push(line);
+      continue;
+    }
+    services.push({
+      name: match[1], load: match[2], active: match[3],
+      sub: match[4], description: match[5]
+    });
+  }
+  return { services, unparsedLines };
+}
+
 export default {
   id: 'services.list',
   title: '列出 systemd 服务',
-  description: '在 Linux 上执行 systemctl 的只读列表命令；Mac 上返回明确标记的模拟数据。',
-  kind: 'read',
-  permission: 'services:read',
-  exposure: { web: true, mcp: true },
+  description: 'Linux 调用 systemctl 并解析结构化服务表；macOS 返回标注的演示数据。',
+  kind: 'read', permission: 'services:read', exposure: { web: true, mcp: true },
   inputSchema: { type: 'object', additionalProperties: false, properties: {} },
-  explain: 'systemd 是许多 Linux 发行版的服务管理器。systemctl list-units --type=service --all 可以列出运行中和未运行的已加载 Unit。',
+  outputSchema: {
+    type: 'object',
+    required: ['source', 'services', 'unparsedLines', 'count'],
+    properties: {
+      source: { type: 'string' }, count: { type: 'integer', minimum: 0 },
+      unparsedLines: { type: 'array', items: { type: 'string' } },
+      services: { type: 'array', items: {
+        type: 'object', required: ['name', 'load', 'active', 'sub', 'description'],
+        properties: {
+          name: { type: 'string' }, load: { type: 'string' }, active: { type: 'string' },
+          sub: { type: 'string' }, description: { type: 'string' }
+        }, additionalProperties: false
+      } }
+    },
+    additionalProperties: false
+  },
+  presentation: {
+    type: 'table', rowsKey: 'services',
+    columns: [
+      { key: 'name', label: '服务' }, { key: 'active', label: '运行状态' },
+      { key: 'sub', label: '子状态' }, { key: 'description', label: '说明' }
+    ]
+  },
+  explain: 'systemctl list-units --type=service --all 读取已加载的 systemd Units；它不是全部已安装服务文件。macOS 不使用 systemd，示例数据不能代表 VPS。',
   createPlan: async () => process.platform === 'linux'
     ? [{ type: 'execFile', command: 'systemctl', args: ['list-units', '--type=service', '--all', '--no-pager', '--no-legend', '--plain'] }]
-    : [{ type: 'mock', description: 'macOS 不使用 systemd；返回演示数据（不代表 VPS 真实状态）' }],
+    : [{ type: 'mock', description: 'macOS 没有 systemd；返回明确标记的模拟数据' }],
   execute: async () => {
     if (process.platform !== 'linux') {
-      return { source: 'mock-macos', services: [{ name: 'demo.service', state: 'mock', description: '仅用于 MacBook 本地开发' }] };
+      const services = [{ name: 'demo.service', load: 'mock', active: 'mock', sub: 'mock', description: 'MacBook 演示数据，非真实 Linux 服务' }];
+      return { source: 'mock-macos', services, unparsedLines: [], count: services.length };
     }
     const { stdout } = await execFileAsync('systemctl',
       ['list-units', '--type=service', '--all', '--no-pager', '--no-legend', '--plain'],
       { timeout: 10000, maxBuffer: 1024 * 1024 });
-    return { source: 'systemd', lines: stdout.split('\n').map(s => s.trim()).filter(Boolean) };
+    const result = parseSystemctlLines(stdout);
+    return { source: 'systemd', ...result, count: result.services.length };
   }
 };
