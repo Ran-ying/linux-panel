@@ -71,6 +71,7 @@ if ((NO_NGINX == 0)); then
   [[ ! -e /etc/nginx/sites-available/linux-panel.conf ]] || die 'Nginx linux-panel.conf already exists'
   [[ ! -e /etc/nginx/sites-enabled/linux-panel.conf ]] || die 'Nginx site link already exists'
   [[ ! -e /etc/nginx/conf.d/linux-panel-limits.conf ]] || die 'Nginx limit config already exists'
+  [[ -d /etc/nginx/snippets && ! -e /etc/nginx/snippets/linux-panel-proxy.inc ]] || die 'Nginx snippets directory or target file unsuitable'
   if nginx -T 2>&1 | grep -Eq "server_name[[:space:]]+$DOMAIN([[:space:];]|$)"; then
     die "An Nginx server_name for $DOMAIN already exists; stop to avoid overriding it"
   fi
@@ -112,9 +113,10 @@ if ((NO_NGINX == 0)); then
   sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__CERT__|$CERT|g" -e "s|__KEY__|$KEY|g" \
     deployment/nginx/linux-panel-public.conf.template > /etc/nginx/sites-available/linux-panel.conf
   install -m 0644 deployment/nginx/linux-panel-limits.conf /etc/nginx/conf.d/linux-panel-limits.conf
+  install -m 0644 deployment/nginx/linux-panel-proxy.inc /etc/nginx/snippets/linux-panel-proxy.inc
   ln -s /etc/nginx/sites-available/linux-panel.conf /etc/nginx/sites-enabled/linux-panel.conf
   if ! nginx -t; then
-    rm -f /etc/nginx/sites-enabled/linux-panel.conf /etc/nginx/sites-available/linux-panel.conf /etc/nginx/conf.d/linux-panel-limits.conf
+    rm -f /etc/nginx/sites-enabled/linux-panel.conf /etc/nginx/sites-available/linux-panel.conf /etc/nginx/conf.d/linux-panel-limits.conf /etc/nginx/snippets/linux-panel-proxy.inc
     die 'Nginx config rejected; proxy files rolled back. The application service is running locally.'
   fi
   systemctl reload nginx || die 'Nginx reload failed; inspect nginx logs'
