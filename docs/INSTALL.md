@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | 系统 | Ubuntu **24.04+** / Debian **12+**；systemd **>=240** | Ubuntu 24.04 LTS；systemd 服务正常 |
 | 权限 | 安装时需要 root / sudo；Git、`runuser` 等基础命令 | 平时通过非 root 的 `linuxpanel` 专用账户运行 |
-| Node.js | **Node 24 LTS**，或 **22.12+**；配套 npm | 使用 24 LTS；已有 PM2/Node 的主机使用 `/opt/node24`，**不升级 /usr/bin/node** |
+| Node.js | **Node 24 LTS**（当前预检允许 major >=24），或 **Node 22.12+ 的 22.x 系列**；配套 npm | 使用 24 LTS；已有 PM2/Node 的主机使用 `/opt/node24`，**不升级 /usr/bin/node** |
 | 端口 | 4188 未被监听 | 应用在回环地址监听 4188；仅经 HTTPS 代理公开 |
 | 磁盘 | `/opt` 所在分区至少 **1 GiB 可用** | 尽量预留 **5 GiB+**，尤其在构建、备份和回滚前 |
 | 内存 | `MemAvailable + SwapFree >= 768 MiB` | 构建时最好有 **1.5 GiB+ 余量**；共享主机推荐实际 RAM >=2 GiB |
@@ -281,7 +281,7 @@ sudo apt update
 sudo apt install ca-certificates curl git nginx certbot
 ~~~
 
-共享 VPS **不要**不经评估就 `apt upgrade` 或覆盖正在使用的 `nodejs`。如果没有 Node24，优先走 `prepare-host.sh --install-node`；需其他手动渠道时，确保最终 Node >=22.12、npm 配套、二进制路径可供服务账户读取。
+共享 VPS **不要**不经评估就 `apt upgrade` 或覆盖正在使用的 `nodejs`。如果没有 Node24，优先走 `prepare-host.sh --install-node`；需其他手动渠道时，确保最终选择 Node 24 LTS（或预检接受的 Node 22.12+ 版本）、npm 配套、二进制路径可供服务账户读取。
 
 ### 7.2 手动拉取、安装依赖、测试及前端构建
 
@@ -318,7 +318,7 @@ id linuxpanel || sudo useradd --system --home-dir /var/lib/linux-panel \
 
 sudo install -d -o linuxpanel -g linuxpanel -m 0700 /var/lib/linux-panel
 sudo install -d -o root -g root -m 0755 /etc/linux-panel
-sudo sh -c 'printf "PANEL_PUBLIC_ORIGIN=https://panel.example.com\nPANEL_DATA_DIR=/var/lib/linux-panel\n" > /etc/linux-panel/panel.env'
+sudo sh -c 'set -C; umask 077; printf "PANEL_PUBLIC_ORIGIN=https://panel.example.com\nPANEL_DATA_DIR=/var/lib/linux-panel\n" > /etc/linux-panel/panel.env'
 sudo chmod 0600 /etc/linux-panel/panel.env
 
 sudo chown -R root:linuxpanel /opt/linux-panel

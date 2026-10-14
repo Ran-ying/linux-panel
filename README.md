@@ -17,7 +17,7 @@
 
 ## 安装（先预检、修复 BLOCK、再安装）
 
-目标系统：Ubuntu 24.04+ / Debian 12+、systemd >=240、Node.js 24 LTS（最低 22.12+）；共享服务器可使用独立 Node24，不替换 PM2/其他程序的系统 Node。**CentOS 7 不支持自动安装或更新 Broker**。
+目标系统：Ubuntu 24.04+ / Debian 12+、systemd >=240、Node.js 24 LTS（另接受 Node 22.12+ 的 22.x 系列）；共享服务器可使用独立 Node24，不替换 PM2/其他程序的系统 Node。**CentOS 7 不支持自动安装或更新 Broker**。
 
 ```bash
 # 1. 拉取并检查代码
