@@ -82,12 +82,18 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
     code,redirect_uri:'https://client.example/callback',code_verifier:verifier,
     resource:'https://other.example/mcp'});
   assert.equal(badResource.statusCode,400);
+  const wrongVerifier=await getToken({client_id:id,grant_type:'authorization_code',
+    code,redirect_uri:'https://client.example/callback',code_verifier:'x'.repeat(43),resource});
+  assert.equal(wrongVerifier.statusCode,400,'PKCE proof must be enforced');
   const issued=await getToken({client_id:id,grant_type:'authorization_code',
     code,redirect_uri:'https://client.example/callback',code_verifier:verifier,resource});
   assert.equal(issued.statusCode,200,issued.body);
   const tokens=issued.json();
   assert.equal(tokens.token_type,'Bearer');
   assert.ok(tokens.refresh_token);
+  const replay=await getToken({client_id:id,grant_type:'authorization_code',
+    code,redirect_uri:'https://client.example/callback',code_verifier:verifier,resource});
+  assert.equal(replay.statusCode,400,'authorization code must be single use');
   const registry=new ActionRegistry();
   await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
   const storeOAuth=new OAuthStore(store,registry,resource);
@@ -196,4 +202,27 @@ test('offline_access is available only for refresh, not for MCP tools',async t=>
       refresh_token:refresh.json().refresh_token,resource}).toString()});
   assert.equal(after.statusCode,200,after.body);
   assert.equal(after.json().scope.includes('offline_access'),false);
+});
+
+test('public client registration is bounded per source and can be disabled without revoking existing grants',async t=>{
+  const {app,cookie,csrf,store}=await fixture(t);
+  const create=async name=>app.inject({method:'POST',url:'/oauth/register',
+    payload:{client_name:name,redirect_uris:['https://client.example/cb']}});
+  const first=await create('trusted');
+  assert.equal(first.statusCode,201);
+  for(let i=0;i<4;i++)assert.equal((await create('anon'+i)).statusCode,201);
+  assert.equal((await create('blocked')).statusCode,429);
+  const disabled=await app.inject({method:'PUT',url:'/api/extensions/mcp/settings',
+    headers:{cookie,'x-panel-csrf':csrf},
+    payload:{enabled:true,registrationEnabled:false,tools:{'system.info':true}}});
+  assert.equal(disabled.statusCode,200);
+  // Another IP cannot register while the administrator switch is closed.
+  assert.equal((await create('blocked2')).statusCode,429);
+  const registry=new ActionRegistry();
+  await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
+  const data=new OAuthStore(store,registry,resource);
+  const user=(await store.snapshot()).users[0];
+  const grant=await data.createGrant(first.json().client_id,user.id,['system:read'],resource);
+  assert.ok(grant.id);
+  assert.ok(await data.client(first.json().client_id),'previous client remains registered');
 });

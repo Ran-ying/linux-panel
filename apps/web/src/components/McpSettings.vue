@@ -85,7 +85,7 @@ onMounted(load);
       </label>
       <label class="refresh-choice">
         <input type="checkbox" v-model="policy.registrationEnabled" :disabled="!policy.enabled"/>
-        允许新 OAuth 客户端注册（完成 ChatGPT 连接后建议关闭）
+        允许新 OAuth 客户端注册（连接成功后建议关闭）
       </label>
       <h4>允许暴露的只读 Action</h4>
       <div v-for="tool in tools" :key="tool.id" class="session-row">
@@ -119,6 +119,10 @@ onMounted(load);
       </div>
       <p v-if="!grants.length" class="muted">还没有已授权的 MCP 客户端。</p>
     </template>
-    <p v-else class="muted">正在读取 MCP 模块状态…</p>
+    <template v-else>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <p v-else class="muted">正在读取 MCP 模块状态…</p>
+      <button v-if="error" class="form-button" type="button" @click="load">重试</button>
+    </template>
   </section>
 </template>

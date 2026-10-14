@@ -34,3 +34,14 @@
 - 集成测试、GitHub CI 与本地编译通过不能代替实际代理环境中的 E2E 测试和第三方安全审计。
 
 **私人预览是受控试运行；请不要将其描述为“生产安全认证完成”。** 详见 `docs/deployment.md`。
+
+
+## v0.4 MCP/OAuth 补充边界
+
+- MCP 默认关闭，且单个 Action 默认不在白名单。启用并设置许可后，仍必须经过 Bearer 验证和用户/Scope/白名单交集检查。
+- OAuth 用户身份复用内置 Auth，OAuth Token 为随机高熵秘密；状态文件仅存其哈希和必要授权记录。
+- Access Token 绑定唯一 `https://uspanel.rany.ing/mcp` 资源，使用 PKCE S256 授权码；密码更改、客户端授权撤销、工具关闭即时失效。
+- 客户端注册必须明确打开，按代理真实客户端 IP 限流并限制最多 60 个客户端；请在 Nginx 对 `/oauth/register`、`/oauth/token` 增加独立速率限制。攻击者仍可在短时间窗口内填满注册名额，因此应尽快关闭注册。
+- 客户端名称为客户端自行声明，不能视为 ChatGPT 的真实性证明。OAuth 同意页面必须核对回调 URL 和授权范围。
+- 独立可安装 MCP 扩展的源代码仍属于受信任执行代码，不是可接受任意第三方插件的沙箱。
+- **当前不支持 Client ID Metadata Documents（CIMD），也没有经过 ChatGPT 公网真实联调。** 不能在未检查兼容性前认定已完成连接。
