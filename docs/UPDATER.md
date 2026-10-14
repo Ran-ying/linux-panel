@@ -22,11 +22,43 @@ The tool is intentionally **not** an arbitrary command executor.
 - The operator-controlled `PANEL_UPDATER_ENABLED=1` switch is the platform-level *deployment* gate. Read-only `panel.update.check` and `panel.update.status` remain usable without it; their status reports `brokerEnabled: false`. It is **off by default** after broker installation too, and requires a separate staging acceptance plus explicit `--activate --ack-acceptance`.
 - A logged-in administrator may check, request, cancel an unapproved request, or approve updates in the **Web 面板维护** page even if MCP is completely disabled.
 - **Web one-click launch (after checking a candidate)**: the Web page presents the exact current/target SHA, asks for one explicit checkbox + administrator password (TOTP only if enabled), then performs the normal proposal and privileged approval back-to-back. There is no second Web approval click. This is a Web UX convenience, not an autonomous MCP permission; the Broker still validates the trusted remote, fast-forward, build, health and rollback. A successful queue response **is not proof** of deployment. If the second step fails, the pending proposal remains visible for review/retry.
-- MCP can only propose updates when MCP is enabled, `allowUpdates` is true, and the live bearer grant includes `panel:update`. Neither the Web gate nor a Web-generated proposal exposes or approves the MCP tool.
+- Proposal MCP requires MCP enabled, `allowUpdates=true`, and `panel:update`. Direct MCP requires an activated Broker, `allowDirectUpdates=true`, and a **separately consented** `panel:update:execute` OAuth grant; neither route confers the other's permissions.
 - `panel.update.check` is a read-only Web Action. It identifies SHA origin as `origin_main` (queried from configured Git remote) or `supplied_sha` (not remotely verified). Neither is a substitute for the broker's pinned-remote verification.
 - `POST /api/panel/update/approve` requires Web Session, CSRF, password re-verification and optional fresh TOTP. `POST /api/panel/update/cancel` cancels only a still-unapproved proposal; MCP has no route to approve or cancel.
 - The platform correlates the broker result ID with an approved proposal: a completed result stops showing as queued and releases the proposal slot. A still-running approval remains locked until its 15-minute expiry; overdue or failed jobs require independent operational inspection.
 - Legacy `/api/extensions/mcp/update` and `.../approve` aliases remain temporarily for compatibility; new Web components use platform Actions and platform URLs.
+
+## Explicitly delegated MCP direct updates (default OFF)
+
+Web's one-confirmation update remains independent of MCP. Existing
+`panel.update.request` and `panel:update` only create proposals requiring Web
+approval. There is now a distinct high-impact MCP-only Action:
+
+- `panel.update.execute` requires a new `panel:update:execute` OAuth grant.
+- Web → MCP settings → **Allow MCP direct updates** must be explicitly enabled,
+  independently from the `allowUpdates` proposal policy.
+- The operator-owned Broker must first pass separate staging/rollback
+  acceptance and be activated with `PANEL_UPDATER_ENABLED=1`. Merely installing
+  its privileged worker does not enable either route.
+- OAuth clients must **explicitly request** `panel:update:execute` and the
+  administrator must confirm the interactive consent. Omitting OAuth scope
+  gives **read-only** grants only; old `panel:update` grants are not upgraded.
+- On every call the server verifies a live bearer, admin role, separate
+  OAuth scope, current direct-update policy and activated Broker gate. The
+  administrator can revoke the client grant or disable the policy immediately.
+- Only an exact 40-character Git SHA or an empty argument to select configured
+  `origin/main` is accepted. The fixed root Broker verifies pinned source,
+  exact main HEAD, fast-forward lineage, resource thresholds, build, health
+  and rollback. There is **no arbitrary shell or remote selector**.
+- A `queued` result is not proof the deployment succeeded. Review the Broker
+  result and systemd journal; requests are audited and concurrent work denied.
+
+Direct MCP execution is a conscious delegation of deployment power to an
+OAuth client. Some clients may ask for their own tool confirmation; the
+server does not demand a *second* Web approval once the direct scope has
+been explicitly granted. Never enable it on the shared production VPS
+before the real root/systemd test matrix in
+[UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) is completed.
 
 ## Independent operator-owned Broker installation: check → apply → verify → activate
 

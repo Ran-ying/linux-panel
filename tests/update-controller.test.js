@@ -109,3 +109,46 @@ test('Web-only cancellation rejects approved/stale proposals and is independent 
     userId:identity.user.id,clientId:'web',approved:true};});
   await assert.rejects(ctrl.cancel({identity,id}),{statusCode:409});
 });
+
+
+test('delegated direct Broker enqueue is single-target, concurrent-safe and recoverable',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'lp-mcp-direct-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const root=join(dir,'checkout');
+  await cmd('init',root);
+  await cmd('-C',root,'config','user.name','test');
+  await cmd('-C',root,'config','user.email','test@example.invalid');
+  await cmd('-C',root,'commit','--allow-empty','-m','initial');
+  const from=await cmd('-C',root,'rev-parse','HEAD'),target='a'.repeat(40);
+  const store=new StateStore(join(dir,'state.json'));
+  const ctrl=createUpdateController({store,root,auth:new AuthService(store),enabled:true,
+    triggerPath:join(dir,'trigger'),resultPath:join(dir,'result')});
+  await assert.rejects(ctrl.executeDirect({userId:'',clientId:'client',targetSha:target}),{statusCode:403});
+  await assert.rejects(ctrl.executeDirect({userId:'admin',clientId:'client',targetSha:'invalid'}),{statusCode:400});
+  const done=await ctrl.executeDirect({userId:'admin',clientId:'client',targetSha:from});
+  assert.deepEqual(done,{status:'up_to_date',sha:from});
+  const queued=await ctrl.executeDirect({userId:'admin',clientId:'client',targetSha:target});
+  assert.equal(queued.status,'queued');
+  assert.equal(queued.from,from);
+  assert.equal(queued.target,target);
+  assert.equal(await readFile(join(dir,'trigger'),'utf8'),'id='+queued.id+'\nsha='+target+'\n');
+  assert.equal((await ctrl.status()).pending.approved,true);
+  assert.equal((await store.snapshot()).audit.at(-1).event,'panel.update.direct_queued');
+  await assert.rejects(ctrl.executeDirect({userId:'admin',clientId:'client2',targetSha:target}),{statusCode:409});
+  assert.equal(await cmd('-C',root,'rev-parse','HEAD'),from,'Controller does not checkout code or execute commands');
+});
+test('direct enqueue fails closed and clears approval on missing Broker trigger path',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'lp-mcp-direct-missing-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const root=join(dir,'checkout');
+  await cmd('init',root);
+  await cmd('-C',root,'config','user.name','test');
+  await cmd('-C',root,'config','user.email','test@example.invalid');
+  await cmd('-C',root,'commit','--allow-empty','-m','initial');
+  const store=new StateStore(join(dir,'state.json'));
+  const ctrl=createUpdateController({store,root,auth:new AuthService(store),enabled:true,
+    triggerPath:join(dir,'missing-parent','trigger'),resultPath:join(dir,'result')});
+  await assert.rejects(ctrl.executeDirect({userId:'admin',clientId:'client',targetSha:'b'.repeat(40)}),{statusCode:503});
+  assert.equal((await ctrl.status()).pending,null);
+  assert.equal((await store.snapshot()).updateRequest,undefined);
+});

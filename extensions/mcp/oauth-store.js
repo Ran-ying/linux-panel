@@ -21,6 +21,10 @@ export function allowedScopes(registry, state) {
     .filter(a => mcpPolicy(state).tools[a.id] === true)
     .map(a => a.permission))];
   if (mcpPolicy(state).allowUpdates === true) scopes.push('panel:update');
+  // A distinct high-impact scope is never implied by panel:update and is
+  // available only when the privileged Broker has been explicitly activated.
+  if (mcpPolicy(state).allowDirectUpdates === true && process.env.PANEL_UPDATER_ENABLED === '1')
+    scopes.push('panel:update:execute');
   return scopes;
 }
 export function safeRedirectUri(value) {

@@ -81,6 +81,45 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
         }catch(e){return {isError:true,content:[{type:'text',text:e.message}]};}
       });
     }
+    // Independently delegated direct update. Existing panel:update proposal
+    // grants NEVER authorize this. A live panel:update:execute bearer grant,
+    // an administrator-controlled explicit Web policy and the OS-level Broker
+    // activation gate are all required simultaneously.
+    const direct=registry.get('panel.update.execute');
+    if(direct?.exposure?.mcp===true &&
+       direct.kind==='write' && direct.executionPolicy==='broker-enqueue' &&
+       direct.permission==='panel:update:execute' &&
+       process.env.PANEL_UPDATER_ENABLED==='1' &&
+       mcpPolicy(snapshot).enabled && mcpPolicy(snapshot).allowDirectUpdates &&
+       permitted.has(direct.permission)) {
+      server.registerTool(direct.id,{
+        description:direct.description,
+        inputSchema:z.object({targetSha:z.string().regex(/^[a-f0-9]{40}$/).optional()}).strict(),
+        annotations:{readOnlyHint:false,destructiveHint:true}
+      },async(input,ctx)=>{
+        const verified=ctx.http?.authInfo??authInfo;
+        const live=verified?.token?await tokens.verifyAccessToken(verified.token):null;
+        const policy=mcpPolicy(await store.snapshot());
+        const current=registry.get(direct.id);
+        if(!live || !live.userId || !live.clientId ||
+           !live.scopes?.includes('panel:update:execute') ||
+           !policy.enabled || !policy.allowDirectUpdates ||
+           process.env.PANEL_UPDATER_ENABLED!=='1' ||
+           current!==direct || current.executionPolicy!=='broker-enqueue')
+          return {isError:true,content:[{type:'text',text:'Direct update authorization revoked or unavailable'}]};
+        try {
+          auth.requirePermission({user:{id:live.userId,role:live.role}},direct.permission);
+          const value=await engine.run(direct.id,input,'mcp',{
+            authenticated:true,channel:'mcp',userId:live.userId,
+            clientId:live.clientId,directUpdateAuthorized:true
+          });
+          return {content:[{type:'text',text:JSON.stringify(value.result)}],
+            structuredContent:value.result};
+        }catch(e){
+          return {isError:true,content:[{type:'text',text:e.message}]};
+        }
+      });
+    }
     // Always register only the actions advertised for MCP. Runtime handler
     // rechecks the policy so revoking a grant or a tool applies immediately.
     for (const action of visible) {

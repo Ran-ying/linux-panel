@@ -20,10 +20,17 @@ export class ActionEngine {
     if (action.kind === 'write') {
       // New write actions are DENIED BY DEFAULT. Only low-risk proposals with
       // their own server-side authorization can execute through trusted adapters.
-      if (action.executionPolicy !== 'proposal-only' ||
-          context.authenticated !== true || typeof context.userId !== 'string' ||
-          !context.userId || context.channel !== channel)
-        throw Object.assign(new Error('Write action requires authorized proposal context'), { statusCode: 403 });
+      const trustedCaller=context.authenticated===true &&
+        typeof context.userId==='string' && !!context.userId &&
+        context.channel===channel;
+      const isProposal=action.executionPolicy==='proposal-only';
+      const isExactBrokerEnqueue=channel==='mcp' &&
+        action.id==='panel.update.execute' &&
+        action.permission==='panel:update:execute' &&
+        action.executionPolicy==='broker-enqueue' &&
+        context.directUpdateAuthorized===true;
+      if(!trustedCaller || (!isProposal && !isExactBrokerEnqueue))
+        throw Object.assign(new Error('Write action requires explicit trusted execution policy'), { statusCode: 403 });
     }
     let validate = this.inputValidators.get(action);
     if (!validate) {
