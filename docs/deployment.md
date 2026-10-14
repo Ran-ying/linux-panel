@@ -1,42 +1,21 @@
-# 开发与部署约定
+# v0.3 开发及部署约定
 
-## 工作流
+## 本地开发与初始化
 
-MacBook 本地编程、测试和构建 → 私有 GitHub 仓库 → VPS 部署 → PM2 持久运行。不要在只有 1 GB 内存的 VPS 上进行大规模前端编译。
+MacBook 上执行 `npm ci`、`npm test`、`npm run check`、`npm run build:web`。首次运行执行 `npm run admin:init`，通过终端交互式隐藏输入创建管理员；随后分别运行 `npm run dev:api` 和 `npm run dev:web`。
 
-当前 v0.1 **仅限本地只读原型**，没有账号认证、CSRF 防护、审计或远程 MCP。即便服务监听 `127.0.0.1`，也不应该配置公网反向代理。
+本地开发服务绑定 `127.0.0.1:4188`，Vite 前端监听 `127.0.0.1:5173`。
 
-## 本地调试
+## 持久化
 
-```bash
-npm install
-npm run dev:api   # 终端 1
-npm run dev:web   # 终端 2
-```
+面板默认存储 `data/panel-state.json`（0600）。数据目录必须由运行面板的非 root 账号私有控制；禁止将其置于 Nginx 静态目录、上传到公开 GitHub 仓库或镜像构建层中。可通过 `PANEL_DATA_DIR` 更改数据目录，并对文件进行受控备份。**v0.3 只能使用单个 Fastify 进程写这个 JSON 文件**，不能在多个 Node 实例间共享状态。
 
-## PM2（后续内测时）
+## Nginx 公网方案（计划，尚不执行）
 
-建议给此项目配置独立的**非 root Linux 用户**。准备好 Node 和 PM2 后：
+计划中的公网入口由 Nginx HTTPS 反向代理到本机 Fastify。生产模式要求配置 `PANEL_PUBLIC_ORIGIN=https://linux.rany.ing` 以识别浏览器请求 Origin 并发送 Secure Cookie。由于当前版本仍未完成公网安全审计，**暂时不要配置 Nginx 公网转发或开放 MCP**。
 
-```bash
-npm ci             # 需要首次 npm install 产生并提交 package-lock.json
-npm run build:web  # 优先在 MacBook 构建并上传 dist
-pm2 start ecosystem.config.cjs
-pm2 status
-pm2 logs linux-panel
-pm2 save
-```
+将来正式部署前需逐一审查 TLS、主机隔离、Nginx 访问控制、限流、代理报头、登录/恢复、权限、日志、回滚及备份。不要触碰旧 VPS 上现有宝塔、Nginx、PHP、MySQL、Redis 和 PM2 项目。当前旧 CentOS 7 VPS 不适合作为公网面板部署环境。
 
-首次设置开机恢复使用 `pm2 startup`，**按 PM2 打印的命令操作**，并确保针对运行这个面板的 Linux 账户。当前旧服务器已有 `pm2-root`，不要直接覆盖它或修改现有四个 Node 项目。NVM 更新 Node 版本后，PM2 启动脚本里的路径可能需要同步更新。参考 [PM2 Startup Hook](https://pm2.io/docs/runtime/guide/startup-hook/)。
+## v0.3 测试重点
 
-本地绑定端口：`127.0.0.1:4188`。将来需要远程查看内测界面时，先用 SSH 端口转发：
-
-```bash
-ssh -L 4188:127.0.0.1:4188 your-user@your-vps
-```
-
-再在 Mac 打开 `http://127.0.0.1:4188`。
-
-## linux.rany.ing 上线前条件
-
-完成 HTTPS、账号和会话、Origin/CSRF 防护、授权、执行审批、持久审计、特权隔离，最后单独进行 MCP 的 OAuth 配置与安全评审。公网发布必须作为独立里程碑。
+未初始化不能登录；无账号自注册；未登录不能获取系统数据；合法登录和设置操作；CSRF 与 Origin 限制；会话撤销、密码修改；禁用所有业务模块后依然能使用面板设置。还要在 MacBook 上手动验证登录页面、Cookie 行为与 UI 交互。

@@ -183,7 +183,7 @@ export async function createApp({
   });
 
   app.setErrorHandler((error, request, reply) => {
-    const status = error.statusCode >= 400 && error.statusCode < 500 ? error.statusCode : 500;
+    const status = Number.isInteger(error.statusCode) && error.statusCode >= 400 && error.statusCode <= 599 ? error.statusCode : 500;
     request.log.error(error);
     reply.code(status).send({ error: status === 500 ? 'Internal error' : error.message });
   });
