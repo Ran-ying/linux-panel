@@ -143,6 +143,43 @@ Ubuntu 24.04. Neither suite simulates an abrupt loss of power or provides
 production sign-off. The remaining release-gate cases still require independent
 staging evidence.
 
+## Fail-closed systemd startup gate (release gate)
+
+A root-only update transaction can survive an interrupted or unsuccessful
+rollback. Simply ordering the recovery service `Before=linux-panel.service`
+is **not enough**: systemd may try to start the ordinary Web service even
+if recovery exits with failure.
+
+The fixed drop-in
+`deployment/systemd/linux-panel-update-guard.conf` applies to the existing
+`linux-panel.service` unit. It uses systemd PID1-evaluated *OR* conditions:
+Web may start when the root transaction does not exist, **or** when the live
+root Broker has provisioned an ephemeral permission marker inside its own
+`/run/linux-panel-root-updater` RuntimeDirectory.
+
+The root updater sets that marker only for its normal, controlled
+`systemctl start linux-panel.service` operations while a transaction exists.
+The marker is removed at process exit or SIGKILL/unit teardown. Boot recovery
+instead queues a nonblocking restart and clears the durable journal before
+systemd evaluates the queued Web start condition, avoiding the previous
+Before= ordering deadlock.
+
+The disposable Ubuntu acceptance tests a root journal with a **missing
+state backup** while the installed Git HEAD differs from the desired old
+SHA. Recovery must record `failed`, retain the journal, and a separate
+`systemctl start linux-panel.service` must **not** result in an active
+Web service. A test-only operator removes only its synthetic journal, then
+checks Web starts normally. No production VPS recovery markers are removed.
+
+Existing Broker installs receive this drop-in only through the distinct
+operator-run `upgrade-update-broker.sh --apply` migration, including backup,
+file ownership validation, post-install check and migration rollback.
+Initial installs also install the guard. **Neither path activates updates.**
+
+This strengthens recovery-failure safety but does not substitute for an
+actual hard power-loss test. Real disk failure, journal durability and a
+manual operator escalation process remain release-gate work.
+
 ## Crash and boot-recovery gate (phase II)
 
 The fixed root Broker now writes a **root-only 0600 transaction journal**

@@ -11,6 +11,8 @@ PIN=/etc/linux-panel/update-source
 PATH_UNIT=/etc/systemd/system/linux-panel-update.path
 SERVICE_UNIT=/etc/systemd/system/linux-panel-update.service
 RECOVERY_UNIT=/etc/systemd/system/linux-panel-update-recover.service
+GUARD_DIR=/etc/systemd/system/linux-panel.service.d
+GUARD_UNIT=$GUARD_DIR/90-update-recovery-guard.conf
 BACKUP_DIR=/var/lib/linux-panel-update-root
 RESULT_DIR=/var/lib/linux-panel-update-status
 MODE=''
@@ -157,19 +159,23 @@ base_checks(){
  local f
  for f in scripts/update-worker.sh deployment/systemd/linux-panel-update.path \
    deployment/systemd/linux-panel-update.service \
-   deployment/systemd/linux-panel-update-recover.service;do
+   deployment/systemd/linux-panel-update-recover.service \
+   deployment/systemd/linux-panel-update-guard.conf;do
   file "$ROOT/$f" && pass "Source file exists: $f" || block "Missing/unsafe source: $f"
  done
 }
 fresh_checks(){
  base_checks
  local path
- for path in "$WORKER" "$PIN" "$PATH_UNIT" "$SERVICE_UNIT" "$RECOVERY_UNIT" \
+ for path in "$WORKER" "$PIN" "$PATH_UNIT" "$SERVICE_UNIT" "$RECOVERY_UNIT" "$GUARD_UNIT" \
    "$BACKUP_DIR" "$RESULT_DIR" /var/lib/linux-panel/update-trigger \
    /var/lib/linux-panel/update-processing;do
   if exists "$path";then block "Broker artifact already exists: $path"
   else pass "Target free: $path";fi
  done
+ if exists "$GUARD_DIR" && (! dir "$GUARD_DIR" || ! owner "$GUARD_DIR" root);then
+  block 'Unsafe existing panel drop-in directory'
+ fi
  if id linuxpanel-updater >/dev/null 2>&1;then
   block 'Updater account already exists; inspect partial installation'
  else pass 'Updater account is not yet present';fi
@@ -192,7 +198,7 @@ installed_checks(){
   [[ "$(cat "$PIN")" == "$(git_checked remote get-url origin)" ]] &&
    pass 'Trusted remote pin matches checkout' || block 'Trusted remote pin mismatch'
  else block 'Remote pin missing/unsafe';fi
- for path in "$PATH_UNIT" "$SERVICE_UNIT" "$RECOVERY_UNIT";do
+ for path in "$PATH_UNIT" "$SERVICE_UNIT" "$RECOVERY_UNIT" "$GUARD_UNIT";do
   file "$path" && owner "$path" root && pass "Root-owned unit: $path" ||
    block "Unit missing/unsafe: $path"
  done
@@ -208,6 +214,14 @@ installed_checks(){
  else block 'Root backup directory missing/unsafe';fi
  if dir "$RESULT_DIR" && owner "$RESULT_DIR" root;then pass 'Status directory exists'
  else block 'Status directory missing/unsafe';fi
+ if [[ "$(systemctl show linux-panel.service -p ConditionResult --value)" == yes ]] ||
+    systemctl cat linux-panel.service >/dev/null 2>&1;then
+  # Effective unit must actually load the fixed root-only boot guard.
+  if systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' &&
+     systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start';then
+    pass 'Effective panel boot recovery guard loaded'
+  else block 'Panel boot recovery guard missing';fi
+ fi
  if systemctl cat linux-panel-update.service >/dev/null 2>&1;then
   local effective
   effective="$(systemctl show linux-panel-update.service -p ProtectSystem --value)"
@@ -267,6 +281,8 @@ if [[ "$MODE" == apply ]];then
  install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update.path" "$PATH_UNIT"
  install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update.service" "$SERVICE_UNIT"
  install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update-recover.service" "$RECOVERY_UNIT"
+ install -d -o root -g root -m 0755 "$GUARD_DIR"
+ install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update-guard.conf" "$GUARD_UNIT"
  chown -R linuxpanel-updater:linuxpanel "$ROOT"
  chmod -R g+rX,g-w,o-w "$ROOT"
  runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js" ||
