@@ -76,8 +76,7 @@ recover(){
      grep -Fq "\"id\":\"$ID\"" "$RESULT" &&
      grep -Fq "\"sha\":\"$TARGET\"" "$RESULT" &&
      grep -Fq '"status":"success"' "$RESULT" &&
-     [[ "$current" == "$TARGET" ]] &&
-     systemctl is-active --quiet linux-panel.service;then
+     [[ "$current" == "$TARGET" ]];then
     rm -f -- "$TXN" "$PROCESSING"
     log "Previously committed deployment $ID cleaned up"
     return 0
