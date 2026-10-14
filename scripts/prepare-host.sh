@@ -76,6 +76,7 @@ if [[ "$MODE" == node ]]; then
   tar -xJf "$stage/$archive" -C "$stage" --strip-components=1 --no-same-owner || die 'Node archive extraction failed'
   [[ -x "$stage/bin/node" && -e "$stage/bin/npm" ]] || die 'Node/npm missing in verified archive'
   [[ "$("$stage/bin/node" -v)" == "v$NODE_VERSION" ]] || die 'Extracted version mismatch'
+  PATH="$stage/bin:$PATH" "$stage/bin/npm" --version >/dev/null || die 'Extracted npm cannot run under the isolated Node runtime'
   rm -f -- "$stage/$archive" "$stage/SHASUMS256.txt"
   chmod -R go-w,a+rX "$stage"
   [[ ! -e "$NODE_DEST" && ! -L "$NODE_DEST" ]] || die 'Node destination appeared concurrently'

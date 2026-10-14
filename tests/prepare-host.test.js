@@ -28,7 +28,7 @@ test('host preparation default install-node only prints plan', () => {
   const r = run('--install-node');
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /DRY-RUN/);
-  assert.match(r.stdout, /Would NOT alter/);
+  assert.match(r.stdout, /Will NOT alter/);
 });
 
 test('host preparation forbids apply without chosen action', () => {

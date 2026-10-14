@@ -72,7 +72,7 @@ bash scripts/prepare-host.sh --create-swap 1024
 ```bash
 sudo bash scripts/prepare-host.sh --install-node --apply
 /opt/node24/bin/node -v
-/opt/node24/bin/npm -v
+PATH=/opt/node24/bin:$PATH /opt/node24/bin/npm -v
 node -v  # 原系统 Node 保持不变
 ```
 
