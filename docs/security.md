@@ -1,47 +1,30 @@
-# Linux Panel v0.3 · 受控公网预览安全边界
+# Linux Panel v0.4 安全边界
 
-**目标：在受支持的 Linux 主机上、HTTPS + Nginx + 非 root + 单实例条件下，允许一次私人公网预览。代码审核与 CI 不等于独立渗透测试或生产安全认证。**
+这是一个实验阶段的自托管服务器管理项目，**代码/CI/本地 OAuth 集成测试不等于独立渗透测试或生产安全认证**。
 
-## 应用层已实现
+## 已有防护
 
-- 无默认密码、无网页注册。CLI 交互式初始化单个管理员。
-- `scrypt`（N=32768，r=8，p=1）及随机盐保存密码哈希，状态文件严格为私有文件 0600；以原子重命名持久化。
-- 会话：高熵随机 Token；持久化时只保存 SHA-256 摘要。固定 12 小时过期；HttpOnly + SameSite=Strict，生产 HTTPS 添加 Secure。
-- 登录限流：每来源 IP 在 10 分钟窗口内最多 5 次失败；失败计数限制最大 key 数量，避免被不同地址充满内存。登录限制是**进程内状态**，重启后清空，不能单独作为公网边界。
-- 生产 `trustProxy` 只信任回环地址 Nginx，而不是任意公网转发头。Nginx 必须**覆盖**客户端输入的 `X-Forwarded-For`；若有 CDN，还必须正确限制可信 CDN IP 范围。凭证、会话限制和授权始终在应用层执行。
-- 生产请求检查确切 `Host`；所有改变状态的 HTTP 请求必须具备与 `PANEL_PUBLIC_ORIGIN` 匹配的 `Origin`。本地开发允许列明的 localhost 来源；Vite 固定使用 5173 且端口冲突立即报错。
-- 除登录/初始化状态外所有 `/api/*` 需要 Cookie 会话；POST/PUT/PATCH/DELETE 还要求与会话绑定的 CSRF 头。Action 还要经过服务端 permission 检查。
-- 生产响应包含 CSP、HSTS、反嵌入、禁止 MIME 嗅探、严格 Referrer 和 Permissions Policy。静态生产前端需在真实 HTTPS 下做浏览器 CSP 兼容性检查。
-- 审计记录包含账号登录、会话撤销、密码更改、设置更改和 Action 调用等事件元数据，不存储密码或业务 Action 结果。
-- API 继续仅监听 `127.0.0.1:4188`，不提供任意 Shell/文件写入 Action。
+- 管理员由服务器 CLI 交互初始化，无默认密码、无 Web 自助注册。使用 scrypt 密码哈希。
+- Web 会话使用随机令牌和 HttpOnly / SameSite Cookie，生产 HTTPS 使用 Secure。私有状态文件模式 0600。
+- 生产验证 Host、来源 Origin、CSRF；只信任回环来源的 Nginx 代理头。
+- API 绑定 `127.0.0.1`，对公网只开放 Nginx HTTPS；设置 CSP、HSTS 和其他响应头。
+- MCP 默认关闭，新客户端注册与每个 Action 白名单均默认关闭。
+- OAuth Authorization Code + PKCE S256，Token 绑定 MCP 资源，客户端 Scope 与用户权限和 Action 白名单取交集；撤销/密码变更导致旧授权失效。
+- MCP 提供只读系统信息，不提供任意 SSH Shell、文件写入或服务控制能力。
+- 登录及 OAuth 注册有应用层速率限制；公网还需要独立 Nginx 限流。
 
-## 外部部署不可缺少的安全措施
+## 生产部署必要条件
 
-1. 受支持、有安全更新的 Linux。旧 CentOS 7 不适合作为本面板的公网宿主；Node 22/24 亦通常不能在其原生 glibc 环境直接运行。
-2. Nginx 在 443 端口终止 TLS，80 跳转 HTTPS；必须配置真实证书，拒绝未知域名，验证认证请求只路由到 4188。
-3. Nginx 对 `/api/auth/login` 按真实客户端 IP 限流；如果位于 Cloudflare 后，应先通过受信任的源站 IP 规则恢复真实地址。不要盲目信任 `X-Forwarded-For`。
-4. 独立非 root 系统用户运行应用；私有数据目录 0700、数据文件 0600，禁止任何其他站点的 Web 进程写入该目录。
-5. 单实例：不要在 PM2 和 systemd 中重复启动，不要在两个 Fastify 进程间共享 JSON 状态。备份、恢复和回滚必须演练。
-6. 登录需强密码、最小化公开暴露和运维告警；条件允许时设置外层 IP 白名单/VPN。应尽量先在独立测试 VPS 验证，不要触碰其他生产服务。
+受支持、定期补丁的 Linux；系统级 Node.js 24；非 root 服务用户；独立 `0700` 私有目录；单个 systemd 实例；有效 TLS 和正确 HTTPS 代理；对真实客户端 IP 限流。如果使用 Cloudflare，必须在受信任代理列表内恢复真实客户端 IP，不可信任任意 `X-Forwarded-For`。
 
-## 仍存在的边界
+## 尚未实现
 
-- 仅支持单管理员，角色权限仍属于初期实现；没有多用户 RBAC、2FA、OIDC、OAuth、MCP。
-- 登录失败计数在内存中，不跨进程持久化；依赖 Nginx 限流与完整网络监测。针对同一公网 IP 的短时锁定仍可能发生。
-- 审计日志存储为有限长度的 JSON 事件列表，不具有防篡改保证，也没有远程日志保存。
-- 当前无复杂的服务器操作 Action；未来引入写操作或特权 Broker 时必须重新进行安全评估。
-- 没有自动的认证状态恢复/灾备迁移；生产长期管理要求使用更可靠的数据库/备份及升级锁。
-- 集成测试、GitHub CI 与本地编译通过不能代替实际代理环境中的 E2E 测试和第三方安全审计。
+- 多用户 RBAC、2FA、SSO、设备风险认证和完整安全审计。
+- 分布式 Token 存储、跨进程一致性和零停机数据迁移。
+- 特权服务 Broker、带审批的 Shell 或写入权限。
+- OAuth Client ID Metadata Documents（CIMD）等全部可选客户端发现方式。
+- 跨各种操作系统、Nginx/CDN 组合的独立生产验收。
 
-**私人预览是受控试运行；请不要将其描述为“生产安全认证完成”。** 详见 `docs/deployment.md`。
+已有 ChatGPT MCP 实际只读调用成功，但这不是所有客户端的兼容性或安全保证。
 
-
-## v0.4 MCP/OAuth 补充边界
-
-- MCP 默认关闭，且单个 Action 默认不在白名单。启用并设置许可后，仍必须经过 Bearer 验证和用户/Scope/白名单交集检查。
-- OAuth 用户身份复用内置 Auth，OAuth Token 为随机高熵秘密；状态文件仅存其哈希和必要授权记录。
-- Access Token 绑定唯一 `https://uspanel.rany.ing/mcp` 资源，使用 PKCE S256 授权码；密码更改、客户端授权撤销、工具关闭即时失效。
-- 客户端注册必须明确打开，按代理真实客户端 IP 限流并限制最多 60 个客户端；请在 Nginx 对 `/oauth/register`、`/oauth/token` 增加独立速率限制。攻击者仍可在短时间窗口内填满注册名额，因此应尽快关闭注册。
-- 客户端名称为客户端自行声明，不能视为 ChatGPT 的真实性证明。OAuth 同意页面必须核对回调 URL 和授权范围。
-- 独立可安装 MCP 扩展的源代码仍属于受信任执行代码，不是可接受任意第三方插件的沙箱。
-- **当前不支持 Client ID Metadata Documents（CIMD），也没有经过 ChatGPT 公网真实联调。** 不能在未检查兼容性前认定已完成连接。
+私有状态、Token、配置和凭据不应该出现在 Git、构建日志、公开 Issue 或网页静态目录。公开仓库前请阅读 [PUBLIC-RELEASE.md](PUBLIC-RELEASE.md)。
