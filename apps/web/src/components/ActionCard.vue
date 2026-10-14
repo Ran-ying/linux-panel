@@ -4,9 +4,11 @@ import ResultRenderer from './ResultRenderer.vue';
 
 const props = defineProps({
   action: { type: Object, required: true },
-  presentation: { type: Object, default: null }
+  presentation: { type: Object, default: null },
+  csrf: { type: String, required: true }
 });
 
+const emit = defineEmits(['unauthorized']);
 const inputText = ref('{}');
 const response = ref(null);
 const error = ref('');
@@ -35,12 +37,13 @@ async function run(operation, refresh = false) {
       `/api/actions/${encodeURIComponent(props.action.id)}/${operation}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Panel-CSRF': props.csrf },
         body: JSON.stringify({ input }),
         signal: controller.signal
       }
     );
     const payload = await apiResponse.json();
+    if (apiResponse.status === 401) emit('unauthorized');
     if (!apiResponse.ok) throw new Error(payload.error || `HTTP ${apiResponse.status}`);
     if (disposed || generation !== requestId) return;
     response.value = { operation, content: payload };

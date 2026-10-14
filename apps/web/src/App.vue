@@ -1,65 +1,117 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import ActionCard from './components/ActionCard.vue';
+import LoginPanel from './components/LoginPanel.vue';
+import SettingsPanel from './components/SettingsPanel.vue';
 import { buildModuleNavigation } from './module-navigation.js';
 
+const initialized = ref(false);
+const checking = ref(true);
+const session = ref(null);
 const moduleDefinitions = ref([]);
 const actions = ref([]);
 const presentations = ref({});
-const activeModule = ref('');
+const settings = ref({ panelName: 'Linux Panel' });
+const activePage = ref('settings');
 const error = ref('');
+
 const moduleGroups = computed(() => buildModuleNavigation(moduleDefinitions.value, actions.value));
-const activeGroup = computed(() => moduleGroups.value.find(group => group.id === activeModule.value));
+const activeGroup = computed(() => moduleGroups.value.find(group => group.id === activePage.value));
 
 async function getJSON(url) {
   const response = await fetch(url);
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-  return body;
+  const payload = await response.json();
+  if (!response.ok) throw Object.assign(new Error(payload.error || `HTTP ${response.status}`), { status: response.status });
+  return payload;
+}
+
+async function loadDashboard() {
+  try {
+    const [modulesResponse, actionsResponse, presentationsResponse, cfg] = await Promise.all([
+      getJSON('/api/modules'), getJSON('/api/actions'),
+      getJSON('/api/web/presentations'), getJSON('/api/panel/settings')
+    ]);
+    moduleDefinitions.value = modulesResponse.modules;
+    actions.value = actionsResponse.actions;
+    presentations.value = Object.fromEntries(presentationsResponse.presentations.map(p => [p.actionId, p]));
+    settings.value = cfg.settings;
+    activePage.value = moduleGroups.value[0]?.id ?? 'settings';
+  } catch (cause) {
+    if (cause.status === 401) signOutLocally();
+    else error.value = `加载失败：${cause.message}`;
+  }
+}
+
+function signOutLocally() {
+  session.value = null;
+  moduleDefinitions.value = [];
+  actions.value = [];
+  activePage.value = 'settings';
+}
+
+async function signIn(payload) {
+  session.value = payload;
+  error.value = '';
+  await loadDashboard();
+}
+
+async function logout() {
+  if (!session.value) return;
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Panel-CSRF': session.value.csrf } });
+  } finally { signOutLocally(); }
 }
 
 onMounted(async () => {
   try {
-    const [modulesResponse, actionsResponse, presentationsResponse] = await Promise.all([
-      getJSON('/api/modules'),
-      getJSON('/api/actions'),
-      getJSON('/api/web/presentations')
-    ]);
-    moduleDefinitions.value = modulesResponse.modules;
-    actions.value = actionsResponse.actions;
-    presentations.value = Object.fromEntries(
-      presentationsResponse.presentations.map(presentation => [presentation.actionId, presentation])
-    );
-    activeModule.value = moduleGroups.value[0]?.id ?? '';
-  } catch (cause) {
-    error.value = `API 不可用：${cause.message}`;
-  }
+    const status = await getJSON('/api/auth/status');
+    initialized.value = status.initialized;
+    if (initialized.value) {
+      try { session.value = await getJSON('/api/auth/session'); }
+      catch (cause) { if (cause.status !== 401) throw cause; }
+      if (session.value) await loadDashboard();
+    }
+  } catch (cause) { error.value = cause.message; }
+  finally { checking.value = false; }
 });
 </script>
 
 <template>
-  <main class="layout">
+  <div v-if="checking" class="auth-shell"><p role="status">正在检查登录状态…</p></div>
+  <LoginPanel v-else-if="!session" :initialized="initialized" @signed-in="signIn" />
+  <main v-else class="layout">
     <header>
-      <div class="eyebrow">LINUX PANEL / V0.2</div>
-      <h1>可解释的 Linux 管理面板</h1>
-      <p>左侧选择功能模块；右侧按顺序展示模块的全部操作和实时数据。当前仅限本地只读使用。</p>
+      <div class="eyebrow">LINUX PANEL / V0.3</div>
+      <div class="header-row">
+        <h1>{{ settings.panelName || 'Linux Panel' }}</h1>
+        <div class="account-area">
+          <span>{{ session.user.username }}</span>
+          <button type="button" @click="logout">退出登录</button>
+        </div>
+      </div>
+      <p>登录后才能查看模块和调用 Action。身份、权限与面板设置属于内置平台功能。</p>
     </header>
-
+    <p v-if="error" role="alert" class="error">{{ error }}</p>
     <div class="columns">
       <aside class="module-sidebar">
         <div class="label">功能模块</div>
-        <nav class="module-nav" aria-label="功能模块">
-          <button v-for="module in moduleGroups" :key="module.id" type="button"
-            class="module-toggle" :class="{ active: activeModule === module.id }"
-            :aria-current="activeModule === module.id ? 'page' : undefined"
-            @click="activeModule = module.id">
+        <nav class="module-nav" aria-label="业务模块">
+          <button v-for="module in moduleGroups" :key="module.id" type="button" class="module-toggle"
+            :class="{ active: activePage === module.id }" @click="activePage=module.id">
             {{ module.name }}
           </button>
+          <p v-if="!moduleGroups.length" class="muted small">尚无业务模块</p>
         </nav>
-        <p v-if="!moduleGroups.length && !error" class="empty-actions">暂无可用模块</p>
+        <div class="sidebar-settings">
+          <div class="label">平台</div>
+          <button type="button" class="module-toggle" :class="{ active: activePage === 'settings' }"
+            @click="activePage='settings'">面板设置</button>
+        </div>
       </aside>
-
-      <div class="module-content" v-if="activeGroup" :key="activeGroup.id">
+      <SettingsPanel v-if="activePage === 'settings'" :key="'settings'"
+        :csrf="session.csrf" :user="session.user" :modules="moduleDefinitions"
+        @signed-out="signOutLocally" @settings-changed="value=>settings=value" />
+      <div v-else-if="activeGroup" :key="activeGroup.id" class="module-content">
         <div class="module-intro">
           <div class="label">模块 / {{ activeGroup.id }}</div>
           <h2>{{ activeGroup.name }}</h2>
@@ -67,14 +119,12 @@ onMounted(async () => {
         </div>
         <div v-if="activeGroup.actions.length" class="action-flow">
           <ActionCard v-for="action in activeGroup.actions" :key="action.id"
-            :action="action" :presentation="presentations[action.id] ?? null" />
+            :action="action" :presentation="presentations[action.id] ?? null"
+            :csrf="session.csrf" @unauthorized="signOutLocally" />
         </div>
         <section v-else class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>
       </div>
-      <section v-else-if="error" role="alert">{{ error }}</section>
-      <section v-else class="empty-state">请选择一个功能模块。</section>
     </div>
-
-    <footer>本地只读原型。没有认证、远程 MCP、Shell 执行或写入能力；禁止公网部署。MacBook 上的数据来自 MacBook。</footer>
+    <footer>v0.3 身份认证与内置设置开发版；尚未开放 OAuth/MCP，禁止未经安全验收直接公网部署。</footer>
   </main>
 </template>
