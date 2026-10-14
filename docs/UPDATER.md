@@ -21,6 +21,7 @@ The tool is intentionally **not** an arbitrary command executor.
 
 - The operator-controlled `PANEL_UPDATER_ENABLED=1` switch is the platform-level *deployment* gate. Read-only `panel.update.check` and `panel.update.status` remain usable without it; their status reports `brokerEnabled: false`. It is **off by default** after broker installation too, and requires a separate staging acceptance plus explicit `--activate --ack-acceptance`.
 - A logged-in administrator may check, request, cancel an unapproved request, or approve updates in the **Web 面板维护** page even if MCP is completely disabled.
+- **Web one-click launch (after checking a candidate)**: the Web page presents the exact current/target SHA, asks for one explicit checkbox + administrator password (TOTP only if enabled), then performs the normal proposal and privileged approval back-to-back. There is no second Web approval click. This is a Web UX convenience, not an autonomous MCP permission; the Broker still validates the trusted remote, fast-forward, build, health and rollback. A successful queue response **is not proof** of deployment. If the second step fails, the pending proposal remains visible for review/retry.
 - MCP can only propose updates when MCP is enabled, `allowUpdates` is true, and the live bearer grant includes `panel:update`. Neither the Web gate nor a Web-generated proposal exposes or approves the MCP tool.
 - `panel.update.check` is a read-only Web Action. It identifies SHA origin as `origin_main` (queried from configured Git remote) or `supplied_sha` (not remotely verified). Neither is a substitute for the broker's pinned-remote verification.
 - `POST /api/panel/update/approve` requires Web Session, CSRF, password re-verification and optional fresh TOTP. `POST /api/panel/update/cancel` cancels only a still-unapproved proposal; MCP has no route to approve or cancel.
@@ -138,10 +139,11 @@ Its Web and read-only MCP functions may continue without this Broker.
    registration, explicitly tick Allow update requests, and scope each client.
 3. Only for MCP: authorize the AI client for `panel:update`. Existing
    access tokens do not gain that scope retroactively.
-4. 在 Web 的「面板维护」模块调用 `panel.update.request`，或 Ask the AI: “Check GitHub main and request a Linux Panel update.”
+4. **Web**：在「面板维护」检查版本后，可核对完整 SHA、输入密码（及已启用时的 TOTP）并直接点击「确认并立即更新」。该按钮复用既有申请与审批 API，一次操作完成这两个阶段，随后跳至步骤 6；也可以按传统流程只创建申请。
+   **MCP**：Ask the AI: “Check GitHub main and request a Linux Panel update.”
    It reads the full SHA, proposes it via `panel.update.request`, then
    returns an approval-required response. **It has not updated anything.**
-5. Web → 面板维护 → update request: verify old → proposed Git SHA,
+5. **仅对 MCP 申请或 Web 传统两阶段操作**：Web → 面板维护 → update request: verify old → proposed Git SHA,
    password, and a fresh TOTP code **only if you enabled TOTP**; click approve.
 6. The path watcher executes tests, syntax, frontend build and restart.
    The AI connection may temporarily disconnect. Reconnect and inspect

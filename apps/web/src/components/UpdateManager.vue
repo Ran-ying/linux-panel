@@ -66,6 +66,45 @@ function request(){
     message.value=value.status==='up_to_date'?'当前 SHA 已是目标版本':'更新申请已创建';
   },'申请已处理；若需部署，请核对并批准待处理提交');
 }
+// Web administrator may check a target and launch it with one explicit
+// confirmation. Keep proposal + step-up + broker enqueue on the server,
+// but do not require two separate buttons in the Web UI.
+async function updateNow(){
+  const candidate=inspection.value;
+  if(busy.value || !enabled.value || update.value?.pending ||
+     candidate?.status!=='update_available' || !candidate.targetSha ||
+     !exactConfirmed.value || !password.value || (totpRequired.value && !code.value))return;
+  busy.value=true;error.value='';message.value='';
+  try{
+    const proposal=(await call('/api/actions/panel.update.request/execute',{
+      input:{targetSha:candidate.targetSha}
+    })).result;
+    if(proposal.status==='up_to_date'){
+      message.value='目标已经是当前版本，无需更新';
+      inspection.value=null;
+    }else if(proposal.status==='approval_required' && proposal.id){
+      // The actual update remains privileged, asynchronously verified by
+      // the separately installed Broker. Never claim deployment succeeded.
+      await call('/api/panel/update/approve',{
+        id:proposal.id,currentPassword:password.value,code:code.value
+      });
+      message.value='已提交并批准这次更新，正在等待独立 Broker 执行；请查看执行结果';
+      inspection.value=null;
+    }else{
+      throw new Error('未知更新申请响应');
+    }
+  }catch(cause){
+    // A request might have been persisted before the approval error. Refresh
+    // first, then show the failure without allowing refresh() to erase it.
+    const details=cause.message;
+    try {await refresh();}catch { /* keep the original error */ }
+    error.value=details+'；如果申请已建立但审批失败，请查看下方待处理申请并重试审批。';
+  }finally{
+    password.value='';code.value='';exactConfirmed.value=false;
+    busy.value=false;
+    if(!error.value)await refresh();
+  }
+}
 function cancel(){
   if(!update.value?.pending || update.value.pending.approved)return;
   const id=update.value.pending.id;
@@ -118,6 +157,27 @@ onMounted(refresh);
         <div><strong>当前安装 SHA：</strong><code>{{ inspection.currentSha }}</code></div>
         <div><strong>候选目标 SHA：</strong><code>{{ inspection.targetSha }}</code></div>
       </div>
+      <section v-if="inspection?.status==='update_available' && !update?.pending"
+        class="settings-section" aria-label="Web 管理员立即更新">
+        <h4>管理员直接更新</h4>
+        <p class="muted small">确认上面显示的目标 SHA 后，可一次点击完成申请和审批，不必先点“申请更新”。后台仍校验 Web Session、CSRF、密码及可选 TOTP，并交给隔离 Broker 验证后执行。</p>
+        <label class="refresh-choice">
+          <input type="checkbox" v-model="exactConfirmed" :disabled="busy"/>
+          我已核对完整目标 SHA，确认由受限 Broker 执行本次更新
+        </label>
+        <label for="direct-update-password">管理员密码</label>
+        <input id="direct-update-password" type="password" v-model="password"
+          autocomplete="current-password" :disabled="busy"/>
+        <template v-if="totpRequired">
+          <label for="direct-update-code">TOTP 验证码</label>
+          <input id="direct-update-code" v-model.trim="code" autocomplete="one-time-code"
+            :disabled="busy"/>
+        </template>
+        <button type="button" class="primary"
+          :disabled="!enabled || busy || checking || !exactConfirmed || !password || (totpRequired && !code)"
+          @click="updateNow">确认并立即更新</button>
+        <p class="muted small">按钮仅触发部署队列，不代表已经更新成功；升级期间面板可能短暂断开，完成后请刷新状态。</p>
+      </section>
       <template v-if="update?.pending">
         <h4>{{ update.pending.approved?'已批准，等待执行器处理':'待批准的更新申请' }}</h4>
         <div class="update-sha-list">
