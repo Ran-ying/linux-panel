@@ -5,7 +5,8 @@ The tool is intentionally **not** an arbitrary command executor.
 ## Roles
 
 - `panel.update.request` 是标准写入（申请型）**Action**，Web 模块页面与 ChatGPT/MCP 均通过同一 `ActionEngine` 调用；`panel.update.status` 是只读 Action，也可在 Web 面板查看。
-- MCP 调用还要求 `panel:update` OAuth Scope、全局策略显式授权；Web 调用需要管理员 Session 和 CSRF。两条入口由 ActionEngine 验证相同的 JSON Schema。\n- The MCP tool can propose **only one Git commit SHA**. No shell command,
+- MCP 调用还要求 `panel:update` OAuth Scope、全局策略显式授权；Web 调用需要管理员 Session 和 CSRF。两条入口由 ActionEngine 验证相同的 JSON Schema。
+- The MCP tool can propose **only one Git commit SHA**. No shell command,
   branch name, arbitrary URL, or user-provided script can be executed.
 - The Web administrator must inspect the old/new SHA and confirm with their
   active browser session + CSRF + password re-verification. **TOTP is optional**: if the administrator enrolled it, a fresh TOTP code is mandatory; otherwise, the password suffices.
@@ -80,10 +81,10 @@ updater account's credentials. If the repo is public, omitting
 ## Once installed: end-to-end update workflow
 
 1. Log into Web → Security. TOTP enrollment is **optional**. If enabled, save the recovery codes offline; enrollment invalidates existing OAuth tokens and requires reconnecting the AI client. No authentication app is needed when TOTP is off.
-2. Web → MCP settings: enable MCP, temporarily allow registration, and
-   explicitly tick **Allow update requests**. Keep individual read tools
-   scoped to your needs.
-3. Authorize the AI client for the new `panel:update` scope. Existing
+2. **Web-only updates:** keep MCP completely disabled and proceed to step 4.
+   **Optional MCP proposals:** enable MCP in Web settings, temporarily allow
+   registration, explicitly tick Allow update requests, and scope each client.
+3. Only for MCP: authorize the AI client for `panel:update`. Existing
    access tokens do not gain that scope retroactively.
 4. 在 Web 的「面板维护」模块调用 `panel.update.request`，或 Ask the AI: “Check GitHub main and request a Linux Panel update.”
    It reads the full SHA, proposes it via `panel.update.request`, then
@@ -97,6 +98,8 @@ updater account's credentials. If the repo is public, omitting
    tries to restore the old Git SHA/dependencies/private state and reports
    `rolled_back` or `failed`. Review `journalctl -u linux-panel-update.service`
    before retrying.
+
+See [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) for a fail-closed staging test matrix before treating the broker as production-ready.
 
 ## Commands for operations
 
