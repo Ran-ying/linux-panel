@@ -58,13 +58,17 @@ build(){
     as_updater npm run check && as_updater npm test && as_updater npm run build:web)
 }
 rollback(){
-  log "Update failed; restoring previous code and rebuilding"
-  as_updater git -C "$ROOT" reset --hard "$OLD" || true
+  log "Update failed; stopping the new version, restoring state and rebuilding old code"
+  local restored=1
+  systemctl stop linux-panel.service || restored=0
+  as_updater git -C "$ROOT" reset --hard "$OLD" || restored=0
   (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
     as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
-    as_updater npm run build:web) || true
-  systemctl start linux-panel.service || true
-  record rolled_back
+    as_updater npm run build:web) || restored=0
+  cp -a "$STATE/panel-state.json.before-$OLD" "$STATE/panel-state.json" || restored=0
+  systemctl start linux-panel.service || restored=0
+  systemctl is-active --quiet linux-panel.service || restored=0
+  if [[ "$restored" -eq 1 ]]; then record rolled_back;else record failed;fi
 }
 if ! build;then rollback;exit 1;fi
 if ! systemctl start linux-panel.service || ! systemctl is-active --quiet linux-panel.service;then
