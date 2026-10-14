@@ -61,7 +61,7 @@ preflight(){
   BLOCK=0; WARN=0
   local cmd
   for cmd in systemctl systemd-analyze git runuser grep stat cmp sha256sum \
-    install mktemp mv flock date hostname;do need "$cmd";done
+    install mktemp mv flock date timeout awk cut cat chmod rm;do need "$cmd";done
   [[ "$( . /etc/os-release; printf '%s %s' "$ID" "$VERSION_ID" )" =~ ^(ubuntu\ (24|25|26)\.|debian\ (1[2-9]|[2-9][0-9])) ]] &&
     pass 'Supported Ubuntu/Debian version' || block 'Unsupported OS'
   local systemd_ver=''
@@ -122,6 +122,13 @@ preflight(){
     if [[ "$remote" == "$pinned" &&
           "$remote" =~ ^(https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?|git@github[.]com:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?)$ ]];then
       pass 'Exact pinned GitHub remote matches checkout'
+      # The updater can alter its cached origin refs; require live GitHub HEAD.
+      local live=''
+      if live="$(runuser -u linuxpanel-updater -- /usr/bin/env GIT_TERMINAL_PROMPT=0 \
+          timeout 20s git -C "$ROOT" ls-remote origin refs/heads/main 2>/dev/null)" &&
+          [[ "$live" == "$current"$'\t'refs/heads/main ]];then
+        pass 'Live pinned origin/main exactly matches checked-out source'
+      else block 'Live origin/main unavailable or differs; do not upgrade root executable';fi
     else block 'Git pin or remote differs/unsafe';fi
   else block 'Unable to validate updater-owned Git and pinned source';fi
   if file "$WORKER" && file "$SOURCE_WORKER";then
@@ -168,7 +175,16 @@ fi
 
 # Only --apply may create lock, backups or temporary files.
 [[ "$MODE" == apply ]] || die 'Unknown mode'
-exec 9> "$BACKUP_ROOT/.broker-migrate.lock"
+[[ -d "$BACKUP_ROOT" && ! -L "$BACKUP_ROOT" &&
+   "$(stat -c %U:%G:%a "$BACKUP_ROOT")" == root:root:700 ]] ||
+  die 'Root backup directory unsafe'
+[[ ! -L "$BACKUP_ROOT/.broker-migrate.lock" ]] ||
+  die 'Unsafe migration lock symlink'
+if [[ -e "$BACKUP_ROOT/.broker-migrate.lock" ]];then
+  owner_mode "$BACKUP_ROOT/.broker-migrate.lock" root:root:600 ||
+    die 'Unsafe migration lock owner/mode'
+fi
+exec 9>> "$BACKUP_ROOT/.broker-migrate.lock"
 flock -n 9 || die 'Concurrent Broker migration refused'
 say INFO 'Revalidating before privileged replacement'
 preflight
@@ -190,6 +206,14 @@ unit_tmp="$(mktemp /etc/systemd/system/.linux-panel-unit.XXXXXXXX)"
 chmod 0600 "$worker_tmp" "$unit_tmp"
 install -o root -g root -m 0755 "$SOURCE_WORKER" "$worker_tmp"
 install -o root -g root -m 0644 "$SOURCE_UNIT" "$unit_tmp"
+# Independently compare root-staged bytes against HEAD's Git objects.
+expected_worker="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:scripts/update-worker.sh)"
+expected_unit="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update.service)"
+if [[ "$(git hash-object -- "$worker_tmp")" != "$expected_worker" ||
+      "$(git hash-object -- "$unit_tmp")" != "$expected_unit" ]];then
+  rm -f -- "$worker_tmp" "$unit_tmp"
+  die 'Staged root artifact differs from audited Git HEAD; no replacement performed'
+fi
 changed=0
 success=0
 cleanup(){
