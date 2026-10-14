@@ -17,7 +17,12 @@ jobs:
           cache: npm
       - name: Validate deploy script syntax
         run: |
-          bash -n scripts/install.sh scripts/install-preflight.sh scripts/prepare-host.sh scripts/update.sh scripts/install-update-broker.sh scripts/update-worker.sh
+          # IMPORTANT: `bash -n a.sh b.sh` only parses a.sh; the rest are arguments.
+          # Always syntax-check EACH script independently, including updater scripts.
+          for script in scripts/*.sh; do
+            echo "Bash syntax: $script"
+            bash -n "$script"
+          done
           bash scripts/prepare-host.sh --help
           bash scripts/prepare-host.sh --check
           bash scripts/prepare-host.sh --install-node
