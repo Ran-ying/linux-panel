@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const original=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
@@ -100,6 +100,10 @@ for(const scenario of [
    assert.equal(out.result.status,scenario.expected,JSON.stringify(out.process));
    assert.equal(out.head,scenario.updated?f.target:f.old);
    assert.equal(out.state,'{"original":true}\n');
+   if(scenario.options.rollback){
+     assert.equal(existsSync(join(f.base,'backup','active-transaction')),true,
+       'A failed rollback must retain a root transaction journal for retry');
+   }
   }finally{f.cleanup();}
  });
 }

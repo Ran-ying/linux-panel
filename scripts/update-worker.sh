@@ -105,13 +105,16 @@ recover(){
   elif [[ "$current" != "$OLD" ]];then
     restored=0
   fi
-  if [[ "$MODE" == recover ]];then
-    # This oneshot unit is ordered Before=linux-panel.service. A synchronous
-    # start would deadlock against systemd's ordering job; enqueue only.
-    systemctl start --no-block linux-panel.service || restored=0
-  else
-    systemctl start linux-panel.service || restored=0
-    systemctl is-active --quiet linux-panel.service || restored=0
+  # Never request a start if Git, dependencies or private state failed
+  # recovery: serving a partially restored app would hide a failed rollback.
+  if ((restored==1));then
+    if [[ "$MODE" == recover ]];then
+      # Boot oneshot is Before=linux-panel.service; blocking start deadlocks.
+      systemctl start --no-block linux-panel.service || restored=0
+    else
+      systemctl start linux-panel.service || restored=0
+      systemctl is-active --quiet linux-panel.service || restored=0
+    fi
   fi
   if ((restored==1));then
     record rolled_back
