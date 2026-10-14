@@ -176,6 +176,33 @@ the panel process. That test is **not** permission to enable deployment:
 in-flight power loss, resource exhaustion and full OAuth/Web end-to-end
 acceptance are separate gates in [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md).
 
+### Interrupted update recovery (disabled until release acceptance)
+
+The root Broker journals the approved request and old SHA in a root-only
+`/var/lib/linux-panel-update-root/active-transaction` **before** stopping
+the panel. Unfinished journal/processing files block new deployments.
+
+A separate fixed, sandboxed systemd one-shot unit,
+`linux-panel-update-recover.service`, runs only the
+`linux-panel-update-worker --recover-only` entrypoint on boot **before**
+`linux-panel.service`. It does not fetch a new target or consume update-trigger
+markers. It validates the journal and either recognizes an already recorded
+successful deployment, or restores the saved revision and private state,
+rebuilds, restarts the panel and records `rolled_back`. If restoration fails,
+the journal is retained and a `failed` result is published; the operator must
+investigate rather than silently retrying new updates.
+
+First installation and the existing-Broker migration install this recovery
+unit but leave it **disabled**. Only the separately attested production
+`--activate --ack-acceptance` enables both the update watcher and boot
+recovery service. Before that point, use the read-only installer/migration
+checks; do not manually start the worker or remove recovery markers on a
+shared production VPS.
+
+The ephemeral Ubuntu real-systemd workflow tests process SIGKILL during
+`npm ci` followed by manual invocation of the boot recovery service.
+It does **not** constitute a real power-off, low-memory or full-disk test.
+
 ### Independent staging acceptance BEFORE activation
 
 Follow [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) on a **disposable** Ubuntu

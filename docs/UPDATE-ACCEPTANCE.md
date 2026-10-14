@@ -1,6 +1,6 @@
 # v0.5 Updater — Acceptance and Release Gate
 
-**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. Reboot/power loss, concurrent approvals, live OAuth-to-Broker handoff and resource-starvation scenarios remain unverified.
+**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. A SIGKILL recovery rehearsal has been added, but literal hard-power-loss integrity, concurrent approvals, live OAuth-to-Broker handoff and resource-starvation scenarios remain unverified.
 
 ## Scope and hard gates
 
@@ -96,6 +96,40 @@ GitHub-hosted acceptance above now also tests actual systemd, npm and Git on
 Ubuntu 24.04. Neither suite simulates an abrupt loss of power or provides
 production sign-off. The remaining release-gate cases still require independent
 staging evidence.
+
+## Crash and boot-recovery gate (phase II)
+
+The fixed root Broker now writes a **root-only 0600 transaction journal**
+`/var/lib/linux-panel-update-root/active-transaction` before stopping the
+Web service. Every transaction carries its exact request ID, expected
+`origin/main` SHA and old SHA. SIGKILL or a machine restart must not silently
+erase the journal or the `update-processing` file.
+
+`linux-panel-update-recover.service` is a **separate** real-systemd,
+root-owned, hardened one-shot unit. Its fixed
+`linux-panel-update-worker --recover-only` entrypoint cannot process new
+`update-trigger` requests. When explicitly enabled during the later
+production activation, systemd orders it before the Web service at boot.
+Installation and Broker migrations leave this recovery unit **disabled**.
+
+The recovery entrypoint takes the same privileged flock and validates the
+journal identity and file permissions. If the trusted root result already
+records success and Git HEAD equals the target, it cleans the journal; for an
+unfinished transaction it attempts to restore the old SHA, rebuild the
+previous assets, restore the exact private-state snapshot and start the
+Web unit. It records `rolled_back` **only if these steps succeed**; on failure
+it records `failed` and retains the journal for a reviewed operator retry.
+Incomplete processing markers left before the journal was created are marked
+failed and removed without performing a new Git update.
+
+The disposable real-systemd acceptance additionally sends **SIGKILL**
+during `npm ci`, checks the durable journal and stranded processing marker,
+runs the isolated recovery service and verifies prior Git SHA/Web health,
+then resumes the normal update/retry test. This is a **process crash and
+boot-handler simulation**, not a literal VM power-cycle. Kernel crash,
+filesystem durability under a hard power loss, filesystem-full rollback and
+repeated failure under sustained memory exhaustion remain independent
+release gates. Never use a production VPS for intentional SIGKILL injection.
 
 ## Already-installed Broker migration acceptance
 

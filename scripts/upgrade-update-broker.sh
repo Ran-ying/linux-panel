@@ -6,8 +6,10 @@ umask 077
 ROOT=/opt/linux-panel
 WORKER=/usr/local/libexec/linux-panel-update-worker
 UNIT=/etc/systemd/system/linux-panel-update.service
+RECOVERY_UNIT=/etc/systemd/system/linux-panel-update-recover.service
 SOURCE_WORKER="$ROOT/scripts/update-worker.sh"
 SOURCE_UNIT="$ROOT/deployment/systemd/linux-panel-update.service"
+SOURCE_RECOVERY="$ROOT/deployment/systemd/linux-panel-update-recover.service"
 PIN=/etc/linux-panel/update-source
 ENV_FILE=/etc/linux-panel/panel.env
 BACKUP_ROOT=/var/lib/linux-panel-update-root
@@ -82,7 +84,17 @@ preflight(){
     pass 'Installed root-owned worker (0755)' || block 'Missing or unsafe installed worker'
   owner_mode "$UNIT" root:root:644 &&
     pass 'Installed root-owned systemd unit (0644)' || block 'Missing or unsafe update unit'
-  file "$SOURCE_WORKER" && file "$SOURCE_UNIT" &&
+  if exists "$RECOVERY_UNIT";then
+    owner_mode "$RECOVERY_UNIT" root:root:644 && pass 'Existing root-owned boot recovery unit' || block 'Unsafe recovery unit'
+  else warn 'Boot recovery unit not yet installed; migration required';fi
+  if systemctl is-active --quiet linux-panel-update-recover.service ||
+     systemctl is-enabled --quiet linux-panel-update-recover.service;then
+    block 'Recovery unit running/enabled; refuse migration of live boot path'
+  fi
+  if [[ -e "$BACKUP_ROOT/active-transaction" || -L "$BACKUP_ROOT/active-transaction" ]];then
+    block 'Unfinished transaction exists; recover before upgrading Broker'
+  fi
+  file "$SOURCE_WORKER" && file "$SOURCE_UNIT" && file "$SOURCE_RECOVERY" &&
     pass 'Audited source worker and unit available' || block 'Missing or unsafe source'
   [[ -f /etc/systemd/system/linux-panel.service &&
      ! -L /etc/systemd/system/linux-panel.service ]] &&
@@ -137,6 +149,10 @@ preflight(){
     say INFO "Installed worker SHA256: $(sha256sum "$WORKER" | cut -d' ' -f1)"
     say INFO "Source worker SHA256:    $(sha256sum "$SOURCE_WORKER" | cut -d' ' -f1)"
   fi
+  if file "$RECOVERY_UNIT" && file "$SOURCE_RECOVERY";then
+    if cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY";then pass 'Boot recovery unit already current'
+    else warn 'Boot recovery unit differs: upgrade required';fi
+  fi
   if file "$UNIT" && file "$SOURCE_UNIT";then
     if cmp -s "$UNIT" "$SOURCE_UNIT";then pass 'Systemd unit already current'
     else warn 'Installed systemd unit differs: upgrade needed';fi
@@ -152,8 +168,9 @@ preflight(){
 installed_verify(){
   preflight
   if file "$WORKER" && file "$SOURCE_WORKER" && cmp -s "$WORKER" "$SOURCE_WORKER" &&
-     file "$UNIT" && file "$SOURCE_UNIT" && cmp -s "$UNIT" "$SOURCE_UNIT";then
-    pass 'Both installed privileged artifacts exactly match source'
+     file "$UNIT" && file "$SOURCE_UNIT" && cmp -s "$UNIT" "$SOURCE_UNIT" &&
+     file "$RECOVERY_UNIT" && cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY";then
+    pass 'All three installed privileged artifacts exactly match source'
   else block 'Root worker/unit still differ from current checked-out source';fi
   if [[ "$(systemctl show linux-panel-update.service -p ExecStart --value)" == *"$WORKER"* ]] &&
      [[ "$(systemctl show linux-panel-update.service -p ReadWritePaths --value)" == *"/opt/linux-panel"* ]];then
@@ -189,7 +206,8 @@ flock -n 9 || die 'Concurrent Broker migration refused'
 say INFO 'Revalidating before privileged replacement'
 preflight
 summary || die 'Migration BLOCKED; no privileged files changed'
-if cmp -s "$WORKER" "$SOURCE_WORKER" && cmp -s "$UNIT" "$SOURCE_UNIT";then
+if cmp -s "$WORKER" "$SOURCE_WORKER" && cmp -s "$UNIT" "$SOURCE_UNIT" &&
+   [[ -f "$RECOVERY_UNIT" ]] && cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY";then
   pass 'Already current: no backup, reload or restart necessary'
   exit 0
 fi
@@ -200,18 +218,27 @@ backup="$(mktemp -d "$BACKUP_ROOT/.broker-migration-$stamp-XXXXXXXX")"
 chmod 0700 "$backup"
 install -o root -g root -m 0755 "$WORKER" "$backup/worker.before"
 install -o root -g root -m 0644 "$UNIT" "$backup/unit.before"
+had_recovery=0
+if [[ -f "$RECOVERY_UNIT" ]];then
+ had_recovery=1
+ install -o root -g root -m 0644 "$RECOVERY_UNIT" "$backup/recovery.before"
+fi
 # stage new artifacts in each destination filesystem before swapping.
 worker_tmp="$(mktemp /usr/local/libexec/.linux-panel-worker.XXXXXXXX)"
 unit_tmp="$(mktemp /etc/systemd/system/.linux-panel-unit.XXXXXXXX)"
-chmod 0600 "$worker_tmp" "$unit_tmp"
+recovery_tmp="$(mktemp /etc/systemd/system/.linux-panel-recovery.XXXXXXXX)"
+chmod 0600 "$worker_tmp" "$unit_tmp" "$recovery_tmp"
 install -o root -g root -m 0755 "$SOURCE_WORKER" "$worker_tmp"
 install -o root -g root -m 0644 "$SOURCE_UNIT" "$unit_tmp"
+install -o root -g root -m 0644 "$SOURCE_RECOVERY" "$recovery_tmp"
 # Independently compare root-staged bytes against HEAD's Git objects.
 expected_worker="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:scripts/update-worker.sh)"
 expected_unit="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update.service)"
+expected_recovery="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update-recover.service)"
 if [[ "$(git hash-object -- "$worker_tmp")" != "$expected_worker" ||
-      "$(git hash-object -- "$unit_tmp")" != "$expected_unit" ]];then
-  rm -f -- "$worker_tmp" "$unit_tmp"
+      "$(git hash-object -- "$unit_tmp")" != "$expected_unit" ||
+      "$(git hash-object -- "$recovery_tmp")" != "$expected_recovery" ]];then
+  rm -f -- "$worker_tmp" "$unit_tmp" "$recovery_tmp"
   die 'Staged root artifact differs from audited Git HEAD; no replacement performed'
 fi
 changed=0
@@ -222,19 +249,24 @@ cleanup(){
   rm -f -- "$worker_tmp" "$unit_tmp"
   if ((changed && !success));then
     say WARN 'Migration interrupted or failed; restoring prior fixed worker/unit'
-    local restore_worker restore_unit
+    local restore_worker restore_unit restore_recovery
     restore_worker="$(mktemp /usr/local/libexec/.linux-panel-restore.XXXXXXXX)"
     restore_unit="$(mktemp /etc/systemd/system/.linux-panel-restore.XXXXXXXX)"
+    restore_recovery="$(mktemp /etc/systemd/system/.linux-panel-recover-restore.XXXXXXXX)"
     if install -o root -g root -m 0755 "$backup/worker.before" "$restore_worker" &&
        install -o root -g root -m 0644 "$backup/unit.before" "$restore_unit" &&
        mv -fT -- "$restore_worker" "$WORKER" &&
        mv -fT -- "$restore_unit" "$UNIT" &&
+       { if ((had_recovery));then
+           install -o root -g root -m 0644 "$backup/recovery.before" "$restore_recovery" &&
+           mv -fT -- "$restore_recovery" "$RECOVERY_UNIT"
+         else rm -f -- "$RECOVERY_UNIT";fi; } &&
        systemctl daemon-reload;then
       say WARN 'Old Broker artifacts restored; Web/Watcher gates remained OFF'
     else
       say BLOCK "Rollback incomplete; inspect root-only backup $backup and keep Broker disabled"
     fi
-    rm -f -- "$restore_worker" "$restore_unit"
+    rm -f -- "$restore_worker" "$restore_unit" "$restore_recovery"
   fi
   exit "$ec"
 }
@@ -242,16 +274,20 @@ trap cleanup EXIT
 changed=1
 mv -fT -- "$worker_tmp" "$WORKER"
 mv -fT -- "$unit_tmp" "$UNIT"
+mv -fT -- "$recovery_tmp" "$RECOVERY_UNIT"
 systemctl daemon-reload
 # Do not invoke any Broker service or restart the Web service.
 if ! cmp -s "$WORKER" "$SOURCE_WORKER" ||
    ! cmp -s "$UNIT" "$SOURCE_UNIT" ||
+   ! cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY" ||
    [[ "$(systemctl show linux-panel-update.service -p ProtectSystem --value)" != strict ]] ||
    [[ "$(systemctl show linux-panel-update.service -p NoNewPrivileges --value)" != yes ]] ||
    [[ "$(systemctl show linux-panel-update.service -p ExecStart --value)" != *"$WORKER"* ]] ||
    systemctl is-active --quiet linux-panel-update.path ||
    systemctl is-enabled --quiet linux-panel-update.path ||
    systemctl is-active --quiet linux-panel-update.service ||
+   systemctl is-active --quiet linux-panel-update-recover.service ||
+   systemctl is-enabled --quiet linux-panel-update-recover.service ||
    ! systemctl is-active --quiet linux-panel.service;then
   die 'Post-replacement verification failed; automatic rollback requested'
 fi

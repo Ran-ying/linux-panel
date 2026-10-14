@@ -39,6 +39,11 @@ chmod 0644 /opt/node24/bin/npm.realpath
 cat >/opt/node24/bin/npm <<'WRAPPER'
 #!/usr/bin/env bash
 set -e
+if [[ "$1" == ci && -f /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI ]];then
+ touch /var/lib/linux-panel-updater/STAGE_NPM_CI_REACHED
+ echo '[broker-stage] Holding npm ci until worker is killed' >&2
+ while [[ -f /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI ]];do sleep 0.3;done
+fi
 if [[ ( "$1" == test || ( "$1" == run && "${2:-}" == test ) ) &&
       -f /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE ]];then
   rm /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE
@@ -105,6 +110,9 @@ install -o root -g root -m 0755 \
 install -o root -g root -m 0644 \
  "$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update.service" \
  /etc/systemd/system/linux-panel-update.service
+install -o root -g root -m 0644 \
+ "$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update-recover.service" \
+ /etc/systemd/system/linux-panel-update-recover.service
 systemctl daemon-reload
 [[ "$(systemctl show linux-panel-update.service -p ProtectSystem --value)" == strict ]] ||
  fail 'ProtectSystem not strict'
@@ -118,7 +126,7 @@ queue(){
 }
 wait_result(){
  local id="$1" status="$2"
- for i in $(seq 1 360);do
+ for i in $(seq 1 75);do
   if [[ -f "$RESULT" ]] && grep -Fq '"id":"'"$id"'"' "$RESULT";then
    grep -Fq '"status":"'"$status"'"' "$RESULT" ||
     fail "Unexpected result: $(cat "$RESULT")"
@@ -154,6 +162,43 @@ wait_healthy || fail 'Rollback did not restore Web'
 [[ -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-22222222222222222222222222222222" ]] ||
  fail 'Per-request backup missing'
 
+note 'Case 3: SIGKILL root Broker during npm ci, then dedicated boot recovery'
+touch /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI
+chown linuxpanel-updater:linuxpanel-updater \
+ /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI
+queue 44444444444444444444444444444444 "$TARGET"
+transaction=/var/lib/linux-panel-update-root/active-transaction
+saw_interrupt_point=0
+for i in $(seq 1 150);do
+ if [[ -f "$transaction" &&
+       -f /var/lib/linux-panel-updater/STAGE_NPM_CI_REACHED ]];then
+   saw_interrupt_point=1; break
+ fi
+ sleep 0.2
+done
+((saw_interrupt_point)) || fail 'Worker never reached in-flight recovery point'
+systemctl kill --kill-who=all --signal=SIGKILL linux-panel-update.service || true
+rm -f /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI
+for i in $(seq 1 30);do
+  if ! systemctl is-active --quiet linux-panel-update.service;then break;fi
+  sleep 0.2
+done
+[[ -f "$transaction" ]] || fail 'SIGKILL lost durable transaction'
+[[ -f /var/lib/linux-panel/update-processing ]] || fail 'SIGKILL lost processing metadata'
+systemctl reset-failed linux-panel-update.service || true
+# Simulate systemd boot recovery without rebooting the ephemeral CI runner.
+systemctl start linux-panel-update-recover.service
+note 'Boot recovery unit returned; examining exact transaction result'
+[[ -f "$RESULT" ]] && cat "$RESULT" || true
+wait_result 44444444444444444444444444444444 rolled_back
+[[ "$(head_now)" == "$OLD" ]] || fail 'Recovery did not restore old Git revision'
+wait_healthy || fail 'Recovery failed to restart healthy Web'
+[[ ! -e "$transaction" && ! -e /var/lib/linux-panel/update-processing ]] ||
+ fail 'Recovery left active transaction or processing file'
+# Recovery entrypoint must never consume a fresh unrelated trigger.
+systemctl start linux-panel-update-recover.service
+note 'SIGKILL interrupted deployment recovered through real systemd unit'
+
 note 'Case 3: same old revision retries successfully with real npm and systemd'
 queue 33333333333333333333333333333333 "$TARGET"
 wait_result 33333333333333333333333333333333 success
@@ -180,7 +225,17 @@ systemctl daemon-reload
 [[ ! -e /var/lib/linux-panel/update-trigger && ! -e /var/lib/linux-panel/update-processing ]] ||
  fail 'Marker not cleared before legacy simulation'
 pid_before="$(systemctl show linux-panel.service -p MainPID --value)"
-MIGRATION="$GITHUB_WORKSPACE/scripts/upgrade-update-broker.sh"
+# Test the proposed upgrade script against the checked-out historical main
+# without altering the public GitHub pinned checkout. The only test-only
+# difference is the proposed recovery unit source/blob identity.
+raw_migration="$GITHUB_WORKSPACE/scripts/upgrade-update-broker.sh"
+MIGRATION="$(mktemp /tmp/linux-panel-migration-stage.XXXXXXXX)"
+sed \
+ -e "s|SOURCE_RECOVERY=\"\$ROOT/deployment/systemd/linux-panel-update-recover.service\"|SOURCE_RECOVERY=\"$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update-recover.service\"|" \
+ -e 's|expected_recovery="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update-recover.service)"|expected_recovery="$(git hash-object -- "$SOURCE_RECOVERY")"|' \
+ "$raw_migration" > "$MIGRATION"
+chmod 0700 "$MIGRATION"
+
 bash -n "$MIGRATION"
 bash "$MIGRATION" --check
 if bash "$MIGRATION" --verify;then

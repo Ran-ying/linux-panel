@@ -12,6 +12,7 @@ MARKER="$STATE/update-trigger"
 PROCESSING="$STATE/update-processing"
 RESULT=/var/lib/linux-panel-update-status/result.json
 EXPECTED_REMOTE=/etc/linux-panel/update-source
+TXN="$ROOT_BACKUP/active-transaction"
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
@@ -24,12 +25,117 @@ record(){
   chown root:linuxpanel "$tmp"
   mv -fT -- "$tmp" "$RESULT"
 }
-[[ "$#" -eq 0 && "$EUID" -eq 0 ]] || exit 2
+MODE=normal
+if [[ "$#" -eq 1 && "$1" == --recover-only ]];then MODE=recover
+elif [[ "$#" -ne 0 ]];then exit 2;fi
+[[ "$EUID" -eq 0 ]] || exit 2
 exec 9> /run/linux-panel-root-updater/update.lock
-flock -n 9 || exit 0
-[[ -f "$MARKER" && ! -L "$MARKER" && ! -e "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 0
+flock -n 9 || exit 2
+# Do not erase crash evidence on failure.
+trap 'if [[ ! -e "$TXN" ]];then rm -f -- "$PROCESSING";fi' EXIT
+journal(){
+  local tmp
+  [[ ! -e "$TXN" && ! -L "$TXN" ]] || return 1
+  tmp="$(mktemp "$ROOT_BACKUP/.pending-transaction.XXXXXXXX")" || return 1
+  printf 'id=%s\nsha=%s\nold=%s\n' "$ID" "$TARGET" "$OLD" > "$tmp"
+  chmod 0600 "$tmp"
+  chown root:root "$tmp"
+  mv -nT -- "$tmp" "$TXN" || { rm -f -- "$tmp"; return 1; }
+}
+recover(){
+  local idline shaline oldline current='' backup='' restored=1
+  if [[ ! -e "$TXN" && ! -L "$TXN" ]];then
+    if [[ -f "$PROCESSING" && ! -L "$PROCESSING" ]];then
+      idline="$(sed -n '1p' "$PROCESSING")"
+      shaline="$(sed -n '2p' "$PROCESSING")"
+      ID="${idline#id=}";TARGET="${shaline#sha=}"
+      if [[ "$idline" == "id=$ID" && "$shaline" == "sha=$TARGET" &&
+            "$ID" =~ ^[a-f0-9]{32}$ && "$TARGET" =~ ^[a-f0-9]{40}$ ]];then
+        record failed
+        rm -f -- "$PROCESSING"
+      else
+        log 'Invalid abandoned processing marker; manual review required'
+        return 1
+      fi
+    fi
+    return 0
+  fi
+  [[ -f "$TXN" && ! -L "$TXN" && "$(stat -c %u:%a "$TXN")" == 0:600 &&
+     "$(wc -l < "$TXN")" -eq 3 ]] || { log 'Unsafe recovery journal';return 1; }
+  idline="$(sed -n '1p' "$TXN")";shaline="$(sed -n '2p' "$TXN")"
+  oldline="$(sed -n '3p' "$TXN")"
+  ID="${idline#id=}";TARGET="${shaline#sha=}";OLD="${oldline#old=}"
+  [[ "$idline" == "id=$ID" && "$shaline" == "sha=$TARGET" &&
+     "$oldline" == "old=$OLD" && "$ID" =~ ^[a-f0-9]{32}$ &&
+     "$TARGET" =~ ^[a-f0-9]{40}$ && "$OLD" =~ ^[a-f0-9]{40}$ ]] ||
+      { log 'Corrupt recovery journal';return 1; }
+  backup="$ROOT_BACKUP/panel-state.json.before-$OLD-$ID"
+  current="$(as_updater git -C "$ROOT" rev-parse HEAD 2>/dev/null)" || return 1
+  # Success is durable only after authenticated root result and matching HEAD.
+  if [[ -f "$RESULT" && ! -L "$RESULT" ]] &&
+     grep -Fq "\"id\":\"$ID\"" "$RESULT" &&
+     grep -Fq "\"sha\":\"$TARGET\"" "$RESULT" &&
+     grep -Fq '"status":"success"' "$RESULT" &&
+     [[ "$current" == "$TARGET" ]];then
+    rm -f -- "$TXN" "$PROCESSING"
+    log "Previously committed deployment $ID cleaned up"
+    return 0
+  fi
+  log "Recovering unfinished Broker transaction $ID"
+  if [[ "$current" != "$OLD" && ! -f "$backup" ]];then
+    log 'No usable backup after checkout change: manual intervention required'
+    record failed
+    return 1
+  fi
+  systemctl stop linux-panel.service || restored=0
+  as_updater git -C "$ROOT" reset --hard "$OLD" || restored=0
+  if [[ -f "$backup" && ! -L "$backup" &&
+        "$(stat -c %u:%a "$backup")" == 0:600 ]];then
+    (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
+     as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
+     as_updater npm run build:web) || restored=0
+    local restore_tmp=''
+    restore_tmp="$(mktemp "$STATE/.restore-state.XXXXXXXX")" || restored=0
+    if [[ -n "$restore_tmp" ]];then
+      cp -- "$backup" "$restore_tmp" || restored=0
+      chmod 0600 "$restore_tmp" || restored=0
+      chown linuxpanel:linuxpanel "$restore_tmp" || restored=0
+      mv -fT -- "$restore_tmp" "$STATE/panel-state.json" || restored=0
+    fi
+  elif [[ "$current" != "$OLD" ]];then
+    restored=0
+  fi
+  # Never request a start if Git, dependencies or private state failed
+  # recovery: serving a partially restored app would hide a failed rollback.
+  if ((restored==1));then
+    if [[ "$MODE" == recover ]];then
+      # Boot oneshot is Before=linux-panel.service; blocking start deadlocks.
+      systemctl start --no-block linux-panel.service || restored=0
+    else
+      systemctl start linux-panel.service || restored=0
+      systemctl is-active --quiet linux-panel.service || restored=0
+    fi
+  fi
+  if ((restored==1));then
+    record rolled_back
+    rm -f -- "$TXN" "$PROCESSING"
+    log "Recovered $ID and restored old version"
+    return 0
+  fi
+  record failed
+  log "Recovery FAILED for $ID; retaining journal for operator review/retry"
+  return 1
+}
+if [[ "$MODE" == recover ]];then
+  recover
+  exit $?
+fi
+if [[ -e "$TXN" || -L "$TXN" || -e "$PROCESSING" || -L "$PROCESSING" ]];then
+  log 'Recovery required; denying new deployment'
+  exit 2
+fi
+[[ -f "$MARKER" && ! -L "$MARKER" ]] || exit 0
 mv -T -- "$MARKER" "$PROCESSING"
-trap 'rm -f -- "$PROCESSING"' EXIT
 [[ -f "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 2
 # The marker is untrusted input. Read only a small fixed format; reject
 # oversized, symlinked, or non-regular files instead of parsing arbitrary data.
@@ -67,6 +173,11 @@ as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record 
 # failure restart the old service instead of leaving it down.
 BACKUP="$ROOT_BACKUP/panel-state.json.before-$OLD-$ID"
 [[ ! -e "$BACKUP" && ! -L "$BACKUP" ]] || { record failed; exit 2; }
+# Write root-only transaction before potentially stopping the panel.
+if ! journal;then
+  record failed
+  exit 2
+fi
 if ! systemctl stop linux-panel.service;then
   systemctl start linux-panel.service || true
   record failed
@@ -88,28 +199,7 @@ build(){
     as_updater /usr/bin/env PANEL_UPDATE_RESULT=/var/lib/linux-panel-updater/.isolated-test-broker-result npm test &&
     as_updater npm run build:web)
 }
-rollback(){
-  log "Update failed; stopping the new version, restoring state and rebuilding old code"
-  local restored=1
-  systemctl stop linux-panel.service || restored=0
-  as_updater git -C "$ROOT" reset --hard "$OLD" || restored=0
-  (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
-    as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
-    as_updater npm run build:web) || restored=0
-  if [[ -f "$BACKUP" && ! -L "$BACKUP" ]];then
-    local restore_tmp
-    restore_tmp="$(mktemp "$STATE/.restore-state.XXXXXXXX")"
-    cp -a -- "$BACKUP" "$restore_tmp" || restored=0
-    chmod 0600 "$restore_tmp" || restored=0
-    chown linuxpanel:linuxpanel "$restore_tmp" || restored=0
-    mv -fT -- "$restore_tmp" "$STATE/panel-state.json" || restored=0
-  else
-    restored=0
-  fi
-  systemctl start linux-panel.service || restored=0
-  systemctl is-active --quiet linux-panel.service || restored=0
-  if [[ "$restored" -eq 1 ]]; then record rolled_back;else record failed;fi
-}
+rollback(){ recover; }
 if ! build;then rollback;exit 1;fi
 if ! systemctl start linux-panel.service || ! systemctl is-active --quiet linux-panel.service;then
   rollback
@@ -158,4 +248,5 @@ if ((ready==0));then
   exit 1
 fi
 record success
+rm -f -- "$TXN"
 log "Updated to $TARGET"

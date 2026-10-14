@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const original=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
@@ -57,7 +57,9 @@ function prepare(){
   ['EXPECTED_REMOTE=/etc/linux-panel/update-source','EXPECTED_REMOTE='+JSON.stringify(pin)],
   ['PANEL_ENV=/etc/linux-panel/panel.env','PANEL_ENV='+JSON.stringify(env)],
   ['exec 9> /run/linux-panel-root-updater/update.lock','exec 9> '+JSON.stringify(join(base,'update.lock'))],
-  ['[[ "$#" -eq 0 && "$EUID" -eq 0 ]] || exit 2','[[ "$#" -eq 0 ]] || exit 2'],
+  ['[[ "$EUID" -eq 0 ]] || exit 2',':'],
+  ['"$(stat -c %u:%a "$TXN")" == 0:600','"$(stat -c %a "$TXN")" == 600'],
+  ['"$(stat -c %u:%a "$backup")" == 0:600','"$(stat -c %a "$backup")" == 600'],
   ['export PATH=/usr/sbin:/usr/bin:/sbin:/bin','export PATH='+JSON.stringify(bin)+':/usr/sbin:/usr/bin:/sbin:/bin'],
   ['as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }','as_updater(){ "$@"; }'],
   ['[[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" && "$(stat -c %u "$ROOT_BACKUP")" -eq 0 ]] || { record failed;exit 2; }','[[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" ]] || { record failed; exit 2; }']
@@ -98,6 +100,10 @@ for(const scenario of [
    assert.equal(out.result.status,scenario.expected,JSON.stringify(out.process));
    assert.equal(out.head,scenario.updated?f.target:f.old);
    assert.equal(out.state,'{"original":true}\n');
+   if(scenario.options.rollback){
+     assert.equal(existsSync(join(f.base,'backup','active-transaction')),true,
+       'A failed rollback must retain a root transaction journal for retry');
+   }
   }finally{f.cleanup();}
  });
 }
@@ -111,5 +117,19 @@ test('isolated updater worker: retry after rollback retains independent backup',
    const second=f.run();
    assert.equal(second.result.status,'success');
    assert.equal(second.head,f.target);
+ }finally{f.cleanup();}
+});
+
+test('recovery-only cannot consume an unapproved new trigger',()=>{
+ const f=prepare();
+ try{
+  writeFileSync(join(f.state,'update-trigger'),'id='+'b'.repeat(32)+'\nsha='+f.target+'\n');
+  const r=spawnSync('bash',[f.script,'--recover-only'],{
+    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log}
+  });
+  assert.equal(r.status,0,r.stderr);
+  assert.equal(readFileSync(join(f.state,'update-trigger'),'utf8').split('\n')[0],
+    'id='+'b'.repeat(32));
+  assert.equal(exec('git',['-C',f.root,'rev-parse','HEAD']),f.old);
  }finally{f.cleanup();}
 });
