@@ -1,0 +1,61 @@
+# Linux Panel private public-preview Nginx template.
+# Copy manually into a file INCLUDED inside Nginx's 'http' block;
+# limit_req_zone must be defined at http level, not inside server/location.
+# This example assumes Nginx terminates TLS directly and knows real client IP.
+# For Cloudflare/CDN: configure Nginx real_ip with VERIFIED CDN IP ranges first,
+# otherwise $remote_addr is the CDN edge IP and rate limits are shared.
+
+limit_req_zone $binary_remote_addr zone=lp_login:10m rate=5r/m;
+
+server {
+    listen 80;
+    server_name linux.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name linux.example.com;
+
+    # Replace with valid cert paths already provisioned on the server.
+    ssl_certificate     /etc/letsencrypt/live/linux.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/linux.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 32k;
+    limit_req_status 429;
+    server_tokens off;
+
+    # Allow only the final canonical domain through this virtual host.
+    # Do not publish the Vite development server (5173) via Nginx.
+    location / {
+        proxy_pass http://127.0.0.1:4188;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        # REPLACE client-supplied forwarding headers rather than append them.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header Connection "";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+        proxy_send_timeout 30s;
+    }
+
+    # Isolate the credential endpoint for Nginx-side rate limiting.
+    location = /api/auth/login {
+        limit_req zone=lp_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:4188;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header Connection "";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+        proxy_send_timeout 30s;
+    }
+}
