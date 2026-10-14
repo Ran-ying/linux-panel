@@ -1,78 +1,52 @@
 # Linux Panel
 
-一个以**可理解、可检查、可扩展**为目标的 Linux 管理面板。使用 JavaScript ES Modules、Fastify、Vue 3，以及模块拥有 Action、Web/MCP 共享执行的架构。
+以**可理解、可检查、可扩展**为目标的 Linux 管理面板。JavaScript ES Modules + Fastify + Vue 3；模块拥有 Action、Web/MCP 共用能力和数据。
 
-> **当前阶段：v0.1 本地只读原型，尚不具备生产环境所需的认证与权限防护。不要暴露到公网。**
+> **v0.2 本地只读原型。没有身份认证和 MCP 服务，禁止公网公开。**
 
-## 项目原则
+## 核心边界
 
-1. **模块拥有操作（Module-owned Actions）**：操作定义和实现放在 `modules/<模块>/actions/`。
-2. **统一发现**：Web 和未来 MCP 适配器都从 `ActionRegistry` 获取同一份操作元数据。
-3. **共享执行**：两个入口使用同一个 `ActionEngine`，不重复实现业务逻辑。
-4. **透明性**：每个 Action 描述其 Linux 原理、参数和只读操作预览。
-5. **权限隔离**：未来需要特权的系统操作由独立的授权执行组件处理，Web 不应以 root 运行。
-6. **默认安全**：v0.1 仅允许只读操作，后端只绑定 `127.0.0.1`。
+- **Action**（`modules/<id>/actions/`）：定义操作、输入输出 JSON Schema、数据来源和执行逻辑，不声明图标、按钮、图表或刷新频率。
+- **Core**（`core/`）：操作注册、输入和输出校验、执行；目前仅允许可信只读 Action。
+- **Web UI**（`modules/<id>/ui/presentations.js` + `apps/web/`）：决定使用指标卡、进度条还是表格，原始 JSON 随时可见；可手动开启自动刷新。
+- **MCP**：未来以适配器方式注册工具，使用同一个 Action 返回的 JSON，**不读取 Web UI 配置**。
+
+## 包含的只读 Action
+
+- `system.info`：主机、平台、内存总量、运行时间等。
+- `system.memory`：Linux 的 MemAvailable，macOS 时展示估算提示。
+- `system.cpu`：短时间 CPU 忙碌率采样。
+- `storage.usage`：根文件系统的容量、可用量、使用率。
+- `services.list`：Linux systemd 列表，macOS 返回明确标注的模拟服务。
+
+Action 输出被验证为结构化 JSON。UI 配置通过单独的 `GET /api/web/presentations` 返回；`GET /api/actions` 则只公开能力元数据。这两份内容**不会混在一起**。
+
+自动刷新是 Web 的可选策略，默认关闭。页面隐藏、操作切换、页面卸载时暂停或停止。刷新调用的是同一只读 Action；不产生服务器后台定时任务。
 
 ## MacBook 本地开发
 
-准备：Node.js **22.12+** 或 24，以及 npm。
-
-在项目目录执行：
+需要 Node.js 22.12+ 或 24：
 
 ```bash
-npm install
+cd ~/Projects/linux-panel
+npm ci
 npm test
-npm run dev:api
+npm run check
+npm run build:web
 ```
 
-再打开第二个终端，在同一目录执行：
+两个终端分别运行：
 
 ```bash
+npm run dev:api
+# 另一个终端
 npm run dev:web
 ```
 
-浏览器打开 Vite 显示的地址，通常是 `http://127.0.0.1:5173`。
+浏览器访问 <http://127.0.0.1:5173>。此时得到的是**MacBook 本机数据，不是 VPS 数据**。开发时 Vite 和 Fastify 各一个进程；正式构建后由 Fastify 托管静态资源，可以一个 PM2 进程运行后端。
 
-内置演示模块：
+## 安全要求
 
-- `system.info`：通过 Node.js 的 `os` 模块读取**当前主机**信息；在 MacBook 上运行时显示 Mac 信息，不是 VPS 信息。
-- `services.list`：在 Linux 上只读查询 systemd 服务；在 MacBook 上返回标注为 `mock-macos` 的模拟数据。
+当前 API 无登录、会话、服务器侧权限验证和独立审计，不可经 Nginx/Cloudflare 或公网 TCP 端口暴露。MCP 尚未实现；`exposure.mcp` 只表示未来支持。不要提交 Token、密码、.env、私有文件或数据库备份。
 
-## 文件结构
-
-```text
-apps/api/           Fastify Web API 和静态文件服务
-apps/web/           Vue 3 + Vite 前端
-core/               ModuleManager、ActionRegistry、ActionEngine
-modules/system/     系统信息模块
-modules/services/   服务列表模块
-tests/              Node.js 内置测试
- docs/              架构、安全、部署与路线图
- ecosystem.config.cjs   PM2 进程定义
-```
-
-## 本地构建
-
-```bash
-npm run build:web
-npm start
-```
-
-构建后，服务仍**只监听** `127.0.0.1:4188`。不要为当前原型配置公网 Nginx 反向代理或公开 MCP；先完成身份认证、权限审批、审计和安全检查。想从 Mac 访问 VPS 上的本地端口，可以在未来部署后使用 SSH 隧道。
-
-详见：[架构设计](docs/architecture.md) · [安全边界](docs/security.md) · [PM2 部署](docs/deployment.md) · [路线图](docs/roadmap.md)。
-
-## 当前实现范围
-
-- [x] 可信内置模块扫描、依赖顺序加载
-- [x] 模块向共享 Action Registry 注册操作
-- [x] Web API 列出、预览、执行只读 Action
-- [x] Vue 前端展示操作、底层说明及原始输出
-- [x] MCP 暴露元数据预留（**尚未实现 MCP 服务**）
-- [ ] 登录认证、权限、CSRF 防护
-- [ ] 有审批绑定的操作计划和持久审计
-- [ ] 特权执行组件、文件管理、交互式终端
-- [ ] 远程 OAuth MCP 适配器
-- [ ] Nginx、PHP、数据库和备份模块
-
-这个原型不会修改现有宝塔、Nginx、数据库或系统服务。
+更多：[架构](docs/architecture.md) · [安全](docs/security.md) · [部署](docs/deployment.md) · [路线图](docs/roadmap.md)

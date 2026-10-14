@@ -1,6 +1,6 @@
 /**
- * Module-owned actions, shared discovery. This registry contains metadata and
- * function implementations; the UI and future MCP adapter only see metadata.
+ * Modules own Actions. The Registry exposes metadata, never executable functions.
+ * Permission strings are descriptive in v0.2: they are NOT authorization.
  */
 export class ActionRegistry {
   #actions = new Map();
@@ -15,9 +15,11 @@ export class ActionRegistry {
     if (!action.inputSchema || action.inputSchema.type !== 'object') {
       throw new Error(`Action must define an object inputSchema: ${action.id}`);
     }
+    if (action.outputSchema && action.outputSchema.type !== 'object') {
+      throw new Error(`Action outputSchema must describe an object: ${action.id}`);
+    }
     if (!['read', 'write'].includes(action.kind)) throw new Error(`Invalid kind: ${action.id}`);
-    const stored = Object.freeze({ ...action, moduleId });
-    this.#actions.set(action.id, stored);
+    this.#actions.set(action.id, Object.freeze({ ...action, moduleId }));
   }
 
   get(id) { return this.#actions.get(id); }
@@ -26,8 +28,9 @@ export class ActionRegistry {
     if (!['web', 'mcp'].includes(channel)) throw new Error('Unknown channel');
     return [...this.#actions.values()]
       .filter(a => a.exposure?.[channel] === true)
-      .map(({ id, moduleId, title, description, inputSchema, kind, permission, explain }) => ({
-        id, moduleId, title, description, inputSchema, kind, permission, explain
+      .map(({ id, moduleId, title, description, inputSchema, outputSchema, kind, permission, explain }) => ({
+        id, moduleId, title, description, inputSchema, outputSchema,
+        kind, permission, explain
       }));
   }
 

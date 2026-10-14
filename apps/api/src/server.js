@@ -6,16 +6,20 @@ import { resolve } from 'node:path';
 import { ActionRegistry } from '../../../core/action-registry.js';
 import { ActionEngine } from '../../../core/action-engine.js';
 import { ModuleManager } from '../../../core/module-manager.js';
+import { loadWebPresentations } from './web-presentations.js';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const app = Fastify({ logger: true, bodyLimit: 32 * 1024 });
 const actions = new ActionRegistry();
-const modules = new ModuleManager(resolve(root, 'modules'), actions);
+const modulesPath = resolve(root, 'modules');
+const modules = new ModuleManager(modulesPath, actions);
 await modules.loadAll();
 const engine = new ActionEngine(actions);
+const webPresentations = await loadWebPresentations(modulesPath, modules.loaded, actions);
 
-app.get('/api/health', async () => ({ status: 'ok', version: '0.1.0', modules: modules.loaded }));
+app.get('/api/health', async () => ({ status: 'ok', version: '0.2.0', modules: modules.loaded }));
 app.get('/api/actions', async () => ({ actions: actions.list('web') }));
+app.get('/api/web/presentations', async () => ({ presentations: webPresentations }));
 
 app.post('/api/actions/:id/preview', async (request) => {
   return engine.preview(request.params.id, request.body?.input ?? {}, 'web');

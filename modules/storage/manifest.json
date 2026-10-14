@@ -1,0 +1,7 @@
+{
+  "id": "storage",
+  "name": "磁盘使用情况",
+  "version": "0.2.0",
+  "entry": "./index.js",
+  "dependencies": ["system"]
+}
