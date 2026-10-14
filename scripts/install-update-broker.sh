@@ -216,7 +216,7 @@ installed_checks(){
   [[ "$effective" == *"/opt/linux-panel"* && "$effective" == *"/var/lib/linux-panel"* ]] &&
    pass 'Effective limited ReadWritePaths found' || block 'Expected ReadWritePaths missing'
   effective="$(systemctl show linux-panel-update.service -p User --value)"
-  [[ "$effective" == root ]] && pass 'Root broker has explicit User=root' || block 'Root broker User mismatch'
+  [[ "$effective" == root || -z "$effective" ]] && pass 'Root broker runs as root (systemd default or explicit User=root)' || block 'Root broker User mismatch'
  else block 'Updater service unit not loaded';fi
  if file "$CONF" && grep -q '^PANEL_UPDATER_ENABLED=1$' "$CONF";then
   warn 'Web updater gate ENABLED (only appropriate after staging sign-off)'
@@ -225,7 +225,10 @@ installed_checks(){
   warn 'Update watcher ENABLED (only appropriate after staging sign-off)'
  else pass 'Update watcher disabled';fi
 }
-summary(){printf 'Broker %s summary: %s BLOCK(s), %s WARN(s)\n' "$MODE" "$BLOCK" "$WARN";((BLOCK==0));}
+summary() {
+  printf 'Broker %s summary: %s BLOCK(s), %s WARN(s)\n' "$MODE" "$BLOCK" "$WARN"
+  ((BLOCK == 0))
+}
 if [[ "$MODE" == check ]];then
  report INFO 'READ ONLY: broker fresh-install preflight'
  fresh_checks

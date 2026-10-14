@@ -10,6 +10,17 @@ const text=readFileSync(path,'utf8');
 const run=(...args)=>spawnSync('bash',[path,...args],{
   encoding:'utf8',timeout:20000,env:{...process.env}
 });
+test('entire broker script parses with bash -n (including code after --help)',()=>{
+ const r=spawnSync('bash',['-n',path],{encoding:'utf8',timeout:10000});
+ assert.equal(r.status,0,r.stderr);
+});
+
+test('root updater worker independently passes full Bash syntax parsing',()=>{
+ const worker=new URL('../scripts/update-worker.sh',import.meta.url).pathname;
+ const r=spawnSync('bash',['-n',worker],{encoding:'utf8',timeout:10000});
+ assert.equal(r.status,0,r.stderr);
+});
+
 test('broker explicit CLI advertises check/apply/verify/activate and disabled default',()=>{
  const r=run('--help');
  assert.equal(r.status,0,r.stderr);
