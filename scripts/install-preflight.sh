@@ -156,8 +156,24 @@ lp_preflight() {
       [[ -d "$folder" ]] || lp_report BLOCK "Nginx directory $folder missing. Use --no-nginx for a custom layout."
     done
     if command -v nginx >/dev/null 2>&1; then
-      if nginx -T 2>/dev/null | grep -Eq "server_name[[:space:]]+$DOMAIN([[:space:];]|$)"; then
+      # Read the complete dump before testing to avoid grep -q SIGPIPE
+      # suppressing a hit under pipefail. Literal domain comparison avoids
+      # regex wildcard false matches and includes alternate server_name entries.
+      local nginx_dump=''
+      nginx_dump="$(nginx -T 2>/dev/null || true)"
+      if awk -v domain="$DOMAIN" '
+        /^[[:space:]]*server_name[[:space:]]/ {
+          for (i=2; i<=NF; i++) {
+            name=$i; sub(/;$/, "", name)
+            if (name == domain) found=1
+          }
+        }
+        END { exit(!found) }
+      ' <<< "$nginx_dump"; then
         lp_report BLOCK "Existing Nginx server_name $DOMAIN found: choose a dedicated hostname."
+      fi
+      if grep -Eq 'zone=lp_(login|oauth_register|oauth_token):' <<< "$nginx_dump"; then
+        lp_report BLOCK 'Existing Nginx limit_req_zone lp_* conflicts with installer-managed zones; use --no-nginx and integrate manually.'
       fi
     fi
   else

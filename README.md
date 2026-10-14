@@ -19,7 +19,10 @@
 
 目标系统：Ubuntu 24.04 LTS / Debian 12+；推荐 Node.js 24 LTS。**CentOS 7 不受自动安装脚本支持。**
 
-共享服务器先执行 **只读预检**：`sudo bash scripts/install.sh --preflight --domain panel.example.com --no-nginx`。\n遇到不兼容的 Nginx/Node、系统资源或文件/端口冲突会明确提示并停止，不升级、替换或关闭其他业务。支持 `--node-bin /opt/node24/bin/node` 使用独立 Node 24。\n\n完整的 **手动分步安装** 和 **自动脚本部署** 请看 [docs/INSTALL.md](docs/INSTALL.md)。准备好公网 DNS、Node.js、Git、Nginx 和合法 HTTPS 证书后：
+共享服务器先执行 **只读预检**：`sudo bash scripts/install.sh --preflight --domain panel.example.com --no-nginx`。
+遇到不兼容的 Nginx/Node、系统资源或文件/端口冲突会明确提示并停止，不升级、替换或关闭其他业务。支持 `--node-bin /opt/node24/bin/node` 使用独立 Node 24。
+
+完整的 **手动分步安装** 和 **自动脚本部署** 请看 [docs/INSTALL.md](docs/INSTALL.md)。准备好公网 DNS、Node.js、Git、Nginx 和合法 HTTPS 证书后：
 
 ```bash
 git clone https://github.com/Ran-ying/linux-panel.git

@@ -88,9 +88,21 @@ if ((NO_NGINX == 0)); then
   [[ ! -e /etc/nginx/sites-enabled/linux-panel.conf ]] || die 'Nginx site link already exists'
   [[ ! -e /etc/nginx/conf.d/linux-panel-limits.conf ]] || die 'Nginx limit config already exists'
   [[ -d /etc/nginx/snippets && ! -e /etc/nginx/snippets/linux-panel-proxy.inc ]] || die 'Nginx snippets directory or target file unsuitable'
-  if nginx -T 2>&1 | grep -Eq "server_name[[:space:]]+$DOMAIN([[:space:];]|$)"; then
+  # Re-evaluate before writing, without allowing nginx SIGPIPE under pipefail
+  # to mask duplicate hostnames in a shared Nginx configuration.
+  NGINX_DUMP="$(nginx -T 2>/dev/null)" || die 'Cannot inspect existing Nginx configuration'
+  if awk -v domain="$DOMAIN" '
+    /^[[:space:]]*server_name[[:space:]]/ {
+      for (i=2; i<=NF; i++) {
+        name=$i; sub(/;$/, "", name)
+        if (name == domain) found=1
+      }
+    }
+    END { exit(!found) }
+  ' <<< "$NGINX_DUMP"; then
     die "An Nginx server_name for $DOMAIN already exists; stop to avoid overriding it"
   fi
+  unset NGINX_DUMP
 fi
 log "Cloning $REPO ($REF). This requires access if the repository is private."
 git clone --depth 1 --single-branch --branch "$REF" "$REPO" /opt/linux-panel
