@@ -1,5 +1,5 @@
 import OAuth2Server from '@node-oauth/oauth2-server';
-import { OAuthStore, secret } from './oauth-store.js';
+import { OAuthStore, secret, allowedScopes } from './oauth-store.js';
 
 export function createOAuthProvider(store, registry, resourceUrl) {
   const data=new OAuthStore(store,registry,resourceUrl);
@@ -21,8 +21,8 @@ export function createOAuthProvider(store, registry, resourceUrl) {
     generateRefreshToken:()=>secret(),
     generateAuthorizationCode:()=>secret(),
     validateScope:async (user,client,scopes)=>{
-      const available=new Set(await (async()=>data.store.snapshot().then(s=>(
-        (await import('./oauth-store.js')).allowedScopes(registry,s))))());
+      const state = await store.snapshot();
+      const available = new Set(allowedScopes(registry, state));
       return scopes?.length && scopes.every(s=>available.has(s))?scopes:false;
     },
     verifyScope:(token,scopes)=>scopes.every(s=>token.scope.includes(s))
