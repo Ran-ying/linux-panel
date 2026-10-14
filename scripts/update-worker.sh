@@ -105,8 +105,14 @@ recover(){
   elif [[ "$current" != "$OLD" ]];then
     restored=0
   fi
-  systemctl start linux-panel.service || restored=0
-  systemctl is-active --quiet linux-panel.service || restored=0
+  if [[ "$MODE" == recover ]];then
+    # This oneshot unit is ordered Before=linux-panel.service. A synchronous
+    # start would deadlock against systemd's ordering job; enqueue only.
+    systemctl start --no-block linux-panel.service || restored=0
+  else
+    systemctl start linux-panel.service || restored=0
+    systemctl is-active --quiet linux-panel.service || restored=0
+  fi
   if ((restored==1));then
     record rolled_back
     rm -f -- "$TXN" "$PROCESSING"
