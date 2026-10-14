@@ -12,7 +12,7 @@ const HOST='http://127.0.0.1:5173', PASSWORD='Correct horse battery staple 2026!
 test('RFC 6238 TOTP SHA1 vector and base32 round-trip',()=>{
   assert.equal(base32Encode(Buffer.from('12345678901234567890')),'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ');
   assert.deepEqual(base32Decode('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'),Buffer.from('12345678901234567890'));
-  assert.equal(totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',59),'287082');
+  assert.equal(totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',1),'287082');
 });
 test('TOTP setup requires password+session CSRF, login needs second factor, recovery codes single use',async t=>{
   const root=await mkdtemp(join(tmpdir(),'lp-totp-'));
