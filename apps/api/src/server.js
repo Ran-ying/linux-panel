@@ -18,6 +18,7 @@ const engine = new ActionEngine(actions);
 const webPresentations = await loadWebPresentations(modulesPath, modules.loaded, actions);
 
 app.get('/api/health', async () => ({ status: 'ok', version: '0.2.0', modules: modules.loaded }));
+app.get('/api/modules', async () => ({ modules: modules.loaded }));
 app.get('/api/actions', async () => ({ actions: actions.list('web') }));
 app.get('/api/web/presentations', async () => ({ presentations: webPresentations }));
 
