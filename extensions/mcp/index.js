@@ -1,18 +1,16 @@
 import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy } from '../../platform/mcp-policy.js';
 import * as auditHelpers from '../../platform/state-store.js';
 import { installOAuthRoutes } from './oauth-router.js';
-import { createUpdateController } from './update-controller.js';
 
 /**
  * Optional transport extension. Never trust Web cookies on /mcp.
  * Authentication is injected by the OAuth module; no bearer = no MCP tools.
  */
-export async function registerMcpExtension(app, { store, auth, registry, engine, resourceUrl, origin, root=process.cwd() }) {
+export async function registerMcpExtension(app, { store, auth, registry, engine, updates, resourceUrl, origin, root=process.cwd() }) {
   const { data: tokens } = installOAuthRoutes(app, { store, auth, registry, resourceUrl, origin });
-  const updates=createUpdateController({store,root,auth});
   app.get('/api/extensions/mcp/update',async request=>{
     auth.requirePermission(request.panelIdentity,'panel:read');
-    return updates.status();
+    return (await engine.run('panel.update.status', {}, 'web')).result;
   });
   app.post('/api/extensions/mcp/update/approve',async request=>{
     auth.requirePermission(request.panelIdentity,'panel:write');
@@ -49,22 +47,37 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
       snapshot.mcp?.policy?.tools?.[a.id] === true && permitted.has(a.permission));
 
     const server = new McpServer({ name: 'linux-panel', version: '0.5.0' }, { capabilities: { tools: {} } });
-    // Separate non-read-only operation: exact-commit proposal only; never executes the update.
-    if (process.env.PANEL_UPDATER_ENABLED === '1' &&
-        mcpPolicy(snapshot).allowUpdates === true && permitted.has('panel:update')) {
-      server.registerTool('panel.update.request', {
-        description:'Propose updating Linux Panel only to the fixed origin/main commit (optional targetSha for private repos). Requires separate Web approval; never executes changes by itself.',
-        inputSchema:z.object({targetSha:z.string().regex(/^[0-9a-f]{40}$/).optional()}).strict(),
+    // Write proposals use the same Action registered in the platform registry.
+    // The transport adapter performs OAuth+policy checks; ActionEngine enforces
+    // schema and validates the returned shape. No parallel execute() path exists.
+    const updateAction = registry.get('panel.update.request');
+    if (updateAction?.exposure?.mcp === true &&
+        updateAction.kind === 'write' && updateAction.permission === 'panel:update' &&
+        process.env.PANEL_UPDATER_ENABLED === '1' &&
+        mcpPolicy(snapshot).enabled && mcpPolicy(snapshot).allowUpdates &&
+        permitted.has(updateAction.permission)) {
+      server.registerTool(updateAction.id, {
+        description:updateAction.description,
+        inputSchema:z.object({targetSha:z.string().regex(/^[a-f0-9]{40}$/).optional()}).strict(),
         annotations:{readOnlyHint:false,destructiveHint:false}
-      },async(_input,ctx)=>{
+      }, async (input,ctx) => {
         const verified=ctx.http?.authInfo??authInfo;
         const live=verified?.token?await tokens.verifyAccessToken(verified.token):null;
-        if(!live || !live.scopes.includes('panel:update') || live.userId==null ||
-           !mcpPolicy(await store.snapshot()).allowUpdates)
+        const policy=mcpPolicy(await store.snapshot());
+        if(!live || !live.scopes?.includes(updateAction.permission) ||
+           !live.userId || !policy.enabled || !policy.allowUpdates ||
+           process.env.PANEL_UPDATER_ENABLED !== '1')
           return {isError:true,content:[{type:'text',text:'Not authorized for update proposals'}]};
+        const source=registry.get(updateAction.id);
+        if(source!==updateAction || source.executionPolicy!=='proposal-only') {
+          return {isError:true,content:[{type:'text',text:'Update proposal Action unavailable'}]};
+        }
         try {
-          const result=await updates.request({userId:live.userId,clientId:live.clientId,targetSha:_input.targetSha});
-          return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result};
+          auth.requirePermission({user:{id:live.userId,role:live.role}},updateAction.permission);
+          const value=await engine.run(updateAction.id,input,'mcp',{
+            authenticated:true,channel:'mcp',userId:live.userId,clientId:live.clientId
+          });
+          return {content:[{type:'text',text:JSON.stringify(value.result)}],structuredContent:value.result};
         }catch(e){return {isError:true,content:[{type:'text',text:e.message}]};}
       });
     }

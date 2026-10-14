@@ -6,6 +6,7 @@ const tools = ref([]);
 const grants = ref([]);
 const installed = ref(null);
 const update=ref(null);
+const updateSha=ref('');
 const totpRequired=ref(false);
 const approvePassword=ref('');
 const approveCode=ref('');
@@ -85,6 +86,26 @@ async function loadUpdate(){
   if(response.ok)update.value=await response.json();
   else update.value=null;
 }
+async function requestPanelUpdate(){
+  if(busy.value)return;
+  busy.value=true;error.value='';message.value='';
+  try{
+    // Web and MCP share the same registered Action and ActionEngine.
+    const input=updateSha.value?{targetSha:updateSha.value.trim()}:{};
+    const response=await fetch('/api/actions/panel.update.request/execute',{
+      method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
+      body:JSON.stringify({input})
+    });
+    const payload=await response.json();
+    if(!response.ok)throw new Error(payload.error||'无法申请更新');
+    message.value=payload.result.status==='up_to_date'
+      ?'当前面板已经处于最新提交'
+      :'已生成更新申请；检查 Git 提交后在下面确认';
+    updateSha.value='';
+    await loadUpdate();
+  }catch(cause){error.value=cause.message;}
+  finally{busy.value=false;}
+}
 async function approveUpdate(){
   if(!update.value?.pending || busy.value)return;
   busy.value=true;error.value='';message.value='';
@@ -133,7 +154,10 @@ onMounted(load);
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="message" class="notice success-notice" role="status">{{ message }}</p>
       <button class="form-button primary" :disabled="busy" type="button" @click="save">保存 MCP 策略</button>
-      <h4>面板更新申请</h4>
+      <h4>面板更新 · Action</h4>
+      <p class="muted small">Web 调用与 MCP 共用 <code>panel.update.request</code>，仅创建申请，不执行部署。可填写可信 main 的完整 SHA；公共仓库可留空由服务端查询。</p>
+      <label>目标完整 Git SHA（可选）<input type="text" v-model.trim="updateSha" placeholder="40 位十六进制提交 SHA" autocomplete="off"/></label>
+      <button type="button" :disabled="busy" @click="requestPanelUpdate">通过 Action 申请更新</button>
       <button type="button" :disabled="busy" @click="loadUpdate">刷新更新状态</button>
       <template v-if="update?.pending">
         <p>待处理更新：<code>{{ update.pending.from }}</code> → <code>{{ update.pending.target }}</code></p>
