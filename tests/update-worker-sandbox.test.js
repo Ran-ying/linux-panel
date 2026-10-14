@@ -45,7 +45,7 @@ function prepare(){
  fake('systemctl','printf "systemctl:%s\n" "$1" >> "$TEST_LOG"\nexit 0');
  fake('curl','[ "$FAIL_HEALTH" != 1 ]');
  fake('chown','exit 0');
- fake('npm','if [ "$FAIL_BUILD" = 1 ] && [ "$1" = run ] && [ "$2" = test ]; then exit 19; fi\nif [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi\nexit 0');
+ fake('npm','if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi\nif [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi\nexit 0');
  let worker=original;
  for(const [a,b] of [
   ['ROOT=/opt/linux-panel','ROOT='+JSON.stringify(root)],
