@@ -19,7 +19,7 @@ The tool is intentionally **not** an arbitrary command executor.
 
 ## Independent Web and MCP gates
 
-- The operator-controlled `PANEL_UPDATER_ENABLED=1` switch is the platform-level *deployment* gate. Read-only `panel.update.check` and `panel.update.status` remain usable without it; their status reports `brokerEnabled: false`. It is **off by default** until the privileged broker has been independently installed and reviewed.
+- The operator-controlled `PANEL_UPDATER_ENABLED=1` switch is the platform-level *deployment* gate. Read-only `panel.update.check` and `panel.update.status` remain usable without it; their status reports `brokerEnabled: false`. It is **off by default** after broker installation too, and requires a separate staging acceptance plus explicit `--activate --ack-acceptance`.
 - A logged-in administrator may check, request, cancel an unapproved request, or approve updates in the **Web 面板维护** page even if MCP is completely disabled.
 - MCP can only propose updates when MCP is enabled, `allowUpdates` is true, and the live bearer grant includes `panel:update`. Neither the Web gate nor a Web-generated proposal exposes or approves the MCP tool.
 - `panel.update.check` is a read-only Web Action. It identifies SHA origin as `origin_main` (queried from configured Git remote) or `supplied_sha` (not remotely verified). Neither is a substitute for the broker's pinned-remote verification.
@@ -27,56 +27,108 @@ The tool is intentionally **not** an arbitrary command executor.
 - The platform correlates the broker result ID with an approved proposal: a completed result stops showing as queued and releases the proposal slot. A still-running approval remains locked until its 15-minute expiry; overdue or failed jobs require independent operational inspection.
 - Legacy `/api/extensions/mcp/update` and `.../approve` aliases remain temporarily for compatibility; new Web components use platform Actions and platform URLs.
 
-## Initial operator-only installation
+## Independent operator-owned Broker installation: check → apply → verify → activate
 
-The current MCP connection offers read-only system tools. It cannot safely
-install its own privileged updater. This is **one manual bootstrap**; later
-updates no longer require manual `git pull`.
+Linux Panel is **independent of Nginx, domains and TLS**. Its ordinary
+`scripts/install.sh` installs the non-root Web service only. Privileged updates
+are optional, installed once by an OS-level administrator from a **separate**
+script. Neither MCP nor the Web service can grant itself root privileges.
 
-Before enabling anything:
+### Preflight (read-only; mandatory)
 
-1. Ensure your Git checkout is clean and under `/opt/linux-panel`.
-2. Back up `/var/lib/linux-panel/panel-state.json` and systemd/Nginx config.
-3. Review `scripts/install-update-broker.sh`,
-   `scripts/update-worker.sh`, and both
-   `deployment/systemd/linux-panel-update.*` files.
-4. Verify systemd **>= 240** (older releases may silently ignore sandbox policy), `PathExists`, `flock`, `runuser`, `curl`,
-   Git and Node/npm. The updater assumes systemd and an existing
-   `linux-panel.service` but does not manage an Nginx site.
-5. Run **once**, on the VPS:
+On **Ubuntu 24.04+ or Debian 12+, systemd >= 240**, first ensure the
+application is already healthy and its tracked `/opt/linux-panel` checkout is
+clean on `main`. Back up the VPS or take a VM snapshot before any privileged
+bootstrap, especially on servers with other services.
 
 ```bash
 cd /opt/linux-panel
-sudo bash scripts/install-update-broker.sh
+sudo bash scripts/install-update-broker.sh --help
+sudo bash scripts/install-update-broker.sh --check
 ```
 
-The installer copies the audited worker into
-`/usr/local/libexec/linux-panel-update-worker` (root owned),
-installs a root-owned `/etc/linux-panel/update-source` pin and systemd
-`linux-panel-update.path/.service`, creates an independent
-`linuxpanel-updater` user and assigns checkout write access **only** to that account (the Web service still runs as `linuxpanel`, with read-only group access to the checkout).
-It opts the Web application into showing the update feature via
-`PANEL_UPDATER_ENABLED=1`; MCP update permission and OAuth Scope
-remain **OFF** until you explicitly enable them.
+`--check` does **not** create users, alter permissions, install systemd units,
+enable Web/MCP controls, pull Git changes or restart services. It checks:
 
-**Private repository**: `linuxpanel-updater` needs its own read-only
-Deploy Key for the Git remote. The existing `core.sshCommand` may point
-to an inaccessible root-owned key: fix it to a key owned by
-`linuxpanel-updater`, and verify:
+- OS/systemd sandbox compatibility and required host commands;
+- clean, readable `main` checkout and credential-free expected GitHub origin;
+- existing running `linux-panel.service`, admin state, service user and group;
+- dedicated Node 24 toolchain, free memory/swap and disk space;
+- no preexisting worker, pin, systemd units, account, trigger or result directory.
+
+`[PASS]` means satisfied; `[WARN]` requires an operator decision (for example
+less than the recommended 5 GiB free space); `[BLOCK]` must be fixed before
+installation. **Do not bypass an OS/systemd BLOCK**. When any Broker artifact
+already exists, do **not** delete it to force a new first install; inspect with
+`--verify` and recover with a separate reviewed plan instead.
+
+### Install (explicit; does not enable updates)
+
+Only after all BLOCKs are resolved and the expected changes have been reviewed:
 
 ```bash
-sudo runuser -u linuxpanel-updater -- \
-  git -C /opt/linux-panel ls-remote origin refs/heads/main
+cd /opt/linux-panel
+sudo bash scripts/install-update-broker.sh --apply
+sudo bash scripts/install-update-broker.sh --verify
 ```
 
-The Web user `linuxpanel` should *not* have the updater's private key.
-For a private GitHub repo, ChatGPT can use its GitHub connector to read
-the current full `main` SHA and submit that as the optional
-`targetSha` to MCP. The broker verifies it independently using the
-updater account's credentials. If the repo is public, omitting
-`targetSha` lets the application query origin/main directly.
+`--apply` creates `linuxpanel-updater`, takes root-only backups of
+`panel-state.json`, `panel.env` and the main systemd unit, installs the fixed
+root-owned worker and trusted Git remote pin, changes checkout ownership to the
+low-privilege updater account (while leaving the Web account **read-only**),
+installs the systemd unit files, and reloads the systemd manager.
 
-**CentOS 7**: The bootstrap installer explicitly **rejects** its old systemd. Do **not** bypass this check: important root-worker sandbox directives are not supported. Migrate to a supported Linux OS (e.g. Ubuntu 24.04 LTS or Debian 12+) or design and independently audit a dedicated legacy broker first. The current Linux Panel may keep operating with read-only MCP meanwhile.
+**New behavior:** it deliberately does **not** enable or start the
+`linux-panel-update.path` watcher, does **not** set
+`PANEL_UPDATER_ENABLED=1`, does **not** restart the running panel and does
+**not** perform any Git update. The Web UI should still say Broker not enabled;
+that is **expected and correct** while safety acceptance is outstanding.
+
+`--verify` is read-only; it checks pinned repository identity, root worker,
+checkout permissions, unit ownership and **effective** `ProtectSystem=strict`,
+`NoNewPrivileges=yes` and `ReadWritePaths`. Examine its WARNs; also run
+`systemd-analyze security linux-panel-update.service` where supported, and
+review actual unit properties. A successful `--verify` is *necessary but not
+sufficient* to declare the Broker production-ready.
+
+### Independent staging acceptance BEFORE activation
+
+Follow [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) on a **disposable** Ubuntu
+24.04/Debian 12+ VM (snapshot, test Git remote, no live credentials) to test
+positive updates, scope/revocation checks, incorrect commits, concurrent
+requests, test/build/startup failures, rollback failure and interruptions.
+Record results and conduct a separate security review of sandbox properties.
+Green GitHub CI or a real production preflight does **not** replace that
+evidence. Keep the production Broker disabled until the requirements pass.
+
+### Activate (separate and explicit operator decision)
+
+After the acceptance checklist has been completed and signed off, an
+administrator may opt into actual updates:
+
+```bash
+cd /opt/linux-panel
+sudo bash scripts/install-update-broker.sh --verify
+sudo bash scripts/install-update-broker.sh --activate --ack-acceptance
+sudo systemctl status linux-panel-update.path --no-pager
+sudo systemctl is-active linux-panel.service
+```
+
+The `--ack-acceptance` flag is a **human attestation**, not an automated test.
+Activation revalidates installation state, backs up `panel.env` again, enables
+the watcher and Web update flag, and restarts **only** `linux-panel.service`.
+If the service fails to restart, the activation command attempts to disable the
+watcher and restore the previous configuration. It does not request an update
+by itself. MCP updates still require a separately authorized policy and
+`panel:update` scope.
+
+**Private repository:** configure a dedicated read-only Git Deploy Key for
+`linuxpanel-updater` if needed; never let `linuxpanel` own the key. Verify
+using `sudo runuser -u linuxpanel-updater -- git -C /opt/linux-panel ls-remote origin refs/heads/main`.
+Do not paste credentials or private hostnames into an open-source repo.
+
+**CentOS 7** / systemd 219 is blocked by design; do not bypass the check.
+Its Web and read-only MCP functions may continue without this Broker.
 
 ## Once installed: end-to-end update workflow
 
