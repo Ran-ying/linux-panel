@@ -124,6 +124,59 @@ sudo bash scripts/install.sh --preflight \
 
 **不会执行** `apt upgrade`、替换现有 Node、修改 Nginx/Caddy、配置域名、证书或防火墙，也不会自动安装 root 更新 Broker。克隆/构建已开始后的失败可能留下部分文件，不能把它当作可无损重试的事务。每个首次安装仅初始化管理员一次。
 
+### 4.4 首次安装在测试或构建阶段中断：安全续装
+
+如果安装器的预检、首次 Git clone、npm 依赖安装已成功，但在 `npm test` 或
+`npm run build:web` 失败，**不能直接再次运行正常的首次安装命令**：
+`/opt/linux-panel` 已存在。也不要删除目录、用户状态、服务或者已有 Node 24。
+
+先核实没有走到管理员初始化/systemd 阶段：
+
+```bash
+sudo git -C /opt/linux-panel status --short
+sudo git -C /opt/linux-panel branch --show-current
+sudo git -C /opt/linux-panel remote get-url origin
+sudo test ! -e /etc/systemd/system/linux-panel.service && echo 'No service unit'
+sudo test ! -e /etc/linux-panel/panel.env && echo 'No panel.env'
+sudo test ! -e /var/lib/linux-panel/panel-state.json && echo 'No private state'
+```
+
+如果**上面三个 `test` 都为真**，且仓库是干净、root 拥有的
+`https://github.com/Ran-ying/linux-panel.git` 的 `main`，可以先把代码更新到
+已经修复测试的版本（仅更新**部分安装的面板 checkout**，不会运行任何服务）：
+
+```bash
+cd /root/linux-panel
+git pull --ff-only
+sudo git -C /opt/linux-panel pull --ff-only origin main
+
+# 只读确认 --resume 预检通过
+sudo bash /root/linux-panel/scripts/install.sh \
+  --resume --preflight --host 127.0.0.1 --port 4188 \
+  --node-bin /opt/node24/bin/node
+
+# 审查预检的 WARN 后，显式继续首次安装
+sudo bash /root/linux-panel/scripts/install.sh \
+  --resume --host 127.0.0.1 --port 4188 \
+  --node-bin /opt/node24/bin/node
+```
+
+`--resume` 只用于**管理员状态尚未初始化**的第一次安装中断：
+会严格检查 Git 目录真实路径、root 所有权、干净工作区、
+预期 remote/branch，以及目标 panel.env、私有状态和 systemd unit 均不存在。
+随后重跑依赖检查、测试、前端构建，再交互创建管理员并启动服务。
+**它不强制 reset、不覆盖现有配置、不重启别的业务。**
+如果有任何一个检查不满足，停止操作并单独排障；
+不能用 `--resume` 更新已经运行的实例。
+
+本例（Ubuntu 24.04）的一次真实中断：`npm test` 有 68 项，
+其中 67 通过、1 项失败，是 `prepare-host.sh --install-node` 的只读测试
+错误地假设 `/opt/node24` 不存在；事实上它已被成功安装。
+新版脚本已使 dry-run 在节点存在时正常报告现状，
+而真正的 `--apply` 仍拒绝覆盖现有 Node。
+安装中的 esbuild `install-scripts` 提示只是**警告**，不能据此判断
+前端构建已成功；仍必须让 `npm run build:web` 通过。
+
 ## 5. 手动安装（同样不依赖 Nginx）
 
 手动安装适合需要严格控制已有业务的运维人员。最低 OS/Node/资源要求与上文相同。

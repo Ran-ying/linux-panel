@@ -24,11 +24,12 @@ test('host preparation check mode is read-only', () => {
   assert.match(r.stdout, /No changes/);
 });
 
-test('host preparation default install-node only prints plan', () => {
+test('host preparation read-only plan works with or without existing Node24', () => {
   const r = run('--install-node');
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, r.stdout+'\n'+r.stderr);
   assert.match(r.stdout, /DRY-RUN/);
   assert.match(r.stdout, /Will NOT alter/);
+  assert.match(r.stdout, /already exists|Plan: fetch official Node/);
 });
 
 test('host preparation forbids apply without chosen action', () => {
