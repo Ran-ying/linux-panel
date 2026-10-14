@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { readSessionCookie } from '../../platform/auth/cookies.js';
 import { addAudit } from '../../platform/state-store.js';
 import { allowedScopes, OAuthStore } from './oauth-store.js';
@@ -196,7 +197,11 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     try {
       const {oauth,Request,Response}=await provider();
       const incoming=new Request({
-        headers:request.headers,method:'GET',query:normalized,body:{}
+        // The OAuth library internally requires state even though OAuth clients
+        // may omit it. Generate an internal nonce solely for the library;
+        // do not return a fabricated state to the client.
+        headers:request.headers,method:'GET',
+        query:{...normalized,state:normalized.state ?? randomBytes(24).toString('base64url')},body:{}
       });
       const outgoing=new Response({headers:{}});
       const code=await oauth.authorize(incoming,outgoing,{
