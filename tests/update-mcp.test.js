@@ -10,6 +10,8 @@ import { ActionRegistry } from '../core/action-registry.js';
 import { ModuleManager } from '../core/module-manager.js';
 import { OAuthStore,secret } from '../extensions/mcp/oauth-store.js';
 import { setMcpPolicy } from '../platform/mcp-policy.js';
+import { registerUpdateActions } from '../platform/update-actions.js';
+import { createUpdateController } from '../platform/update-controller.js';
 
 const origin='http://127.0.0.1:4188',resource=origin+'/mcp';
 function parse(text){const d=text.split('\n').filter(s=>s.startsWith('data:'));return JSON.parse(d.length?d.at(-1).slice(5).trim():text);}
@@ -91,6 +93,8 @@ test('MCP direct update requires a separate OAuth execution scope, explicit poli
   const user=await auth.bootstrap('admin','safe direct update test password');
   const registry=new ActionRegistry();
   await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
+  // The app registers built-in platform Actions in addition to module Actions.
+  registerUpdateActions(registry,createUpdateController({store,root:process.cwd(),auth,enabled:true}));
   await setMcpPolicy(store,registry,{
     enabled:true,registrationEnabled:true,allowUpdates:false,allowDirectUpdates:true,
     tools:{'system.info':true,'panel.update.status':true}
