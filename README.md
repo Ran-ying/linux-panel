@@ -1,78 +1,69 @@
 # Linux Panel
 
-一个以**可理解、可检查、可扩展**为目标的 Linux 管理面板。使用 JavaScript ES Modules、Fastify、Vue 3，以及模块拥有 Action、Web/MCP 共享执行的架构。
+一个以**可理解、可检查、可扩展**为目标的 Linux 管理面板。基于 JavaScript ES Modules、Fastify、Vue 3，采用模块拥有 Action、Web/MCP 共享操作定义的架构。
 
-> **当前阶段：v0.1 本地只读原型，尚不具备生产环境所需的认证与权限防护。不要暴露到公网。**
+> **当前阶段：v0.2 开发分支，本地只读原型。没有认证和真实 MCP 服务，严禁直接暴露公网。**
 
-## 项目原则
+## v0.2 功能
 
-1. **模块拥有操作（Module-owned Actions）**：操作定义和实现放在 `modules/<模块>/actions/`。
-2. **统一发现**：Web 和未来 MCP 适配器都从 `ActionRegistry` 获取同一份操作元数据。
-3. **共享执行**：两个入口使用同一个 `ActionEngine`，不重复实现业务逻辑。
-4. **透明性**：每个 Action 描述其 Linux 原理、参数和只读操作预览。
-5. **权限隔离**：未来需要特权的系统操作由独立的授权执行组件处理，Web 不应以 root 运行。
-6. **默认安全**：v0.1 仅允许只读操作，后端只绑定 `127.0.0.1`。
+- ModuleManager 读取可信内置模块的 Manifest、检查依赖并调用 setup()。
+- ActionRegistry 统一注册 Action，向 Web 公开 Input/Output Schema 与 Presentation 元数据。
+- ActionEngine 用 AJV 验证输入和执行结果；仍然拒绝所有声明为 write 的操作。
+- Web UI 根据 `presentation.type` 自动呈现 **metrics / progress / table**；可以切换原始 JSON 并查看操作计划。
+- `system.info`：系统概况。
+- `system.memory`：Linux 读 /proc/meminfo 的 MemAvailable；Mac 则显示估算值提示。
+- `system.cpu`：两次 CPU 时间计数器采样，估算整体 CPU 使用率。
+- `storage.usage`：使用 fs.statfs() 获取根文件系统容量（无需 Shell）。
+- `services.list`：Linux 使用 systemctl 并解析结构化服务记录；macOS 返回明确标记的模拟数据。
 
-## MacBook 本地开发
+本项目运行在 MacBook 上时，**读取的是 MacBook，不是远端 VPS**。所有图表均来自实际 Action 结构化结果，没有写死示例数值。
 
-准备：Node.js **22.12+** 或 24，以及 npm。
+## 本地开发
 
-在项目目录执行：
+需要 Node.js 22.12+ 或 24，npm。
 
 ```bash
-npm install
+cd ~/Projects/linux-panel
+npm ci
 npm test
-npm run dev:api
+npm run check
+npm run build:web
 ```
 
-再打开第二个终端，在同一目录执行：
+打开两个终端，分别运行：
 
 ```bash
+npm run dev:api
+# 第二个终端
 npm run dev:web
 ```
 
-浏览器打开 Vite 显示的地址，通常是 `http://127.0.0.1:5173`。
+浏览器访问 <http://127.0.0.1:5173>。
 
-内置演示模块：
+生产模式的 Web 静态资源可由 Fastify 一起提供；部署时只需一个 Node.js 后端进程，但当前版本不适合公网使用。详见 [docs/deployment.md](docs/deployment.md)。
 
-- `system.info`：通过 Node.js 的 `os` 模块读取**当前主机**信息；在 MacBook 上运行时显示 Mac 信息，不是 VPS 信息。
-- `services.list`：在 Linux 上只读查询 systemd 服务；在 MacBook 上返回标注为 `mock-macos` 的模拟数据。
-
-## 文件结构
+## 架构
 
 ```text
-apps/api/           Fastify Web API 和静态文件服务
-apps/web/           Vue 3 + Vite 前端
-core/               ModuleManager、ActionRegistry、ActionEngine
-modules/system/     系统信息模块
-modules/services/   服务列表模块
-tests/              Node.js 内置测试
- docs/              架构、安全、部署与路线图
- ecosystem.config.cjs   PM2 进程定义
+modules/{system,storage,services}/actions/*
+       │ action + outputSchema + presentation
+       ▼
+ModuleManager → ActionRegistry → ActionEngine
+                       │              │
+                 API 元数据         运行结构化结果
+                       └───── Web Renderer
+                                ├─ metrics
+                                ├─ progress
+                                ├─ table
+                                └─ raw JSON
 ```
 
-## 本地构建
+Web 和未来的 MCP 都使用同一 Action Registry/Engine。现在尚未实现 MCP transport、用户认证或独立权限验证；`exposure.mcp` 只是元数据。
 
-```bash
-npm run build:web
-npm start
-```
+操作预览用于理解数据采集方法，**不是与实际执行绑定的审批计划**。下一阶段实现 Auth/Permissions、审计与高权限隔离。
 
-构建后，服务仍**只监听** `127.0.0.1:4188`。不要为当前原型配置公网 Nginx 反向代理或公开 MCP；先完成身份认证、权限审批、审计和安全检查。想从 Mac 访问 VPS 上的本地端口，可以在未来部署后使用 SSH 隧道。
+## 约束
 
-详见：[架构设计](docs/architecture.md) · [安全边界](docs/security.md) · [PM2 部署](docs/deployment.md) · [路线图](docs/roadmap.md)。
+不要把 .env、Token、密码、数据库备份或私人文件推送到 GitHub。所有 Action 只操作当前进程所在主机；不要用 root 运行面板。开发 API 绑定 127.0.0.1，禁止配置公网反向代理。
 
-## 当前实现范围
-
-- [x] 可信内置模块扫描、依赖顺序加载
-- [x] 模块向共享 Action Registry 注册操作
-- [x] Web API 列出、预览、执行只读 Action
-- [x] Vue 前端展示操作、底层说明及原始输出
-- [x] MCP 暴露元数据预留（**尚未实现 MCP 服务**）
-- [ ] 登录认证、权限、CSRF 防护
-- [ ] 有审批绑定的操作计划和持久审计
-- [ ] 特权执行组件、文件管理、交互式终端
-- [ ] 远程 OAuth MCP 适配器
-- [ ] Nginx、PHP、数据库和备份模块
-
-这个原型不会修改现有宝塔、Nginx、数据库或系统服务。
+[架构](docs/architecture.md) · [部署](docs/deployment.md) · [安全](docs/security.md) · [路线图](docs/roadmap.md)
