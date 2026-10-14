@@ -112,7 +112,7 @@ onUnmounted(() => {
     <div class="toolbar">
       <button type="button" :disabled="busy" @click="run('preview')">查看操作计划</button>
       <button type="button" class="primary" :disabled="busy" @click="run('execute')">
-        {{ busy ? '读取中…' : '刷新数据' }}
+        {{ busy ? '处理中…' : action.kind === 'write' ? '申请更新' : '刷新数据' }}
       </button>
     </div>
 
@@ -135,6 +135,6 @@ onUnmounted(() => {
       <pre v-else class="raw-output">{{ JSON.stringify(response.content, null, 2) }}</pre>
     </div>
     <p v-else-if="busy && !error" class="empty-state" role="status">正在读取实时数据…</p>
-    <p v-else-if="!error" class="empty-state">尚未读取数据，可点击“刷新数据”。</p>
+    <p v-else-if="!error" class="empty-state">{{ action.kind === 'write' ? '此操作只生成待批准的更新申请，不会立即部署。' : '尚未读取数据，可点击“刷新数据”。' }}</p>
   </section>
 </template>

@@ -4,8 +4,8 @@ The tool is intentionally **not** an arbitrary command executor.
 
 ## Roles
 
-- ChatGPT or another MCP client can request `panel.update.request`.
-- The MCP tool can propose **only one Git commit SHA**. No shell command,
+- `panel.update.request` 是标准写入（申请型）**Action**，Web 模块页面与 ChatGPT/MCP 均通过同一 `ActionEngine` 调用；`panel.update.status` 是只读 Action，也可在 Web 面板查看。
+- MCP 调用还要求 `panel:update` OAuth Scope、全局策略显式授权；Web 调用需要管理员 Session 和 CSRF。两条入口由 ActionEngine 验证相同的 JSON Schema。\n- The MCP tool can propose **only one Git commit SHA**. No shell command,
   branch name, arbitrary URL, or user-provided script can be executed.
 - The Web administrator must inspect the old/new SHA and confirm with their
   active browser session + CSRF + password re-verification. **TOTP is optional**: if the administrator enrolled it, a fresh TOTP code is mandatory; otherwise, the password suffices.
@@ -75,7 +75,7 @@ updater account's credentials. If the repo is public, omitting
    scoped to your needs.
 3. Authorize the AI client for the new `panel:update` scope. Existing
    access tokens do not gain that scope retroactively.
-4. Ask the AI: “Check GitHub main and request a Linux Panel update.”
+4. 在 Web 的「面板维护」模块调用 `panel.update.request`，或 Ask the AI: “Check GitHub main and request a Linux Panel update.”
    It reads the full SHA, proposes it via `panel.update.request`, then
    returns an approval-required response. **It has not updated anything.**
 5. Web → MCP settings → update request: verify old → proposed Git SHA,

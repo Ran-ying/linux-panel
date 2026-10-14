@@ -54,7 +54,8 @@ test('account sessions and built-in settings function with zero business modules
   assert.equal(reply.statusCode, 200);
   assert.match(reply.headers['set-cookie'], /HttpOnly; SameSite=Strict/);
   assert.equal(payload.user.role, 'admin');
-  assert.equal((await app.inject({ url: '/api/modules', headers: { cookie } })).json().modules.length, 0);
+  // No optional business modules; platform-owned update Actions remain visible.
+  assert.deepEqual((await app.inject({ url: '/api/modules', headers: { cookie } })).json().modules.map(m=>m.id), ['panel']);
   assert.equal((await app.inject({ url: '/api/auth/session', headers: { cookie } })).json().user.username, 'admin');
 
   const csrf = payload.csrf;

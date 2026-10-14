@@ -1,8 +1,8 @@
 import Ajv from 'ajv';
 
 /**
- * Local-only read Actions in v0.2. Output schemas describe an Action's data;
- * presentation metadata never affects permissions or execution.
+ * Validated Actions shared by Web and MCP. Write capabilities require an
+ * explicit execution policy and trusted adapter context; UI metadata never grants permission.
  */
 export class ActionEngine {
   constructor(registry) {
@@ -12,13 +12,18 @@ export class ActionEngine {
     this.outputValidators = new Map();
   }
 
-  #resolve(id, channel, input) {
+  #resolve(id, channel, input, context = {}) {
     const action = this.registry.get(id);
     if (!action || action.exposure?.[channel] !== true) {
       throw Object.assign(new Error('Action unavailable'), { statusCode: 404 });
     }
-    if (action.kind !== 'read') {
-      throw Object.assign(new Error('Write actions are disabled in v0.2'), { statusCode: 403 });
+    if (action.kind === 'write') {
+      // New write actions are DENIED BY DEFAULT. Only low-risk proposals with
+      // their own server-side authorization can execute through trusted adapters.
+      if (action.executionPolicy !== 'proposal-only' ||
+          context.authenticated !== true || typeof context.userId !== 'string' ||
+          !context.userId || context.channel !== channel)
+        throw Object.assign(new Error('Write action requires authorized proposal context'), { statusCode: 403 });
     }
     let validate = this.inputValidators.get(action);
     if (!validate) {
@@ -34,20 +39,20 @@ export class ActionEngine {
     return action;
   }
 
-  async preview(id, input = {}, channel = 'web') {
-    const action = this.#resolve(id, channel, input);
+  async preview(id, input = {}, channel = 'web', context = {}) {
+    const action = this.#resolve(id, channel, input, context);
     return {
       action: id, kind: action.kind,
       steps: typeof action.createPlan === 'function'
         ? await action.createPlan(input)
         : [{ description: 'No preview available' }],
-      note: 'Preview is informational for this read-only v0.2 action.'
+      note: 'Preview is informational and never triggers an update or other side effect.'
     };
   }
 
-  async run(id, input = {}, channel = 'web') {
-    const action = this.#resolve(id, channel, input);
-    const result = await action.execute(input);
+  async run(id, input = {}, channel = 'web', context = {}) {
+    const action = this.#resolve(id, channel, input, context);
+    const result = await action.execute(input, context);
     if (action.outputSchema) {
       let validate = this.outputValidators.get(action);
       if (!validate) {

@@ -11,6 +11,8 @@ import { StateStore, addAudit, DEFAULT_SETTINGS } from '../../../platform/state-
 import { AuthService } from '../../../platform/auth/service.js';
 import { readSessionCookie, sessionCookie, clearSessionCookie } from '../../../platform/auth/cookies.js';
 import { panelContentSecurityPolicy } from '../../../platform/http-security.js';
+import { createUpdateController } from '../../../platform/update-controller.js';
+import { registerUpdateActions } from '../../../platform/update-actions.js';
 
 const badRequest = message => Object.assign(new Error(message), { statusCode: 400 });
 const forbidden = message => Object.assign(new Error(message), { statusCode: 403 });
@@ -55,6 +57,10 @@ export async function createApp({
   const registry = new ActionRegistry();
   const modules = new ModuleManager(modulesPath, registry);
   await modules.loadAll();
+  const updates = createUpdateController({store, root, auth});
+  registerUpdateActions(registry, updates);
+  // Platform capabilities are first-class Actions, not transport extensions.
+  modules.loaded.push({ id:'panel', name:'面板维护', version:'0.5.0' });
   const engine = new ActionEngine(registry);
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
   const secure = production || publicOrigin.startsWith('https://');
@@ -64,7 +70,7 @@ export async function createApp({
   if (existsSync(mcpPath)) {
     const { registerMcpExtension } = await import(pathToFileURL(mcpPath).href);
     await registerMcpExtension(app, {
-      store, auth, registry, engine, root,
+      store, auth, registry, engine, updates, root,
       origin: publicOrigin || 'http://127.0.0.1:4188',
       resourceUrl: (publicOrigin || 'http://127.0.0.1:4188') + '/mcp'
     });
@@ -213,14 +219,18 @@ export async function createApp({
     if (!action || action.exposure?.web !== true)
       throw Object.assign(new Error('Action unavailable'), { statusCode: 404 });
     auth.requirePermission(request.panelIdentity, action.permission);
-    return engine.preview(request.params.id, request.body?.input ?? {}, 'web');
+    return engine.preview(request.params.id, request.body?.input ?? {}, 'web', {
+      authenticated:true,channel:'web',userId:request.panelIdentity.user.id
+    });
   });
   app.post('/api/actions/:id/execute', async request => {
     const action = registry.get(request.params.id);
     if (!action || action.exposure?.web !== true)
       throw Object.assign(new Error('Action unavailable'), { statusCode: 404 });
     auth.requirePermission(request.panelIdentity, action.permission);
-    const result = await engine.run(request.params.id, request.body?.input ?? {}, 'web');
+    const result = await engine.run(request.params.id, request.body?.input ?? {}, 'web', {
+      authenticated:true,channel:'web',userId:request.panelIdentity.user.id
+    });
     // Store only metadata, never input parameters, raw outputs or secrets.
     await store.mutate(state => addAudit(state, 'action.execute', request.panelIdentity.user.id, action.id));
     return result;
