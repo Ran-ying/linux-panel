@@ -69,6 +69,9 @@ test('MCP may only propose the pinned origin/main SHA; approval requires Web pas
   assert.equal(approved.status,'queued');
   assert.equal(await readFile(trigger,'utf8'),'id='+response.id+'\nsha='+target+'\n');
   assert.equal((await ctrl.status()).pending.approved,true);
+  await store.mutate(x=>{x.updateRequest.expiresAt=Date.now()-1000;});
+  assert.equal((await ctrl.status()).pending?.approved,true,'Queued work remains active even after approval TTL');
+  await assert.rejects(ctrl.request({userId:identity.user.id,clientId:'late-client',targetSha:target}),{statusCode:409});
   await assert.rejects(ctrl.approve({identity,id:response.id,password:'long-test-password-123!',code:good}),{statusCode:409});
   assert.equal(await cmd('-C',repo,'rev-parse','HEAD'),initial,'controller never changes the repository');
   await store.mutate(s=>{s.mcp.policy.allowUpdates=false;s.mcp.policy.enabled=false;});
@@ -134,6 +137,9 @@ test('delegated direct Broker enqueue is single-target, concurrent-safe and reco
   assert.equal(await readFile(join(dir,'trigger'),'utf8'),'id='+queued.id+'\nsha='+target+'\n');
   assert.equal((await ctrl.status()).pending.approved,true);
   assert.equal((await store.snapshot()).audit.at(-1).event,'panel.update.direct_queued');
+  await store.mutate(x=>{x.updateRequest.expiresAt=Date.now()-1000;});
+  assert.equal((await ctrl.status()).pending?.approved,true);
+  await assert.rejects(ctrl.executeDirect({userId:'admin',clientId:'late-client',targetSha:target}),{statusCode:409});
   await assert.rejects(ctrl.executeDirect({userId:'admin',clientId:'client2',targetSha:target}),{statusCode:409});
   assert.equal(await cmd('-C',root,'rev-parse','HEAD'),from,'Controller does not checkout code or execute commands');
 });
