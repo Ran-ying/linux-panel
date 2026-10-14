@@ -1,6 +1,7 @@
 /** Web-only table view for the structured systemd Action. */
 export default [{
   actionId: 'services.list',
+    loadOnEnter: true,
   renderer: 'table', rowsKey: 'services',
   columns: [
     { key: 'name', label: '服务' },
