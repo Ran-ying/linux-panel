@@ -2,6 +2,25 @@
 
 要求：`/opt/linux-panel/.git` 存在，systemd 的 `linux-panel.service` 是唯一运行实例，`/var/lib/linux-panel` 保存真实账号和 OAuth 数据。**不要使用 `scripts/install.sh` 覆盖已有部署。**
 
+> 如果最初在共享主机上使用了 `--node-bin /opt/node24/bin/node` 安装，
+> `/usr/bin/node` 仍可能是旧版本。下面的 `npm` 命令和 `scripts/update.sh`
+> 必须明确使用正确运行时，而不是碰运气依赖 root 的默认 PATH。
+> 自动 Broker 的实现与安装另见 [UPDATER.md](UPDATER.md)。
+>
+> **不建议对已经启用 Broker 的实例混用手动更新脚本**，应采用经过验收的 Broker 更新流程。
+
+### 独立 Node24 的更新命令
+
+初次以隔离 Node24 安装、**尚未安装更新 Broker** 的机器，可在确认状态备份与变更窗口后使用：
+
+```bash
+sudo env PATH=/opt/node24/bin:$PATH bash /opt/linux-panel/scripts/update.sh
+```
+
+此命令**真的执行更新**：停止并重新启动 `linux-panel.service`，期间会中断面板访问；
+一旦依赖安装或构建失败仍可能需要**手工回滚**。如果只是想检查版本或更新可用性，
+应使用面板只读 Action `panel.update.check`，不要执行这条命令。
+
 ## 手动更新
 
 ```bash
@@ -28,7 +47,9 @@ sudo systemctl status linux-panel.service --no-pager
 
 这是保守的全量升级，每次会有短暂停机。单独更新后端 JS、依赖未变时，可以只执行 `git pull`、测试和服务重启；前端变化则仍要运行 `npm run build:web`。
 
-## 自动升级
+## 脚本式手动升级（有停机时间）
+
+下面的写法**仅适用于 root 默认 PATH 中的 Node/npm 已满足要求**。如使用独立 `/opt/node24`，必须改用本页顶部的 `sudo env PATH=/opt/node24/bin:$PATH bash …`。
 
 ```bash
 sudo bash /opt/linux-panel/scripts/update.sh
