@@ -3,6 +3,7 @@ import { readSessionCookie } from '../../platform/auth/cookies.js';
 import { addAudit } from '../../platform/state-store.js';
 import { allowedScopes, OAuthStore } from './oauth-store.js';
 import { mcpPolicy } from '../../platform/mcp-policy.js';
+import { panelContentSecurityPolicy } from '../../platform/http-security.js';
 
 const escapeHtml = value => String(value).replaceAll('&','&amp;').replaceAll('<','&lt;')
   .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
@@ -167,8 +168,12 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     // For this OAuth consent document alone, origin sends a canonical Origin
     // while limiting Referer to the public origin (not the OAuth query string).
     // Keep the strict Origin/CSRF checks on POST unchanged.
+    // Chromium/WebKit enforce CSP form-action through the 302 redirect
+    // from this consent form to the OAuth client's registered callback.
+    // Add only that exact registered callback origin on this HTML document.
     reply.type('text/html; charset=utf-8').header('Cache-Control','no-store')
-      .header('Referrer-Policy','origin');
+      .header('Referrer-Policy','origin')
+      .header('Content-Security-Policy',panelContentSecurityPolicy(redirectHost));
     return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="referrer" content="origin"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Linux Panel · MCP 授权</title></head>
 <body><main><h1>授权 MCP 客户端</h1><p>当前用户：${escapeHtml(identity.user.username)}</p>
 <p>客户端自称：<strong>${escapeHtml(client.name)}</strong>（名称未经验证）</p>

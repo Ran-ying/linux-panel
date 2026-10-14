@@ -10,6 +10,7 @@ import { loadWebPresentations } from './web-presentations.js';
 import { StateStore, addAudit, DEFAULT_SETTINGS } from '../../../platform/state-store.js';
 import { AuthService } from '../../../platform/auth/service.js';
 import { readSessionCookie, sessionCookie, clearSessionCookie } from '../../../platform/auth/cookies.js';
+import { panelContentSecurityPolicy } from '../../../platform/http-security.js';
 
 const badRequest = message => Object.assign(new Error(message), { statusCode: 400 });
 const forbidden = message => Object.assign(new Error(message), { statusCode: 403 });
@@ -76,10 +77,7 @@ export async function createApp({
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     if (production) {
-      reply.header('Content-Security-Policy',
-        "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
-        "form-action 'self'; script-src 'self'; style-src 'self'; " +
-        "img-src 'self' data:; font-src 'self'; connect-src 'self'");
+      reply.header('Content-Security-Policy', panelContentSecurityPolicy());
       reply.header('Strict-Transport-Security', 'max-age=31536000');
       // Defense in depth. A public Nginx vhost must forward the canonical host.
       const requestedHost = request.headers.host;
