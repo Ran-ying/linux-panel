@@ -109,3 +109,9 @@ td{overflow-wrap:anywhere}
 .success-notice{border-color:#376456;color:#bde0c6;background:#17372b}
 .settings-page .module-intro{margin-bottom:0}
 @media(max-width:730px){.auth-card{padding:20px}.settings-section{padding:16px}}
+
+/* Update manager displays full immutable commit identities without truncation. */
+.update-sha-list{display:grid;gap:11px;padding:13px;margin:12px 0 20px;border:1px solid #30445b;border-radius:9px;background:#19293a}
+.update-sha-list>div{overflow-wrap:anywhere}
+.update-sha-list code{word-break:break-all;user-select:text}
+.settings-section .refresh-choice input{width:16px;flex:none;margin:0}

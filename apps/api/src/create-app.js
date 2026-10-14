@@ -172,6 +172,17 @@ export async function createApp({
       reply.header('Set-Cookie', clearSessionCookie({ secure }));
     return { ok: true };
   });
+  // Platform-owned approval/cancellation never pass through the MCP transport.
+  // Both endpoints use the existing Web session, Origin and CSRF defenses.
+  app.post('/api/panel/update/approve', async request => {
+    auth.requirePermission(request.panelIdentity,'panel:write');
+    return updates.approve({identity:request.panelIdentity,id:request.body?.id,
+      password:request.body?.currentPassword,code:request.body?.code});
+  });
+  app.post('/api/panel/update/cancel', async request => {
+    auth.requirePermission(request.panelIdentity,'panel:write');
+    return updates.cancel({identity:request.panelIdentity,id:request.body?.id});
+  });
   app.get('/api/panel/audit', async request => ({
     events: await auth.audit(request.panelIdentity)
   }));

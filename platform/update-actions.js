@@ -13,6 +13,7 @@ export function registerUpdateActions(registry, controller) {
     exposure: { web: true, mcp: false },
     inputSchema: {type:'object',properties:{},additionalProperties:false},
     outputSchema: {type:'object',properties:{
+      brokerEnabled:{type:'boolean'},
       pending:{type:['object','null'],properties:{
         id:{type:'string'},from:{type:'string'},target:{type:'string'},
         createdAt:{type:'string'},expiresAt:{type:'string'},approved:{type:'boolean'}
@@ -20,9 +21,29 @@ export function registerUpdateActions(registry, controller) {
       lastResult:{type:['object','null'],properties:{
         id:{type:'string'},sha:{type:'string'},status:{type:'string'},at:{type:'string'}
       },required:['id','sha','status','at'],additionalProperties:false}
-    },required:['pending','lastResult'],additionalProperties:false},
+    },required:['brokerEnabled','pending','lastResult'],additionalProperties:false},
     createPlan:async()=>[{type:'local-state',description:'读取面板更新申请和只读更新状态，不执行任何更新'}],
     execute:async()=>controller.status()
+  });
+  registry.register('panel', {
+    id: 'panel.update.check',
+    title: '检查面板更新',
+    description: '只读比较当前 Git SHA 与 origin/main；私有仓库可填写候选完整 SHA，最终仍由独立 Broker 验证。',
+    explain: '此 Action 不修改磁盘或状态。提供的 SHA 尚未经过可信远程验证，不能视为可部署证明。',
+    kind: 'read',
+    permission: 'panel:read',
+    exposure: {web:true,mcp:false},
+    inputSchema:{type:'object',additionalProperties:false,properties:{
+      targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'}
+    }},
+    outputSchema:{type:'object',properties:{
+      status:{type:'string',enum:['up_to_date','update_available']},
+      currentSha:{type:'string',pattern:'^[a-f0-9]{40}$'},
+      targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'},
+      source:{type:'string',enum:['origin_main','supplied_sha']}
+    },required:['status','currentSha','targetSha','source'],additionalProperties:false},
+    createPlan:async()=>[{type:'git-read',description:'读取本地 HEAD 和主分支 SHA，不修改仓库'}],
+    execute:async input=>controller.check(input)
   });
   registry.register('panel', {
     id: 'panel.update.request',
@@ -41,7 +62,7 @@ export function registerUpdateActions(registry, controller) {
       sha:{type:'string'},id:{type:'string'},from:{type:'string'},
       target:{type:'string'},expiresAt:{type:'string'},instructions:{type:'string'}
     },required:['status'],additionalProperties:false},
-    createPlan:async()=>[{type:'approval-proposal',description:'只检查可信 main 的提交并生成待人工批准的申请，实际部署必须单独批准'}],
+    createPlan:async()=>[{type:'approval-proposal',description:'创建有时效的候选 SHA 申请；实际部署必须由可信 Broker 验证 origin/main 并经过管理员批准'}],
     execute:async(input,context)=>{
       if(typeof context.userId!=='string'||!context.userId) {
         throw Object.assign(new Error('Unauthorized update proposal'),{statusCode:403});

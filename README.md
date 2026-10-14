@@ -13,7 +13,7 @@
 - Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
 - MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
 - Git + systemd + Nginx HTTPS，独立非 root 服务账户。
-- **面板更新是标准 Action**：`panel.update.status`（只读）、`panel.update.request`（创建申请），Web 和 MCP 走同一个 Action Engine；后者需 Web 管理员独立确认密码（TOTP 若已启用则额外验证），由受限 systemd Broker 进行实际更新（首次安装须管理员处理）。
+- **面板更新是标准 Action**：`panel.update.status`（只读）、`panel.update.check`（只读检查）、`panel.update.request`（创建申请），Web 和 MCP 走同一个 Action Engine；后者需 Web 管理员独立确认密码（TOTP 若已启用则额外验证），由受限 systemd Broker 进行实际更新（首次安装须管理员处理）。
 
 ## 安装
 
@@ -57,6 +57,6 @@ scripts/           管理员初始化 / 安装 / 更新
 tests/             Node 单元与集成测试
 ```
 
-更多文档：[架构](docs/architecture.md) · [MCP](docs/mcp.md) · [安装](docs/INSTALL.md) · [升级](docs/UPGRADING.md) · [安全](docs/security.md) · [威胁模型](docs/THREAT-MODEL.md) · [MCP 更新器](docs/UPDATER.md) · [公开审查](docs/PUBLIC-RELEASE.md)
+更多文档：[更新验收清单](docs/UPDATE-ACCEPTANCE.md) · [架构](docs/architecture.md) · [MCP](docs/mcp.md) · [安装](docs/INSTALL.md) · [升级](docs/UPGRADING.md) · [安全](docs/security.md) · [威胁模型](docs/THREAT-MODEL.md) · [MCP 更新器](docs/UPDATER.md) · [公开审查](docs/PUBLIC-RELEASE.md)
 
 许可证见 [LICENSE](LICENSE)。请勿把含密码、Cookie、Token 的数据文件推送到 GitHub。
