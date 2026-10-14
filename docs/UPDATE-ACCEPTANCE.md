@@ -2,6 +2,21 @@
 
 **Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. A SIGKILL recovery rehearsal has been added, but literal hard-power-loss integrity, concurrent approvals, live OAuth-to-Broker handoff and resource-starvation scenarios remain unverified.
 
+## Resource gate — conservative minimums, not a 3 GiB block
+
+The root worker refuses in-place npm deployment **before stopping Web** only
+when code filesystem space is below **1 GiB**, root backup filesystem space
+below **256 MiB**, or combined `MemAvailable + SwapFree` below **768 MiB**.
+Below 1.5 GiB combined memory/swap is a **warning**, not a rejection.
+These are initial floor values, not a promise that all builds fit; record
+real peak memory/disk usage from a disposable Ubuntu runner before enabling
+the production Broker. A shared VPS with approximately 3.8 GiB free disk
+is **not** rejected by the storage gate.
+
+Approved jobs remain blocked until an exact root result is observed,
+regardless of the proposal's 15-minute expiry, preventing a second
+submission during a slow build.
+
 ## Scope and hard gates
 
 - Never run the root broker installer on CentOS 7 / systemd 219, or bypass its `>=240` check.

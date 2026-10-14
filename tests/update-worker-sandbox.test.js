@@ -46,9 +46,12 @@ function prepare(){
  fake('curl','[ "$FAIL_HEALTH" != 1 ]');
  fake('sleep','exit 0');
  fake('chown','exit 0');
+ fake('df','printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 5000000 0 %s 0%% /\\n" "${TEST_FREE_KIB:-4000000}"');
  fake('install','src=; dst=; for x do src="$dst"; dst="$x"; done; exec /bin/cp -- "$src" "$dst"');
  fake('npm','if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi\nif [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi\nexit 0');
- let worker=original;
+ const meminfo=join(base,'meminfo');
+ writeFileSync(meminfo,'MemAvailable:    3000000 kB\\nSwapFree:    3000000 kB\\n'.replaceAll('\\n','\n'));
+ let worker=original.replaceAll('/proc/meminfo',JSON.stringify(meminfo));
  for(const [a,b] of [
   ['ROOT=/opt/linux-panel','ROOT='+JSON.stringify(root)],
   ['STATE=/var/lib/linux-panel','STATE='+JSON.stringify(state)],
@@ -71,14 +74,15 @@ function prepare(){
  let sequence=0;
  writeFileSync(script,worker,{mode:0o700});
  exec('bash',['-n',script]);
- return {base,root,state,status,script,log,old,target,
+ return {base,root,state,status,script,log,old,target,meminfo,
   cleanup(){rmSync(base,{recursive:true,force:true})},
-  run({sha=target,build=false,health=false,rollback=false}={}){
+  run({sha=target,build=false,health=false,rollback=false,lowDisk=false}={}){
    const id=(++sequence).toString(16).padStart(32,'0');
    writeFileSync(join(state,'update-trigger'),'id='+id+'\nsha='+sha+'\n');
    const process=spawnSync('bash',[script],{encoding:'utf8',timeout:20000,env:{
     ...globalThis.process.env,TEST_LOG:log,FAIL_BUILD:build?'1':'0',
-    FAIL_HEALTH:health?'1':'0',FAIL_ROLLBACK:rollback?'1':'0'
+    FAIL_HEALTH:health?'1':'0',FAIL_ROLLBACK:rollback?'1':'0',
+    TEST_FREE_KIB:lowDisk?'900000':'4000000'
    }});
    const result=JSON.parse(readFileSync(join(status,'result.json'),'utf8'));
    return {process,result,head:exec('git',['-C',root,'rev-parse','HEAD']),
@@ -131,5 +135,27 @@ test('recovery-only cannot consume an unapproved new trigger',()=>{
   assert.equal(readFileSync(join(f.state,'update-trigger'),'utf8').split('\n')[0],
     'id='+'b'.repeat(32));
   assert.equal(exec('git',['-C',f.root,'rev-parse','HEAD']),f.old);
+ }finally{f.cleanup();}
+});
+
+test('1 GiB disk threshold refuses only genuinely low space before service interruption',()=>{
+ const f=prepare();
+ try{
+  const blocked=f.run({lowDisk:true});
+  assert.equal(blocked.result.status,'failed');
+  assert.equal(blocked.head,f.old);
+  assert.doesNotMatch(readFileSync(f.log,'utf8'),/systemctl:stop/);
+  assert.match(blocked.process.stdout,/Insufficient free storage/);
+ }finally{f.cleanup();}
+});
+test('low memory + swap refuses before touching panel and high memory allows update',()=>{
+ const f=prepare();
+ try{
+  writeFileSync(f.meminfo,'MemAvailable: 200000 kB\nSwapFree: 200000 kB\n');
+  const blocked=f.run();
+  assert.equal(blocked.result.status,'failed');
+  assert.equal(blocked.head,f.old);
+  assert.doesNotMatch(readFileSync(f.log,'utf8'),/systemctl:stop/);
+  assert.match(blocked.process.stdout,/Memory \+ swap below 768 MiB/);
  }finally{f.cleanup();}
 });

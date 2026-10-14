@@ -15,6 +15,11 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     resultPath=process.env.PANEL_UPDATE_RESULT ?? '/var/lib/linux-panel-update-status/result.json'}) {
   // Platform-controlled broker gate. MCP policy is enforced ONLY by the MCP
   // adapter; disabling MCP must never disable an administrator's Web updates.
+  // An approved job is active until its exact root Broker result arrives;
+  // expiry limits user approval windows, NOT deployment execution duration.
+  // Otherwise a slow npm build could pass TTL and authorize a second job.
+  const isBlocking=(pending,lastResult)=>Boolean(pending &&
+    (pending.approved===true ? lastResult?.id!==pending.id : pending.expiresAt>Date.now()));
   const ensure=()=>{
     if(!enabled) throw error('Update broker is not enabled',404);
   };
@@ -49,8 +54,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     const lastResult=await readResult();
     // A completed broker result supersedes a previously approved proposal.
     // It must not appear to be queued forever or block subsequent updates.
-    const finished=record?.approved===true && lastResult?.id===record.id;
-    return {brokerEnabled:enabled,pending:record && record.expiresAt>Date.now() && !finished?
+    return {brokerEnabled:enabled,pending:record && isBlocking(record,lastResult)?
       {id:record.id,from:record.from,target:record.target,createdAt:record.createdAt,
         expiresAt:new Date(record.expiresAt).toISOString(),approved:record.approved===true}:null,
       lastResult};
@@ -117,8 +121,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     const state=await store.snapshot();
     const lastResult=await readResult();
     const previous=state.updateRequest;
-    if(previous?.expiresAt>Date.now() &&
-       !(previous.approved===true && lastResult?.id===previous.id))
+    if(isBlocking(previous,lastResult))
       throw error('Update already queued or awaiting approval',409);
     const {from,target}=await revisions(targetSha);
     if(from===target) return {status:'up_to_date',sha:from};
@@ -127,8 +130,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
       approved:true,userId,clientId};
     await store.mutate(s=>{
       const q=s.updateRequest;
-      if(q?.expiresAt>Date.now() &&
-         !(q.approved===true && lastResult?.id===q.id))
+      if(isBlocking(q,lastResult))
         throw error('Concurrent update request',409);
       s.updateRequest=item;
       addAudit(s,'panel.update.direct_queued',userId,item.id);

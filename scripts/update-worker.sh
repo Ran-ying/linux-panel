@@ -161,9 +161,37 @@ REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 [[ "$REMOTE" == "$TARGET" ]] || { record failed; exit 2; }
 if [[ "$OLD" == "$TARGET" ]];then record no_change;exit 0;fi
 as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record failed; exit 2; }
-# Refuse a high-risk in-place npm rebuild if the disk is nearly full.
-[[ "$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')" -ge 1048576 ]] ||
-  { log 'Less than 1 GiB free; no update attempted'; record failed; exit 2; }
+# Stop BEFORE service interruption if the shared VPS cannot safely build.
+# These are fixed, root-owned safety thresholds, not MCP-controlled parameters.
+# 1 GiB on the code filesystem; 256 MiB for root-only backups, and
+# 768 MiB MemAvailable + SwapFree for npm/test/build, with a soft warning
+# under 1.5 GiB. A 3.8 GiB free disk is therefore not blocked. This is a
+# minimum, not a guarantee against transient OOM / disk usage spikes.
+resource_headroom(){
+  local opt_kib backup_kib mem_kib swap_kib
+  opt_kib="$(df -Pk "$ROOT" 2>/dev/null | awk 'NR==2 {print $4}')" || return 1
+  backup_kib="$(df -Pk "$ROOT_BACKUP" 2>/dev/null | awk 'NR==2 {print $4}')" || return 1
+  mem_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)" || return 1
+  swap_kib="$(awk '/^SwapFree:/ {print $2}' /proc/meminfo)" || return 1
+  if [[ ! "$opt_kib" =~ ^[0-9]+$ || ! "$backup_kib" =~ ^[0-9]+$ ||
+        ! "$mem_kib" =~ ^[0-9]+$ || ! "$swap_kib" =~ ^[0-9]+$ ]];then
+    log 'Cannot reliably read disk/memory headroom; rejecting update'
+    return 1
+  fi
+  if ((opt_kib < 1048576 || backup_kib < 262144));then
+    log 'Insufficient free storage for update (min code 1 GiB, backup 256 MiB)'
+    return 1
+  fi
+  if ((mem_kib + swap_kib < 786432));then
+    log 'Memory + swap below 768 MiB: insufficient for reliable npm execution'
+    return 1
+  fi
+  if ((mem_kib + swap_kib < 1572864));then
+    log 'WARN: memory + swap below recommended 1.5 GiB; review build peak'
+  fi
+  log "Resource gate: code=${opt_kib}KiB backup=${backup_kib}KiB memory+swap=$((mem_kib+swap_kib))KiB"
+}
+if ! resource_headroom;then record failed; exit 2;fi
 # Non-root updater executes all potentially untrusted Git and npm code.
 # The root broker only stops/starts the fixed systemd unit and backs up state.
 [[ -f "$STATE/panel-state.json" && ! -L "$STATE/panel-state.json" ]] || { record failed;exit 2; }
