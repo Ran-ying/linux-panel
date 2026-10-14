@@ -36,7 +36,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     const visible = exposedReadActions(registry).filter(a =>
       snapshot.mcp?.policy?.tools?.[a.id] === true && permitted.has(a.permission));
 
-    const server = new McpServer({ name: 'linux-panel', version: '0.4.0' });
+    const server = new McpServer({ name: 'linux-panel', version: '0.4.0' }, { capabilities: { tools: {} } });
     // Always register only the actions advertised for MCP. Runtime handler
     // rechecks the policy so revoking a grant or a tool applies immediately.
     for (const action of visible) {
