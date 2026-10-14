@@ -97,6 +97,22 @@ Ubuntu 24.04. Neither suite simulates an abrupt loss of power or provides
 production sign-off. The remaining release-gate cases still require independent
 staging evidence.
 
+## Already-installed Broker migration acceptance
+
+A separate operator-only `scripts/upgrade-update-broker.sh` has three
+modes, `--check` (read-only), `--apply` (explicit root migration with backup)
+and `--verify` (read-only). It fails closed if watcher is enabled/active,
+a trigger or processing marker is present, Web gate is enabled, installed
+privileged files are symlinks/wrong-owner, or the clean Git main checkout
+does not match its pinned cached origin/main.
+
+The ephemeral Ubuntu workflow additionally stages known historical root
+worker/unit artifacts, injects one `systemctl daemon-reload` failure after
+swapping both files, checks rollback to both historical artifacts and a
+still-healthy Web service, and then migrates successfully. This test covers
+repeat migration/no-op, source equality and disabled watcher/Web gate.
+The production VPS receives **no migration automatically**.
+
 ## Installation gate and operational sign-off
 
 The one-time Broker installer now has four explicit modes. Operators must

@@ -161,5 +161,75 @@ wait_result 33333333333333333333333333333333 success
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
+
+note 'Stage migration from LEGACY already-installed immutable worker/service'
+# Historical real installer snapshot from a known public main revision.
+LEGACY=cdc48a38d7e89298bd410fe78611f98e03c786f4
+runuser -u linuxpanel-updater -- git -C "$ROOT" cat-file -e "${LEGACY}^{commit}" ||
+  fail 'Expected audited legacy commit absent from test Git history'
+legacy_dir="$(mktemp -d /tmp/linux-panel-legacy-XXXXXXXX)"
+chmod 0700 "$legacy_dir"
+runuser -u linuxpanel-updater -- git -C "$ROOT" show "$LEGACY:scripts/update-worker.sh" \
+  > "$legacy_dir/worker"
+runuser -u linuxpanel-updater -- git -C "$ROOT" show "$LEGACY:deployment/systemd/linux-panel-update.service" \
+  > "$legacy_dir/service"
+install -o root -g root -m 0755 "$legacy_dir/worker" /usr/local/libexec/linux-panel-update-worker
+install -o root -g root -m 0644 "$legacy_dir/service" /etc/systemd/system/linux-panel-update.service
+systemctl daemon-reload
+[[ "$(head_now)" == "$TARGET" ]] || fail 'Migration staging checkout not at approved main'
+[[ ! -e /var/lib/linux-panel/update-trigger && ! -e /var/lib/linux-panel/update-processing ]] ||
+ fail 'Marker not cleared before legacy simulation'
+pid_before="$(systemctl show linux-panel.service -p MainPID --value)"
+MIGRATION="$GITHUB_WORKSPACE/scripts/upgrade-update-broker.sh"
+bash -n "$MIGRATION"
+bash "$MIGRATION" --check
+if bash "$MIGRATION" --verify;then
+  fail 'Read-only migration verification incorrectly accepted legacy files'
+fi
+# Rehearse an exactly-once post-replacement systemd daemon-reload failure:
+# the migration must restore both prior artifacts from its root-only backup.
+inject_dir="$(mktemp -d /tmp/linux-panel-migrate-fault-XXXXXXXX)"
+chmod 0700 "$inject_dir"
+cat >"$inject_dir/systemctl" <<'SYSTEMCTL'
+#!/usr/bin/env bash
+if [[ "$1" == daemon-reload && ! -e /tmp/lp-migrate-daemon-failed-once ]];then
+  /usr/bin/touch /tmp/lp-migrate-daemon-failed-once
+  exit 73
+fi
+exec /usr/bin/systemctl "$@"
+SYSTEMCTL
+chmod 0755 "$inject_dir/systemctl"
+if PATH="$inject_dir:$PATH" bash "$MIGRATION" --apply;then
+ fail 'Injected systemd failure incorrectly reported migration success'
+fi
+cmp -s /usr/local/libexec/linux-panel-update-worker "$legacy_dir/worker" ||
+ fail 'Migration failure did not restore installed legacy worker'
+cmp -s /etc/systemd/system/linux-panel-update.service "$legacy_dir/service" ||
+ fail 'Migration failure did not restore legacy systemd unit'
+! systemctl is-active --quiet linux-panel-update.path || fail 'Watcher enabled by failed migration'
+healthy || fail 'Failed Broker migration interrupted Web API'
+
+note 'Successful migration after fault injection: root worker/unit and live sandbox'
+bash "$MIGRATION" --check
+bash "$MIGRATION" --apply
+bash "$MIGRATION" --verify
+cmp -s /usr/local/libexec/linux-panel-update-worker "$ROOT/scripts/update-worker.sh" ||
+ fail 'Installed worker does not match current pinned Git source'
+cmp -s /etc/systemd/system/linux-panel-update.service "$ROOT/deployment/systemd/linux-panel-update.service" ||
+ fail 'Installed Broker unit does not match current pinned Git source'
+find /var/lib/linux-panel-update-root -maxdepth 1 -name '.broker-migration-*' -type d | grep -q . ||
+ fail 'No per-run root backup persisted'
+[[ "$(systemctl show linux-panel.service -p MainPID --value)" == "$pid_before" ]] ||
+ fail 'Migration restarted running Web service'
+! systemctl is-active --quiet linux-panel-update.path || fail 'Migration activated update watcher'
+! systemctl is-enabled --quiet linux-panel-update.path || fail 'Migration enabled update watcher'
+! grep -q '^PANEL_UPDATER_ENABLED=1
+note 'Not tested: machine power loss, interrupted kernel, Web OAuth approval'
+ /etc/linux-panel/panel.env ||
+ fail 'Migration enabled Web updater gate'
+bash "$MIGRATION" --apply  # idempotent no-op
+bash "$MIGRATION" --verify
+note 'Real migration from old immutable root-worker succeeded and stayed DISABLED'
+
 note 'Real staging systemd/git/npm update and retry PASSED'
 note 'Not tested: machine power loss, interrupted kernel, Web OAuth approval'

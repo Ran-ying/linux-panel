@@ -124,6 +124,58 @@ checkout permissions, unit ownership and **effective** `ProtectSystem=strict`,
 review actual unit properties. A successful `--verify` is *necessary but not
 sufficient* to declare the Broker production-ready.
 
+### Upgrade an already-installed immutable Broker (without activation)
+
+If `install-update-broker.sh --apply` was run in the past, **do not repeat**
+first installation, delete old root files or just run `git pull` and assume
+the fixed privileged worker changed. The installer copied **two immutable
+root-owned artifacts** outside the Git tree. Source updates do not replace:
+
+- `/usr/local/libexec/linux-panel-update-worker`
+- `/etc/systemd/system/linux-panel-update.service`
+
+A separate **operator-only migration script** upgrades exactly those two
+artifacts. It requires a healthy running panel, clean cached `origin/main`
+checkout owned by `linuxpanel-updater`, unchanged root-owned Git pin, watcher
+both disabled and inactive, Web gate OFF, zero pending/processing markers,
+and safe existing worker/unit/backup ownership and file types.
+
+Take a separate VPS snapshot first. Review the Git diff/commit on the
+server before any new root-owned script is executed. **Do not run this flow
+if the Broker is enabled, processing updates or partially installed.**
+
+```bash
+# 1. Update checked-out source only — not the installed root worker.
+sudo runuser -u linuxpanel-updater -- \
+  git -C /opt/linux-panel pull --ff-only origin main
+cd /opt/linux-panel
+
+# 2. Read-only verification; examine WARN and SHA256 differences.
+sudo bash scripts/upgrade-update-broker.sh --check
+
+# 3. Explicit privileged migration. NO Web gate, watcher or app restart.
+sudo bash scripts/upgrade-update-broker.sh --apply
+
+# 4. Confirm exact installed/source match and disabled policy.
+sudo bash scripts/upgrade-update-broker.sh --verify
+sudo bash scripts/install-update-broker.sh --verify
+```
+
+`--check` and `--verify` are read-only; `--apply` uses a root-only flock,
+a separate root-only timestamped backup for each attempt, staged replacements
+and atomic per-file rename. On a post-swap error it tries to restore the old
+worker and unit and reload systemd. Re-running an already-current `--apply`
+is a no-op. It does not change the Git pin, private state, account ownership,
+Nginx, DNS, TLS, third-party services or public Web/MCP permissions.
+The operator must inspect warnings or failed recovery before retrying.
+
+A disposable [real Ubuntu 24.04 systemd migration test](../.github/workflows/broker-acceptance.yml)
+starts with an old pinned installation, injects a daemon-reload failure,
+verifies restoration, then migrates to current artifacts without touching
+the panel process. That test is **not** permission to enable deployment:
+in-flight power loss, resource exhaustion and full OAuth/Web end-to-end
+acceptance are separate gates in [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md).
+
 ### Independent staging acceptance BEFORE activation
 
 Follow [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) on a **disposable** Ubuntu
