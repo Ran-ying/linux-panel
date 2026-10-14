@@ -1,0 +1,19 @@
+[Unit]
+Description=Execute one approved Linux Panel Git update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/libexec/linux-panel-update-worker
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/linux-panel /var/lib/linux-panel
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID
+RestrictSUIDSGID=true
+TimeoutStartSec=900
