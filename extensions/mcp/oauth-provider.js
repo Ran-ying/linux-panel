@@ -22,7 +22,7 @@ export function createOAuthProvider(store, registry, resourceUrl) {
     generateAuthorizationCode:()=>secret(),
     validateScope:async (user,client,scopes)=>{
       const state = await store.snapshot();
-      const available = new Set(allowedScopes(registry, state));
+      const available = new Set([...allowedScopes(registry, state), 'offline_access']);
       return scopes?.length && scopes.every(s=>available.has(s))?scopes:false;
     },
     verifyScope:(token,scopes)=>scopes.every(s=>token.scope.includes(s))

@@ -84,8 +84,8 @@ export class OAuthStore {
       throw Object.assign(new Error('Invalid OAuth resource'), { statusCode: 400 });
     const state = await this.store.snapshot();
     const client = state.mcp?.clients?.find(c=>c.id===clientId);
-    const allowed = new Set(allowedScopes(this.registry,state));
-    if (!client || !Array.isArray(scopes) || !scopes.length ||
+    const allowed = new Set([...allowedScopes(this.registry,state), 'offline_access']);
+    if (!client || !Array.isArray(scopes) || !scopes.some(s=>s!=='offline_access') ||
         scopes.some(s=>!allowed.has(s)))
       throw Object.assign(new Error('Requested scopes are not available'), { statusCode: 400 });
     const user=state.users.find(u=>u.id===userId);
@@ -134,8 +134,9 @@ export class OAuthStore {
     await this.store.mutate(state=>{
       const mcp=oauthData(state),grant=mcp.grants.find(g=>g.id===id && g.userId===userId && !g.revoked);
       if (!grant) throw Object.assign(new Error('Grant not found'),{statusCode:404});
-      if (!Array.isArray(scopes) || !scopes.length || scopes.some(s=>!grant.scopes.includes(s) ||
-          !allowedScopes(this.registry,state).includes(s)))
+      if (!Array.isArray(scopes) || !scopes.some(s=>s!=='offline_access') ||
+          scopes.some(s=>!grant.scopes.includes(s) || (s!=='offline_access' &&
+          !allowedScopes(this.registry,state).includes(s))))
         throw Object.assign(new Error('Cannot add scopes to an existing grant'),{statusCode:400});
       grant.scopes=[...new Set(scopes)];
       addAudit(state,'mcp.grant.restricted',userId,grant.clientId);
@@ -200,8 +201,15 @@ export class OAuthStore {
     await this.store.mutate(state=>{
       const mcp=oauthData(state);
       const grant=mcp.grants.find(g=>g.id===grantId && !g.revoked);
+      const currentUser=state.users.find(u=>u.id===user.id);
       if(!grant || grant.clientId!==client.id || grant.userId!==user.id ||
-          grant.resource!==this.resourceUrl) throw Object.assign(new Error('Grant invalid'),{statusCode:401});
+          grant.resource!==this.resourceUrl || !currentUser ||
+          (currentUser.credentialEpoch??0)!==(grant.credentialEpoch??0))
+        throw Object.assign(new Error('Grant invalid'),{statusCode:401});
+      // Never persist or return permissions that have since been revoked.
+      const currentScopes=new Set([...allowedScopes(this.registry,state),'offline_access']);
+      value.scopes=value.scopes.filter(s=>grant.scopes.includes(s)&&currentScopes.has(s));
+      token.scope=value.scopes;
       mcp.tokens=mcp.tokens.filter(t=>active(t.accessExpiresAt) ||
         (t.refreshExpiresAt && active(t.refreshExpiresAt)));
       if (mcp.tokens.length>=MAX_TOKENS)
@@ -221,7 +229,9 @@ export class OAuthStore {
     if(!grant||!user||!client||grant.resource!==this.resourceUrl ||
        (user.credentialEpoch??0)!==(grant.credentialEpoch??0))return null;
     return { refreshToken:token,refreshTokenExpiresAt:new Date(record.refreshExpiresAt),
-      scope:record.scopes,client,user:{id:user.id,grantId:grant.id,resource:grant.resource} };
+      scope:record.scopes.filter(s=>grant.scopes.includes(s) &&
+        (s==='offline_access' || allowedScopes(this.registry,state).includes(s))),
+      client,user:{id:user.id,grantId:grant.id,resource:grant.resource} };
   }
   async revokeRefresh(token) {
     return this.store.mutate(state=>{

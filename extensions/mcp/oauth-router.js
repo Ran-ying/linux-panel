@@ -7,6 +7,7 @@ const escapeHtml = value => String(value).replaceAll('&','&amp;').replaceAll('<'
   .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const error = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const supported = ['authorization_code','refresh_token'];
+const OFFLINE_SCOPE = 'offline_access';
 const fields = ['client_id','redirect_uri','response_type','code_challenge','code_challenge_method','scope','resource','state'];
 
 export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin}) {
@@ -40,7 +41,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     grant_types_supported:supported,
     token_endpoint_auth_methods_supported:['none'],
     code_challenge_methods_supported:['S256'],
-    scopes_supported:['system:read','storage:read','services:read'],
+    scopes_supported:['system:read','storage:read','services:read', OFFLINE_SCOPE],
     authorization_response_iss_parameter_supported:true
   });
   const sendMetadata=(request,reply,data)=>{
@@ -85,7 +86,8 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
       throw error('Invalid OAuth client or redirect_uri');
     const scopes=typeof params.scope==='string' ? [...new Set(params.scope.split(/\s+/).filter(Boolean))] : [];
     const allowed=new Set(allowedScopes(registry,await store.snapshot()));
-    if(!scopes.length || scopes.some(s=>!allowed.has(s))) throw error('Unavailable OAuth scope');
+    if(!scopes.some(s=>s!==OFFLINE_SCOPE) || scopes.some(s=>s!==OFFLINE_SCOPE && !allowed.has(s)))
+      throw error('Unavailable OAuth scope');
     return {client,scopes};
   };
 
@@ -99,7 +101,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     const hidden=fields.map(key=>`<input type="hidden" name="${key}" value="${escapeHtml(request.query[key])}">`).join('');
     // Client-supplied display names are UNVERIFIED. Show its exact callback origin.
     const redirectHost=new URL(request.query.redirect_uri).origin;
-    const scopeLabels=scopes.map(s=>`<li><code>${escapeHtml(s)}</code></li>`).join('');
+    const scopeLabels=scopes.map(s=>`<li><code>${escapeHtml(s)}</code>${s===OFFLINE_SCOPE?'（允许连接在 Access Token 到期后继续刷新）':''}</li>`).join('');
     reply.type('text/html; charset=utf-8').header('Cache-Control','no-store');
     return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Linux Panel · MCP 授权</title></head>
 <body><main><h1>授权 MCP 客户端</h1><p>当前用户：${escapeHtml(identity.user.username)}</p>

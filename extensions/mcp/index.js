@@ -1,4 +1,5 @@
 import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy } from '../../platform/mcp-policy.js';
+import * as auditHelpers from '../../platform/state-store.js';
 import { installOAuthRoutes } from './oauth-router.js';
 
 /**
@@ -48,13 +49,20 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
         const verified = ctx.http?.authInfo ?? authInfo;
         const state = await store.snapshot();
         const source = registry.get(action.id);
-        if (!verified || !actionAllowed(state, source) ||
-            !verified.scopes?.includes(action.permission) ||
-            verified.userId == null)
+        // Revalidate the bearer at the actual execution boundary.
+        // This makes grant revocation, credential changes and policy changes
+        // effective even if they happen after tools/list has been served.
+        const live = verified?.token ? await tokens.verifyAccessToken(verified.token) : null;
+        if (!live || !actionAllowed(state, source) ||
+            !live.scopes?.includes(action.permission) || live.userId == null)
           return { isError: true, content: [{ type: 'text', text: 'This tool is not authorized' }] };
         // This is defense-in-depth; client credentials are not Web cookies.
-        auth.requirePermission({ user: { id: verified.userId, role: verified.role } }, source.permission);
+        auth.requirePermission({ user: { id: live.userId, role: live.role } }, source.permission);
         const value = await engine.run(action.id, {}, 'mcp');
+        await store.mutate(state => {
+          const { addAudit } = auditHelpers;
+          addAudit(state, 'mcp.action.execute', live.userId, action.id);
+        });
         return { content: [{ type: 'text', text: JSON.stringify(value.result) }], structuredContent: value.result };
       });
     }
