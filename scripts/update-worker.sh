@@ -72,8 +72,10 @@ if ! systemctl stop linux-panel.service;then
   record failed
   exit 2
 fi
-if ! cp -a -- "$STATE/panel-state.json" "$BACKUP" ||
-   ! chmod 0600 "$BACKUP";then
+# Do not preserve the Web user's owner/mode with cp -a: the root Broker
+# deliberately lacks CAP_FOWNER and cannot chmod a linuxpanel-owned copy.
+# Create a new root-owned 0600 snapshot instead.
+if ! install -o root -g root -m 0600 -- "$STATE/panel-state.json" "$BACKUP";then
   systemctl start linux-panel.service || true
   record failed
   exit 2
