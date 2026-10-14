@@ -67,7 +67,7 @@ No guarantee against unknown parser vulnerabilities, compromised dependencies,
 reverse-proxy misconfiguration, TOTP phishing, account recovery compromise,
 a compromised GitHub upstream or root host. Single-process JSON persistence,
 no multi-user RBAC or independent third-party penetration test. The updater's
-first-time provisioning is privileged and requires a manual operator review.
+first-time provisioning is privileged and requires a manual operator review; the root worker installer refuses systemd < 240 because silent ignoring of filesystem-sandbox directives is unacceptable.
 The system is not production-safety certified.
 
 ## Tests

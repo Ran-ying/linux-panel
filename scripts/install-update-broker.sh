@@ -4,6 +4,12 @@
 set -Eeuo pipefail
 (( EUID == 0 )) || { echo 'Run with sudo/root' >&2; exit 1; }
 ROOT=/opt/linux-panel
+# Older systemd can silently ignore sandbox directives (e.g. strict
+# filesystem protection), which is unsafe for a root-owned update worker.
+# Require a version known to implement our hardening policy.
+SYSTEMD_VERSION="$(systemctl --version | awk 'NR==1 {print $2}')"
+[[ "$SYSTEMD_VERSION" =~ ^[0-9]+$ && "$SYSTEMD_VERSION" -ge 240 ]] ||
+  { echo 'Updater requires systemd >= 240 for verified sandbox support; do not install on CentOS 7' >&2;exit 1; }
 command -v flock >/dev/null && command -v curl >/dev/null || { echo 'Requires flock and curl' >&2;exit 1; }
 [[ -d "$ROOT/.git" ]] || { echo 'A Git checkout is required' >&2; exit 1; }
 [[ -f /etc/systemd/system/linux-panel.service ]] || { echo 'linux-panel.service not installed' >&2; exit 1; }

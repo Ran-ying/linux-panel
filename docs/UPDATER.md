@@ -29,7 +29,7 @@ Before enabling anything:
 3. Review `scripts/install-update-broker.sh`,
    `scripts/update-worker.sh`, and both
    `deployment/systemd/linux-panel-update.*` files.
-4. Verify systemd supports `PathExists`, `flock`, `runuser`, `curl`,
+4. Verify systemd **>= 240** (older releases may silently ignore sandbox policy), `PathExists`, `flock`, `runuser`, `curl`,
    Git and Node/npm. The updater assumes systemd and an existing
    `linux-panel.service` but does not manage an Nginx site.
 5. Run **once**, on the VPS:
@@ -65,11 +65,7 @@ the current full `main` SHA and submit that as the optional
 updater account's credentials. If the repo is public, omitting
 `targetSha` lets the application query origin/main directly.
 
-**CentOS 7**: Not supported as a new production host. Existing legacy
-installations using the bundled `runtime/node` need separate
-compatibility checks for systemd sandbox rules, npm and the Git deploy
-key before the worker can be activated. Prefer migrating to a
-supported Linux OS. Do not assume CI running Ubuntu verifies CentOS 7.
+**CentOS 7**: The bootstrap installer explicitly **rejects** its old systemd. Do **not** bypass this check: important root-worker sandbox directives are not supported. Migrate to a supported Linux OS (e.g. Ubuntu 24.04 LTS or Debian 12+) or design and independently audit a dedicated legacy broker first. The current Linux Panel may keep operating with read-only MCP meanwhile.
 
 ## Once installed: end-to-end update workflow
 
