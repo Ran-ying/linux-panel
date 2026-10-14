@@ -151,4 +151,4 @@ curl -i https://panel.example.com/mcp
 
 ## v0.5 安全与 MCP 更新功能
 
-安装后建议在 **面板设置 → 账户安全** 启用 TOTP 并离线备份一次性恢复码。默认 MCP 及更新功能都关闭。要使用 AI 申请更新功能，请另外阅读 [UPDATER.md](UPDATER.md)，在管理员审查 root 固定脚本后 **只手动安装一次** systemd 更新 Broker；初次安装脚本不会自动授予 MCP 更新权限。
+安装后可按需在 **面板设置 → 账户安全** 启用 TOTP；这不是登录或更新的必需条件。若启用，请离线保存恢复码。默认 MCP 及更新功能都关闭。要使用 AI 申请更新功能，请另外阅读 [UPDATER.md](UPDATER.md)，在管理员审查 root 固定脚本后 **只手动安装一次** systemd 更新 Broker；初次安装脚本不会自动授予 MCP 更新权限。

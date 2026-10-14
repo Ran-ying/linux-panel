@@ -8,12 +8,12 @@
 
 ## 功能
 
-- 无默认密码的管理员账户、本地初始化、会话、CSRF、TOTP 双因素认证（一次性恢复码）和审计事件。
+- 无默认密码的管理员账户、本地初始化、会话、CSRF、可选 TOTP 双因素认证（一次性恢复码）和审计事件。
 - 系统、CPU、内存、磁盘及 systemd 服务只读信息。
 - Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
 - MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
 - Git + systemd + Nginx HTTPS，独立非 root 服务账户。
-- MCP 可以申请 Git 主分支更新；需要管理员在 Web 上输入密码和 TOTP 确认，随后由独立受限的 systemd 更新器测试、部署或回滚（需首次手动安装 Broker）。
+- MCP 可以申请 Git 主分支更新；需要管理员在 Web 上重新输入密码确认（TOTP 若已启用则额外验证），随后由独立受限的 systemd 更新器测试、部署或回滚（需首次手动安装 Broker）。
 
 ## 安装
 

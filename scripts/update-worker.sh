@@ -27,9 +27,12 @@ record(){
 exec 9> /run/linux-panel-root-updater/update.lock
 flock -n 9 || exit 0
 [[ -f "$MARKER" && ! -L "$MARKER" && ! -e "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 0
-mv -- "$MARKER" "$PROCESSING"
+mv -T -- "$MARKER" "$PROCESSING"
 trap 'rm -f -- "$PROCESSING"' EXIT
 [[ -f "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 2
+# The marker is untrusted input. Read only a small fixed format; reject
+# oversized, symlinked, or non-regular files instead of parsing arbitrary data.
+[[ "$(stat -c %s "$PROCESSING")" -le 1024 ]] || exit 2
 [[ "$(wc -l < "$PROCESSING")" -eq 2 ]] || exit 2
 IFS= read -r idline < "$PROCESSING"
 IFS= read -r shaline < <(sed -n '2p' "$PROCESSING")
