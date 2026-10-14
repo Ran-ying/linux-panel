@@ -7,6 +7,7 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 ROOT=/opt/linux-panel
 STATE=/var/lib/linux-panel
+ROOT_BACKUP=/var/lib/linux-panel-update-root
 MARKER="$STATE/update-trigger"
 PROCESSING="$STATE/update-processing"
 RESULT="$STATE/update-result"
@@ -15,15 +16,17 @@ USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
 as_updater(){ /usr/sbin/runuser -u "$USER" -- /usr/bin/env PATH=/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
-  local status="$1"
-  printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$RESULT"
-  chmod 0600 "$RESULT"
-  chown linuxpanel:linuxpanel "$RESULT"
+  local status="$1" tmp
+  tmp="$(mktemp "$STATE/.update-result.XXXXXXXX")"
+  printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$tmp"
+  chmod 0600 "$tmp"
+  chown linuxpanel:linuxpanel "$tmp"
+  mv -fT -- "$tmp" "$RESULT"
 }
 [[ "$#" -eq 0 && "$EUID" -eq 0 ]] || exit 2
-exec 9> "$STATE/update-worker.lock"
+exec 9> /run/linux-panel-root-updater/update.lock
 flock -n 9 || exit 0
-[[ -f "$MARKER" && ! -L "$MARKER" && ! -e "$PROCESSING" ]] || exit 0
+[[ -f "$MARKER" && ! -L "$MARKER" && ! -e "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 0
 mv -- "$MARKER" "$PROCESSING"
 trap 'rm -f -- "$PROCESSING"' EXIT
 [[ -f "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 2
@@ -50,9 +53,13 @@ if [[ "$OLD" == "$TARGET" ]];then record no_change;exit 0;fi
 as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || {record failed;exit 2;}
 # Non-root updater executes all potentially untrusted Git and npm code.
 # The root broker only stops/starts the fixed systemd unit and backs up state.
+[[ -f "$STATE/panel-state.json" && ! -L "$STATE/panel-state.json" ]] || { record failed;exit 2; }
+[[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" && "$(stat -c %u "$ROOT_BACKUP")" -eq 0 ]] || { record failed;exit 2; }
 systemctl stop linux-panel.service
-cp -a "$STATE/panel-state.json" "$STATE/panel-state.json.before-$OLD"
-chmod 0600 "$STATE/panel-state.json.before-$OLD"
+BACKUP="$ROOT_BACKUP/panel-state.json.before-$OLD"
+[[ ! -e "$BACKUP" && ! -L "$BACKUP" ]] || { systemctl start linux-panel.service;record failed;exit 2; }
+cp -a -- "$STATE/panel-state.json" "$BACKUP"
+chmod 0600 "$BACKUP"
 build(){
   as_updater git -C "$ROOT" merge --ff-only "$TARGET" || return 1
   (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
@@ -67,7 +74,11 @@ rollback(){
   (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
     as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
     as_updater npm run build:web) || restored=0
-  cp -a "$STATE/panel-state.json.before-$OLD" "$STATE/panel-state.json" || restored=0
+  if [[ -f "$BACKUP" && ! -L "$BACKUP" && ! -L "$STATE/panel-state.json" ]];then
+    cp -a -- "$BACKUP" "$STATE/panel-state.json" || restored=0
+  else
+    restored=0
+  fi
   systemctl start linux-panel.service || restored=0
   systemctl is-active --quiet linux-panel.service || restored=0
   if [[ "$restored" -eq 1 ]]; then record rolled_back;else record failed;fi
