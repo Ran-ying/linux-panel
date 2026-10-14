@@ -35,6 +35,8 @@ test('first admin must be bootstrapped locally; Web cannot self-register', async
   const { app, admin, statePath } = await fixture(t);
   assert.deepEqual((await app.inject('/api/auth/status')).json(), { initialized: false });
   assert.equal((await app.inject('/api/actions')).statusCode, 401);
+  assert.equal((await app.inject('/api/health')).statusCode, 401);
+  assert.equal((await app.inject('/api/web/presentations')).statusCode, 401);
   assert.equal((await app.inject('/api/panel/settings')).statusCode, 401);
   assert.equal((await app.inject({ method: 'POST', url: '/api/auth/login',
     headers: { 'x-panel-client': 'web' },
@@ -138,4 +140,20 @@ test('settings input validation prevents extra properties and invalid values', a
   });
   assert.equal(bad.statusCode, 400);
   assert.equal((await app.inject({ url: '/api/panel/settings', headers: { cookie } })).json().settings.panelName, 'Linux Panel');
+});
+
+test('logout must revoke the cookie on the server, not just hide the Web UI', async t => {
+  const { app, admin, login } = await fixture(t);
+  await admin();
+  const { cookie, payload } = await login();
+  const denied = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } });
+  assert.equal(denied.statusCode, 403);
+  assert.equal((await app.inject({ url: '/api/auth/session', headers: { cookie } })).statusCode, 200);
+  const ok = await app.inject({
+    method: 'POST', url: '/api/auth/logout',
+    headers: { cookie, 'x-panel-csrf': payload.csrf }
+  });
+  assert.equal(ok.statusCode, 200);
+  assert.match(ok.headers['set-cookie'], /Max-Age=0/);
+  assert.equal((await app.inject({ url: '/api/auth/session', headers: { cookie } })).statusCode, 401);
 });

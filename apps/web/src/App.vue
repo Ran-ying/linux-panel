@@ -57,9 +57,20 @@ async function signIn(payload) {
 
 async function logout() {
   if (!session.value) return;
+  error.value = '';
   try {
-    await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Panel-CSRF': session.value.csrf } });
-  } finally { signOutLocally(); }
+    const response = await fetch('/api/auth/logout', {
+      method: 'POST', headers: { 'X-Panel-CSRF': session.value.csrf }
+    });
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    signOutLocally();
+  } catch (cause) {
+    // Never claim the user was logged out if server-side revocation failed.
+    error.value = `退出登录失败：${cause.message}`;
+  }
 }
 
 onMounted(async () => {
