@@ -1,6 +1,6 @@
 # v0.5 Updater — Acceptance and Release Gate
 
-**Status: NOT VERIFIED FOR LIVE ROOT BROKER.** Rootless Git worker simulations and app/OAuth tests have passed in CI, but there is no disposable VM sign-off for the real systemd broker, service interruption, power loss or rollback.
+**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. Reboot/power loss, concurrent approvals, live OAuth-to-Broker handoff and resource-starvation scenarios remain unverified.
 
 ## Scope and hard gates
 
@@ -10,7 +10,7 @@
 - Verify the root-owned worker, source pin, trigger directory, `linuxpanel` / `linuxpanel-updater` identities, checkout permissions and systemd sandbox with `systemd-analyze security` and effective unit properties. Reviewing a text unit file alone is insufficient.
 - A green GitHub CI, Bash syntax pass, or app-level integration test is **not** equivalent to testing the root broker or rollback.
 
-## Required checks (all initially UNVERIFIED)
+## Release-gate checks (automated subset passed; remaining cases unverified)
 
 | Case | Expected result | Evidence to preserve |
 |---|---|---|
@@ -47,6 +47,42 @@ Redact cookies, passwords, tokens, recovery codes, private keys and private host
 
 Do not mark release-ready until the supported staging VM has passed the positive and failure-injection scenarios, followed by a separate security review of root-sandbox effective properties and update-source trust. Production migration or installer execution requires explicit operator approval.
 
+## Real systemd acceptance evidence — disposable GitHub-hosted Ubuntu
+
+The dedicated [Broker acceptance workflow](../.github/workflows/broker-acceptance.yml)
+runs on an **ephemeral GitHub-hosted** Ubuntu 24.04 runner, refuses self-hosted
+runners and pre-existing Linux Panel installations, and does not load operator
+credentials. It deliberately leaves Web/MCP deployment gates OFF. A test-only
+privileged driver submits fixed markers to the actual root-owned worker and
+systemd path unit. The runner's checkout uses a public GitHub origin/main
+commit and creates random, throwaway local admin credentials.
+
+On 2026-10-15, the [real staging run](https://github.com/Ran-ying/linux-panel/actions/runs/38646024184)
+recorded **success** for the following observed scenarios:
+
+| Observed case | Result in ephemeral runner |
+| --- | --- |
+| Ubuntu 24.04 / systemd 255, actual unprivileged panel and separate root worker | `--check`, `--apply`, `--verify` pass; worker remains disabled after install |
+| Invalid Git SHA via real systemd path watcher | `failed` result; old HEAD and running Web API remain unchanged |
+| Controlled npm test failure while deploying exact origin/main | `rolled_back`; prior HEAD, state backup and Web service recovered |
+| Second request from the same old SHA | `success`; new HEAD matches target and HTTP probe returns healthy |
+| End of transaction | Processing/trigger markers removed |
+
+The real-systemd workflow uncovered missing capability inheritance, a
+privilege-switching incompatibility, metadata-preserving backup failures,
+inconsistent test result paths, cross-mount atomic-restore issues and immediate
+post-start health-check races. Fixes belong to the dedicated fixed
+root worker, and must be reviewed again before anyone replaces the
+already-installed immutable worker on a VPS.
+
+**Still not proven:** real kernel panic/power-off/reboot behavior, interruption
+while npm is modifying dependencies, sustained low-memory behavior,
+rollback failure when disk is full, concurrent Web/OAuth approvals,
+OAuth client credential revocation during an in-flight update, and
+operator recovery from a stranded processing marker. A green hosted
+workflow is evidence for the listed cases only, **not** a global
+production release signature.
+
 ## Automated evidence vs. outstanding real-system acceptance
 
 The repository includes `tests/update-worker-sandbox.test.js`, which runs a
@@ -55,11 +91,11 @@ copy of the fixed update worker. Its stub systemctl, npm and curl exercise
 successful FF, wrong SHA refusal, build failure, failed HTTP health and failed
 rollback-build recording without root or changes to the production worker.
 
-This tests the worker's control flow, **not** npm's actual resource use,
-systemd sandbox user switching, process lifetime across machine power loss,
-worker/service concurrent writers, rollback following ungraceful kernel restart,
-or origin TLS. The acceptance matrix below and external disposable Ubuntu
-24.04/Debian 12+ VM sign-off remain required for production activation.
+The **rootless** suite only tests simulated control flow. The separate
+GitHub-hosted acceptance above now also tests actual systemd, npm and Git on
+Ubuntu 24.04. Neither suite simulates an abrupt loss of power or provides
+production sign-off. The remaining release-gate cases still require independent
+staging evidence.
 
 ## Installation gate and operational sign-off
 

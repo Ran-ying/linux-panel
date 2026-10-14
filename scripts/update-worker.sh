@@ -15,7 +15,7 @@ EXPECTED_REMOTE=/etc/linux-panel/update-source
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
-as_updater(){ /usr/sbin/runuser -u "$USER" -- /usr/bin/env PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
+as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
   local status="$1" tmp
   tmp="$(mktemp "$ROOT_BACKUP/.update-result.XXXXXXXX")"
@@ -62,16 +62,31 @@ as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record 
 # The root broker only stops/starts the fixed systemd unit and backs up state.
 [[ -f "$STATE/panel-state.json" && ! -L "$STATE/panel-state.json" ]] || { record failed;exit 2; }
 [[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" && "$(stat -c %u "$ROOT_BACKUP")" -eq 0 ]] || { record failed;exit 2; }
-systemctl stop linux-panel.service
-BACKUP="$ROOT_BACKUP/panel-state.json.before-$OLD"
-[[ ! -e "$BACKUP" && ! -L "$BACKUP" ]] || { systemctl start linux-panel.service; record failed; exit 2; }
-cp -a -- "$STATE/panel-state.json" "$BACKUP"
-chmod 0600 "$BACKUP"
+# Each request gets an independent backup to support retry from one SHA.
+# Stop first to guarantee a consistent private state snapshot; on any snapshot
+# failure restart the old service instead of leaving it down.
+BACKUP="$ROOT_BACKUP/panel-state.json.before-$OLD-$ID"
+[[ ! -e "$BACKUP" && ! -L "$BACKUP" ]] || { record failed; exit 2; }
+if ! systemctl stop linux-panel.service;then
+  systemctl start linux-panel.service || true
+  record failed
+  exit 2
+fi
+# Do not preserve the Web user's owner/mode with cp -a: the root Broker
+# deliberately lacks CAP_FOWNER and cannot chmod a linuxpanel-owned copy.
+# Create a new root-owned 0600 snapshot instead.
+if ! install -o root -g root -m 0600 -- "$STATE/panel-state.json" "$BACKUP";then
+  systemctl start linux-panel.service || true
+  record failed
+  exit 2
+fi
 build(){
   as_updater git -C "$ROOT" merge --ff-only "$TARGET" || return 1
   (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
     as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
-    as_updater npm run check && as_updater npm test && as_updater npm run build:web)
+    as_updater npm run check &&
+    as_updater /usr/bin/env PANEL_UPDATE_RESULT=/var/lib/linux-panel-updater/.isolated-test-broker-result npm test &&
+    as_updater npm run build:web)
 }
 rollback(){
   log "Update failed; stopping the new version, restoring state and rebuilding old code"
@@ -83,7 +98,7 @@ rollback(){
     as_updater npm run build:web) || restored=0
   if [[ -f "$BACKUP" && ! -L "$BACKUP" ]];then
     local restore_tmp
-    restore_tmp="$(mktemp "$ROOT_BACKUP/.restore-state.XXXXXXXX")"
+    restore_tmp="$(mktemp "$STATE/.restore-state.XXXXXXXX")"
     cp -a -- "$BACKUP" "$restore_tmp" || restored=0
     chmod 0600 "$restore_tmp" || restored=0
     chown linuxpanel:linuxpanel "$restore_tmp" || restored=0
@@ -122,9 +137,23 @@ ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' "$PANEL_ENV" | tail -n 1)"
 [[ -n "$ORIGIN" ]] || ORIGIN="http://127.0.0.1:$PROBE_PORT"
 HOST="${ORIGIN#http://}"
 HOST="${HOST#https://}"
-if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]] ||
-   ! curl --silent --show-error --fail --max-time 8 -H "Host: $HOST" \
-    "http://127.0.0.1:$PROBE_PORT/api/auth/status" >/dev/null;then
+if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]];then
+  rollback
+  exit 1
+fi
+# systemctl start only means the process was spawned, not that Fastify
+# finished binding its listener. Give the application a bounded readiness
+# window before declaring an otherwise successful deployment broken.
+ready=0
+for attempt in $(seq 1 20);do
+  if curl --silent --show-error --fail --max-time 4 -H "Host: $HOST" \
+      "http://127.0.0.1:$PROBE_PORT/api/auth/status" >/dev/null;then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if ((ready==0));then
   rollback
   exit 1
 fi
