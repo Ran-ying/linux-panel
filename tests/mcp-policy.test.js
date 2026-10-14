@@ -11,7 +11,7 @@ test('MCP default policy is disabled and denies every Action', async t => {
   const folder = await mkdtemp(join(tmpdir(), 'mcp-policy-'));
   t.after(() => rm(folder, { recursive: true, force: true }));
   const store = new StateStore(join(folder, 'state.json'));
-  assert.deepEqual(mcpPolicy(await store.snapshot()), { enabled: false, registrationEnabled: false, tools: {} });
+  assert.deepEqual(mcpPolicy(await store.snapshot()), { enabled: false, registrationEnabled: false, allowUpdates:false, tools: {} });
   assert.equal(actionAllowed(await store.snapshot(), { kind:'read', exposure:{mcp:true}, id:'system.info' }), false);
 });
 
@@ -28,11 +28,15 @@ test('policy rejects unknown and write Actions and persists an explicit allowlis
   await assert.rejects(setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'system.restart':true}},'1'),{statusCode:400});
   await assert.rejects(setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'other.action':true}},'1'),{statusCode:400});
   const updated = await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'system.info':true}},'1');
-  assert.deepEqual(updated,{enabled:true,registrationEnabled:true,tools:{'system.info':true}});
+  assert.deepEqual(updated,{enabled:true,registrationEnabled:true,allowUpdates:false,tools:{'system.info':true}});
   assert.equal(actionAllowed(await store.snapshot(),registry.get('system.info')),true);
   assert.equal(actionAllowed(await store.snapshot(),registry.get('system.restart')),false);
   assert.deepEqual(exposedReadActions(registry).map(a=>a.id),['system.info']);
   await setMcpPolicy(store,registry,{enabled:false,registrationEnabled:false,tools:{'system.info':true}},'1');
   assert.equal(actionAllowed(await store.snapshot(),registry.get('system.info')),false);
   assert.equal((await store.snapshot()).audit.at(-1).event,'mcp.policy.updated');
+  const withUpdates=await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:false,allowUpdates:true,tools:{'system.info':false}},'1');
+  assert.equal(withUpdates.allowUpdates,true);
+  assert.equal(actionAllowed(await store.snapshot(),registry.get('system.info')),false);
+  await assert.rejects(setMcpPolicy(store,registry,{enabled:true,registrationEnabled:false,allowUpdates:'yes',tools:{}},'1'),{statusCode:400});
 });

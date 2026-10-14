@@ -64,7 +64,7 @@ export async function createApp({
   if (existsSync(mcpPath)) {
     const { registerMcpExtension } = await import(pathToFileURL(mcpPath).href);
     await registerMcpExtension(app, {
-      store, auth, registry, engine,
+      store, auth, registry, engine, root,
       origin: publicOrigin || 'http://127.0.0.1:4188',
       resourceUrl: (publicOrigin || 'http://127.0.0.1:4188') + '/mcp'
     });
@@ -187,7 +187,7 @@ export async function createApp({
   // All existing endpoints pass through the same login/CSRF policy.
   app.get('/api/health', async request => {
     auth.requirePermission(request.panelIdentity, 'system:read');
-    return { status: 'ok', version: '0.3.0', modules: modules.loaded };
+    return { status: 'ok', version: '0.5.0', modules: modules.loaded };
   });
   app.get('/api/modules', async request => {
     auth.requirePermission(request.panelIdentity, 'modules:read');

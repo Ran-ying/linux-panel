@@ -32,9 +32,9 @@ TARGET="${shaline#sha=}"
 [[ -f "$EXPECTED_REMOTE" && ! -L "$EXPECTED_REMOTE" ]] || { record failed;exit 2; }
 EXPECTED="$(cat "$EXPECTED_REMOTE")"
 [[ "$EXPECTED" =~ ^(https://github\.com/[^[:space:]]+\.git|git@github\.com:[^[:space:]]+\.git)$ ]] || { record failed;exit 2; }
-[[ "$(git -C "$ROOT" remote get-url origin)" == "$EXPECTED" ]] || { record failed;exit 2; }
-[[ "$(git -C "$ROOT" branch --show-current)" == main ]] || { record failed;exit 2; }
-[[ -z "$(git -C "$ROOT" status --porcelain)" ]] || { record failed;exit 2; }
+[[ "$(as_updater git -C "$ROOT" remote get-url origin)" == "$EXPECTED" ]] || { record failed;exit 2; }
+[[ "$(as_updater git -C "$ROOT" branch --show-current)" == main ]] || { record failed;exit 2; }
+[[ -z "$(as_updater git -C "$ROOT" status --porcelain)" ]] || { record failed;exit 2; }
 OLD="$(as_updater git -C "$ROOT" rev-parse HEAD)"
 [[ "$OLD" =~ ^[a-f0-9]{40}$ ]] || { record failed;exit 2; }
 log "Fetch pinned origin/main commit $TARGET"
