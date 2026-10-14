@@ -48,7 +48,7 @@ fi
 exec "$(cat /opt/node24/bin/npm.realpath)" "$@"
 WRAPPER
 chmod 0755 /opt/node24/bin/npm
-export PATH=/opt/node24/bin:/usr/local/bin:/usr/bin:/bin
+export PATH=/opt/node24/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export GIT_TERMINAL_PROMPT=0
 git clone -q --single-branch --branch main \
  https://github.com/Ran-ying/linux-panel.git "$ROOT"
