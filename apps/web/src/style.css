@@ -7,7 +7,7 @@ header{margin-bottom:30px}
 h1{font-size:clamp(1.65rem,3.8vw,2.7rem);margin:13px 0}
 h2{margin-top:12px}
 p{line-height:1.65;color:#b1bfd1}
-.columns{display:grid;grid-template-columns:275px minmax(0,1fr);gap:20px}
+.columns{display:grid;grid-template-columns:225px minmax(0,1fr);gap:20px;align-items:start}
 aside,section{border:1px solid #2b3a4e;background:#141e2c;border-radius:14px;padding:24px;min-width:0}
 .action{display:flex;flex-direction:column;gap:5px;text-align:left;width:100%;border:1px solid transparent;background:transparent;color:inherit;padding:14px;border-radius:9px;margin-top:8px;cursor:pointer}
 .action:hover{background:#1b2a3c}
@@ -56,17 +56,31 @@ td{overflow-wrap:anywhere}
 .refresh-choice{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:15px;font-size:.85rem;font-weight:500;color:#d4e5f1;cursor:pointer}
 .refresh-choice input{accent-color:#249aaf;width:16px;height:16px}
 
-/* Two-level Module → Action navigation; Web-only grouping. */
-.module-nav{margin-top:12px;display:flex;flex-direction:column;gap:9px}
-.module-group{border:1px solid #30445b;border-radius:11px;overflow:hidden;background:#182638}
-.module-toggle{width:100%;padding:14px;text-align:left;cursor:pointer;color:inherit;background:transparent;border:0}
-.module-toggle.active{background:#1f3549}
+
+/* Module-only navigation and full-width vertical Action flow. */
+.module-sidebar{position:sticky;top:20px}
+.module-nav{display:flex;flex-direction:column;gap:9px;margin-top:13px}
+.module-toggle{width:100%;padding:14px;text-align:left;cursor:pointer;border:1px solid #30445b;
+  border-radius:10px;background:#182638;color:inherit;font-weight:650}
 .module-toggle:hover{background:#26394c}
-.module-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
-.module-subtitle{display:flex;justify-content:space-between;color:#93a9bd;font-size:.78rem;margin-top:6px}
-.action-count{font-size:.77rem;font-variant-numeric:tabular-nums;color:#b8cbe0;background:#30455b;border-radius:8px;padding:2px 8px}
-.module-action-list{border-top:1px solid #30445b;padding:8px}
-.module-action-list .action{margin:2px 0;padding:11px 12px;font-size:.87rem}
-.module-action-list .action.active{border-color:#4c95ae;background:#193f50}
-.empty-actions{padding:4px 8px;color:#93a9bd;font-size:.82rem}
-.module-toggle:focus-visible,.action:focus-visible{outline:2px solid #79c7dc;outline-offset:-2px}
+.module-toggle.active{background:#193f50;border-color:#4c95ae}
+.module-toggle:focus-visible{outline:2px solid #79c7dc;outline-offset:2px}
+.module-content{min-width:0}
+.module-intro{margin:0 0 18px;padding:0 3px}
+.module-intro h2{margin-bottom:6px}
+.module-intro p{margin:0}
+.action-flow{display:flex;flex-direction:column;gap:20px;min-width:0}
+.action-card{min-width:0}
+.card-heading{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.card-heading h3{font-size:1.26rem;margin:10px 0 8px}
+.card-description{margin-top:3px}
+.read-pill{border:1px solid #376456;border-radius:20px;padding:4px 9px;
+  background:#16382e;color:#a9d9bb;font-size:.75rem;white-space:nowrap}
+.action-explanation{border:1px solid #30445b;background:#1e2c40;
+  border-radius:9px;padding:12px 14px;margin:17px 0}
+.action-explanation summary{cursor:pointer;color:#d4e5f1;font-weight:650;font-size:.87rem}
+.action-explanation p{margin:10px 0 0}
+.action-card .toolbar{margin:16px 0 22px}
+.action-card .empty-state{margin-bottom:0}
+@media(max-width:730px){.module-sidebar{position:static}.module-nav{display:flex;flex-direction:row;flex-wrap:wrap}
+  .module-toggle{width:auto;min-width:110px}}
