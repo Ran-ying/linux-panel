@@ -19,8 +19,8 @@ const swap=(s,a,b)=>{
 function prepare(){
  const base=mkdtempSync(join(tmpdir(),'lp-updater-stage-'));
  const root=join(base,'code'),bare=join(base,'remote.git'),state=join(base,'state');
- const backup=join(base,'backup'),status=join(base,'status'),bin=join(base,'bin');
- for(const d of [root,state,backup,status,bin])mkdirSync(d,{recursive:true});
+ const backup=join(base,'backup'),status=join(base,'status'),bin=join(base,'bin'),runtime=join(base,'run');
+ for(const d of [root,state,backup,status,bin,runtime])mkdirSync(d,{recursive:true});
  exec('git',['init','-q','--bare',bare]);
  exec('git',['init','-q','-b','main',root]);
  exec('git',['-C',root,'config','user.name','Test']);
@@ -60,6 +60,8 @@ function prepare(){
   ['EXPECTED_REMOTE=/etc/linux-panel/update-source','EXPECTED_REMOTE='+JSON.stringify(pin)],
   ['PANEL_ENV=/etc/linux-panel/panel.env','PANEL_ENV='+JSON.stringify(env)],
   ['exec 9> /run/linux-panel-root-updater/update.lock','exec 9> '+JSON.stringify(join(base,'update.lock'))],
+  ['ALLOW_START=/run/linux-panel-root-updater/allow-panel-start','ALLOW_START='+JSON.stringify(join(runtime,'allow-panel-start'))],
+  ['[[ -d /run/linux-panel-root-updater ]] || return 1','[[ -d '+JSON.stringify(runtime)+' ]] || return 1'],
   ['[[ "$EUID" -eq 0 ]] || exit 2',':'],
   ['"$(stat -c %u:%a "$TXN")" == 0:600','"$(stat -c %a "$TXN")" == 600'],
   ['"$(stat -c %u:%a "$backup")" == 0:600','"$(stat -c %a "$backup")" == 600'],

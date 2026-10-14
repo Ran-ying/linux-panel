@@ -7,9 +7,12 @@ ROOT=/opt/linux-panel
 WORKER=/usr/local/libexec/linux-panel-update-worker
 UNIT=/etc/systemd/system/linux-panel-update.service
 RECOVERY_UNIT=/etc/systemd/system/linux-panel-update-recover.service
+GUARD_DIR=/etc/systemd/system/linux-panel.service.d
+GUARD_UNIT=$GUARD_DIR/90-update-recovery-guard.conf
 SOURCE_WORKER="$ROOT/scripts/update-worker.sh"
 SOURCE_UNIT="$ROOT/deployment/systemd/linux-panel-update.service"
 SOURCE_RECOVERY="$ROOT/deployment/systemd/linux-panel-update-recover.service"
+SOURCE_GUARD="$ROOT/deployment/systemd/linux-panel-update-guard.conf"
 PIN=/etc/linux-panel/update-source
 ENV_FILE=/etc/linux-panel/panel.env
 BACKUP_ROOT=/var/lib/linux-panel-update-root
@@ -84,6 +87,14 @@ preflight(){
     pass 'Installed root-owned worker (0755)' || block 'Missing or unsafe installed worker'
   owner_mode "$UNIT" root:root:644 &&
     pass 'Installed root-owned systemd unit (0644)' || block 'Missing or unsafe update unit'
+  if exists "$GUARD_DIR";then
+    directory "$GUARD_DIR" && [[ "$(stat -c %U:%G "$GUARD_DIR")" == root:root ]] ||
+      block 'Unsafe existing guard directory'
+  fi
+  if exists "$GUARD_UNIT";then
+    owner_mode "$GUARD_UNIT" root:root:644 &&
+      pass 'Installed root-owned boot guard' || block 'Unsafe installed boot guard'
+  else warn 'Boot recovery guard not installed; migration required';fi
   if exists "$RECOVERY_UNIT";then
     owner_mode "$RECOVERY_UNIT" root:root:644 && pass 'Existing root-owned boot recovery unit' || block 'Unsafe recovery unit'
   else warn 'Boot recovery unit not yet installed; migration required';fi
@@ -94,7 +105,7 @@ preflight(){
   if [[ -e "$BACKUP_ROOT/active-transaction" || -L "$BACKUP_ROOT/active-transaction" ]];then
     block 'Unfinished transaction exists; recover before upgrading Broker'
   fi
-  file "$SOURCE_WORKER" && file "$SOURCE_UNIT" && file "$SOURCE_RECOVERY" &&
+  file "$SOURCE_WORKER" && file "$SOURCE_UNIT" && file "$SOURCE_RECOVERY" && file "$SOURCE_GUARD" &&
     pass 'Audited source worker and unit available' || block 'Missing or unsafe source'
   [[ -f /etc/systemd/system/linux-panel.service &&
      ! -L /etc/systemd/system/linux-panel.service ]] &&
@@ -149,6 +160,10 @@ preflight(){
     say INFO "Installed worker SHA256: $(sha256sum "$WORKER" | cut -d' ' -f1)"
     say INFO "Source worker SHA256:    $(sha256sum "$SOURCE_WORKER" | cut -d' ' -f1)"
   fi
+  if file "$GUARD_UNIT" && file "$SOURCE_GUARD";then
+    if cmp -s "$GUARD_UNIT" "$SOURCE_GUARD";then pass 'Panel boot guard already current'
+    else warn 'Panel boot guard differs from source';fi
+  fi
   if file "$RECOVERY_UNIT" && file "$SOURCE_RECOVERY";then
     if cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY";then pass 'Boot recovery unit already current'
     else warn 'Boot recovery unit differs: upgrade required';fi
@@ -169,9 +184,14 @@ installed_verify(){
   preflight
   if file "$WORKER" && file "$SOURCE_WORKER" && cmp -s "$WORKER" "$SOURCE_WORKER" &&
      file "$UNIT" && file "$SOURCE_UNIT" && cmp -s "$UNIT" "$SOURCE_UNIT" &&
-     file "$RECOVERY_UNIT" && cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY";then
+     file "$RECOVERY_UNIT" && cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY" &&
+     file "$GUARD_UNIT" && cmp -s "$GUARD_UNIT" "$SOURCE_GUARD";then
     pass 'All three installed privileged artifacts exactly match source'
   else block 'Root worker/unit still differ from current checked-out source';fi
+  if systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' &&
+     systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start';then
+    pass 'Web unit enforces transaction boot guard'
+  else block 'Web recovery guard not loaded in systemd';fi
   if [[ "$(systemctl show linux-panel-update.service -p ExecStart --value)" == *"$WORKER"* ]] &&
      [[ "$(systemctl show linux-panel-update.service -p ReadWritePaths --value)" == *"/opt/linux-panel"* ]];then
     pass 'Effective Broker unit points to fixed worker, with restricted writable roots'
@@ -207,7 +227,8 @@ say INFO 'Revalidating before privileged replacement'
 preflight
 summary || die 'Migration BLOCKED; no privileged files changed'
 if cmp -s "$WORKER" "$SOURCE_WORKER" && cmp -s "$UNIT" "$SOURCE_UNIT" &&
-   [[ -f "$RECOVERY_UNIT" ]] && cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY";then
+   [[ -f "$RECOVERY_UNIT" ]] && cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY" &&
+   [[ -f "$GUARD_UNIT" ]] && cmp -s "$GUARD_UNIT" "$SOURCE_GUARD";then
   pass 'Already current: no backup, reload or restart necessary'
   exit 0
 fi
@@ -223,22 +244,34 @@ if [[ -f "$RECOVERY_UNIT" ]];then
  had_recovery=1
  install -o root -g root -m 0644 "$RECOVERY_UNIT" "$backup/recovery.before"
 fi
+had_guard=0
+if [[ -f "$GUARD_UNIT" ]];then
+ had_guard=1
+ install -o root -g root -m 0644 "$GUARD_UNIT" "$backup/guard.before"
+fi
 # stage new artifacts in each destination filesystem before swapping.
 worker_tmp="$(mktemp /usr/local/libexec/.linux-panel-worker.XXXXXXXX)"
 unit_tmp="$(mktemp /etc/systemd/system/.linux-panel-unit.XXXXXXXX)"
 recovery_tmp="$(mktemp /etc/systemd/system/.linux-panel-recovery.XXXXXXXX)"
-chmod 0600 "$worker_tmp" "$unit_tmp" "$recovery_tmp"
+if [[ ! -d "$GUARD_DIR" ]];then
+ install -d -o root -g root -m 0755 "$GUARD_DIR"
+fi
+guard_tmp="$(mktemp "$GUARD_DIR/.linux-panel-guard.XXXXXXXX")"
+chmod 0600 "$worker_tmp" "$unit_tmp" "$recovery_tmp" "$guard_tmp"
 install -o root -g root -m 0755 "$SOURCE_WORKER" "$worker_tmp"
 install -o root -g root -m 0644 "$SOURCE_UNIT" "$unit_tmp"
 install -o root -g root -m 0644 "$SOURCE_RECOVERY" "$recovery_tmp"
+install -o root -g root -m 0644 "$SOURCE_GUARD" "$guard_tmp"
 # Independently compare root-staged bytes against HEAD's Git objects.
 expected_worker="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:scripts/update-worker.sh)"
 expected_unit="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update.service)"
 expected_recovery="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update-recover.service)"
+expected_guard="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update-guard.conf)"
 if [[ "$(git hash-object -- "$worker_tmp")" != "$expected_worker" ||
       "$(git hash-object -- "$unit_tmp")" != "$expected_unit" ||
-      "$(git hash-object -- "$recovery_tmp")" != "$expected_recovery" ]];then
-  rm -f -- "$worker_tmp" "$unit_tmp" "$recovery_tmp"
+      "$(git hash-object -- "$recovery_tmp")" != "$expected_recovery" ||
+      "$(git hash-object -- "$guard_tmp")" != "$expected_guard" ]];then
+  rm -f -- "$worker_tmp" "$unit_tmp" "$recovery_tmp" "$guard_tmp"
   die 'Staged root artifact differs from audited Git HEAD; no replacement performed'
 fi
 changed=0
@@ -246,13 +279,14 @@ success=0
 cleanup(){
   local ec=$?
   trap - EXIT
-  rm -f -- "$worker_tmp" "$unit_tmp"
+  rm -f -- "$worker_tmp" "$unit_tmp" "$recovery_tmp" "$guard_tmp"
   if ((changed && !success));then
     say WARN 'Migration interrupted or failed; restoring prior fixed worker/unit'
-    local restore_worker restore_unit restore_recovery
+    local restore_worker restore_unit restore_recovery restore_guard
     restore_worker="$(mktemp /usr/local/libexec/.linux-panel-restore.XXXXXXXX)"
     restore_unit="$(mktemp /etc/systemd/system/.linux-panel-restore.XXXXXXXX)"
     restore_recovery="$(mktemp /etc/systemd/system/.linux-panel-recover-restore.XXXXXXXX)"
+    restore_guard="$(mktemp "$GUARD_DIR/.linux-panel-guard-restore.XXXXXXXX")"
     if install -o root -g root -m 0755 "$backup/worker.before" "$restore_worker" &&
        install -o root -g root -m 0644 "$backup/unit.before" "$restore_unit" &&
        mv -fT -- "$restore_worker" "$WORKER" &&
@@ -261,12 +295,16 @@ cleanup(){
            install -o root -g root -m 0644 "$backup/recovery.before" "$restore_recovery" &&
            mv -fT -- "$restore_recovery" "$RECOVERY_UNIT"
          else rm -f -- "$RECOVERY_UNIT";fi; } &&
+       { if ((had_guard));then
+           install -o root -g root -m 0644 "$backup/guard.before" "$restore_guard" &&
+           mv -fT -- "$restore_guard" "$GUARD_UNIT"
+         else rm -f -- "$GUARD_UNIT";fi; } &&
        systemctl daemon-reload;then
       say WARN 'Old Broker artifacts restored; Web/Watcher gates remained OFF'
     else
       say BLOCK "Rollback incomplete; inspect root-only backup $backup and keep Broker disabled"
     fi
-    rm -f -- "$restore_worker" "$restore_unit" "$restore_recovery"
+    rm -f -- "$restore_worker" "$restore_unit" "$restore_recovery" "$restore_guard"
   fi
   exit "$ec"
 }
@@ -275,11 +313,13 @@ changed=1
 mv -fT -- "$worker_tmp" "$WORKER"
 mv -fT -- "$unit_tmp" "$UNIT"
 mv -fT -- "$recovery_tmp" "$RECOVERY_UNIT"
+mv -fT -- "$guard_tmp" "$GUARD_UNIT"
 systemctl daemon-reload
 # Do not invoke any Broker service or restart the Web service.
 if ! cmp -s "$WORKER" "$SOURCE_WORKER" ||
    ! cmp -s "$UNIT" "$SOURCE_UNIT" ||
    ! cmp -s "$RECOVERY_UNIT" "$SOURCE_RECOVERY" ||
+   ! cmp -s "$GUARD_UNIT" "$SOURCE_GUARD" ||
    [[ "$(systemctl show linux-panel-update.service -p ProtectSystem --value)" != strict ]] ||
    [[ "$(systemctl show linux-panel-update.service -p NoNewPrivileges --value)" != yes ]] ||
    [[ "$(systemctl show linux-panel-update.service -p ExecStart --value)" != *"$WORKER"* ]] ||

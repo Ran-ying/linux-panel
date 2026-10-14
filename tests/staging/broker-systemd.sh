@@ -115,7 +115,15 @@ install -o root -g root -m 0644 \
 install -o root -g root -m 0644 \
  "$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update-recover.service" \
  /etc/systemd/system/linux-panel-update-recover.service
+install -d -o root -g root -m 0755 /etc/systemd/system/linux-panel.service.d
+install -o root -g root -m 0644 \
+ "$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update-guard.conf" \
+ /etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf
 systemctl daemon-reload
+systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' ||
+ fail 'Systemd did not load durable transaction guard'
+systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start' ||
+ fail 'Systemd did not load live-worker startup permit'
 [[ "$(systemctl show linux-panel-update.service -p ProtectSystem --value)" == strict ]] ||
  fail 'ProtectSystem not strict'
 [[ "$(systemctl show linux-panel-update.service -p NoNewPrivileges --value)" == yes ]] ||
@@ -221,6 +229,39 @@ sed -i '/^PANEL_UPDATER_ENABLED=1$/d' /etc/linux-panel/panel.env
 systemctl restart linux-panel.service
 wait_healthy || fail 'Web unhealthy after staging gate reset'
 unset STAGE_PASSWORD
+note 'Failed boot recovery must block panel until root operator resolves journal'
+# Synthetic transaction points to an OLD SHA but deliberately lacks its
+# per-request state snapshot. This exercises the fail-closed path without
+# changing the successful Git checkout or deleting real backups.
+blocked_id=55555555555555555555555555555555
+printf 'id=%s\nsha=%s\nold=%s\n' "$blocked_id" "$TARGET" "$OLD" \
+ > /var/lib/linux-panel-update-root/active-transaction
+chmod 0600 /var/lib/linux-panel-update-root/active-transaction
+rm -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-$blocked_id"
+systemctl stop linux-panel.service
+if systemctl start linux-panel-update-recover.service;then
+ fail 'Recovery with missing state snapshot must fail'
+fi
+wait_result "$blocked_id" failed
+[[ -f /var/lib/linux-panel-update-root/active-transaction ]] ||
+ fail 'Failed recovery erased root transaction'
+systemctl reset-failed linux-panel-update-recover.service || true
+# Conditions use systemd PID1 evaluation. A successful start command can be
+# SKIPPED, so verify actual service remains inactive.
+systemctl start linux-panel.service || true
+if systemctl is-active --quiet linux-panel.service;then
+ fail 'Unresolved root journal allowed non-broker panel startup'
+fi
+! systemctl is-active --quiet linux-panel-update.service ||
+ fail 'Unexpected privileged worker execution'
+# Test-only operator repair: remove synthetic journal, no application data
+# was touched by this deliberately pre-backup failed recovery.
+rm -f /var/lib/linux-panel-update-root/active-transaction
+systemctl reset-failed linux-panel.service || true
+systemctl start linux-panel.service
+wait_healthy || fail 'Recovered Web did not return after operator cleanup'
+note 'Fail-closed systemd boot guard verified against missing recovery snapshot'
+
 systemctl stop linux-panel-update.path
 note 'Stage migration from LEGACY already-installed immutable worker/service'
 # Historical real installer snapshot from a known public main revision.
@@ -248,6 +289,8 @@ MIGRATION="$(mktemp /tmp/linux-panel-migration-stage.XXXXXXXX)"
 sed \
  -e "s|SOURCE_RECOVERY=\"\$ROOT/deployment/systemd/linux-panel-update-recover.service\"|SOURCE_RECOVERY=\"$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update-recover.service\"|" \
  -e 's|expected_recovery="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update-recover.service)"|expected_recovery="$(git hash-object -- "$SOURCE_RECOVERY")"|' \
+ -e 's|SOURCE_GUARD="$ROOT/deployment/systemd/linux-panel-update-guard.conf"|SOURCE_GUARD="'"$GITHUB_WORKSPACE"'/deployment/systemd/linux-panel-update-guard.conf"|' \
+ -e 's|expected_guard="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD:deployment/systemd/linux-panel-update-guard.conf)"|expected_guard="$(git hash-object -- "$SOURCE_GUARD")"|' \
  "$raw_migration" > "$MIGRATION"
 chmod 0700 "$MIGRATION"
 

@@ -176,6 +176,24 @@ the panel process. That test is **not** permission to enable deployment:
 in-flight power loss, resource exhaustion and full OAuth/Web end-to-end
 acceptance are separate gates in [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md).
 
+### Fail-closed Web service guard during unresolved recovery
+
+The installer and existing-Broker migration now manage a root-owned systemd
+drop-in `/etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf`.
+When a root transaction remains unresolved, systemd skips an ordinary Web
+start. A live, root-owned Broker has a transient permission inside its
+volatile RuntimeDirectory to restart Web for health checking and rollback.
+It disappears after the Broker exits and does not authorize unrelated
+shell commands or grant MCP permissions.
+
+Operators must not delete the root-only
+`/var/lib/linux-panel-update-root/active-transaction` to "fix" a failed
+boot without inspecting the Git checkout, private state backup and Broker
+result. Inspect `systemctl status linux-panel-update-recover.service` and
+`journalctl -u linux-panel-update-recover.service`, take a VPS snapshot and
+follow the tested recovery runbook. The drop-in does not get installed by
+a Git pull alone; use the separate checked migration.
+
 ### Interrupted update recovery (disabled until release acceptance)
 
 The root Broker journals the approved request and old SHA in a root-only

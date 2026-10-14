@@ -13,6 +13,7 @@ PROCESSING="$STATE/update-processing"
 RESULT=/var/lib/linux-panel-update-status/result.json
 EXPECTED_REMOTE=/etc/linux-panel/update-source
 TXN="$ROOT_BACKUP/active-transaction"
+ALLOW_START=/run/linux-panel-root-updater/allow-panel-start
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
@@ -32,7 +33,17 @@ elif [[ "$#" -ne 0 ]];then exit 2;fi
 exec 9> /run/linux-panel-root-updater/update.lock
 flock -n 9 || exit 2
 # Do not erase crash evidence on failure.
-trap 'if [[ ! -e "$TXN" ]];then rm -f -- "$PROCESSING";fi' EXIT
+# A live Broker alone may bypass the systemd fail-closed recovery guard.
+# The volatile permit disappears on ordinary exit AND after SIGKILL when
+# systemd tears down the service's private RuntimeDirectory.
+trap 'rm -f -- "$ALLOW_START"; if [[ ! -e "$TXN" ]];then rm -f -- "$PROCESSING";fi' EXIT
+start_panel(){
+  if [[ -e "$TXN" ]];then
+    [[ -d /run/linux-panel-root-updater ]] || return 1
+    (umask 077; : > "$ALLOW_START") || return 1
+  fi
+  systemctl start linux-panel.service
+}
 journal(){
   local tmp
   [[ ! -e "$TXN" && ! -L "$TXN" ]] || return 1
@@ -112,7 +123,7 @@ recover(){
       # Boot oneshot is Before=linux-panel.service; blocking start deadlocks.
       systemctl start --no-block linux-panel.service || restored=0
     else
-      systemctl start linux-panel.service || restored=0
+      start_panel || restored=0
       systemctl is-active --quiet linux-panel.service || restored=0
     fi
   fi
@@ -207,7 +218,7 @@ if ! journal;then
   exit 2
 fi
 if ! systemctl stop linux-panel.service;then
-  systemctl start linux-panel.service || true
+  start_panel || true
   record failed
   exit 2
 fi
@@ -229,7 +240,7 @@ build(){
 }
 rollback(){ recover; }
 if ! build;then rollback;exit 1;fi
-if ! systemctl start linux-panel.service || ! systemctl is-active --quiet linux-panel.service;then
+if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then
   rollback
   exit 1
 fi
