@@ -161,7 +161,6 @@ wait_result 33333333333333333333333333333333 success
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
-
 note 'Stage migration from LEGACY already-installed immutable worker/service'
 # Historical real installer snapshot from a known public main revision.
 LEGACY=cdc48a38d7e89298bd410fe78611f98e03c786f4
@@ -223,9 +222,7 @@ find /var/lib/linux-panel-update-root -maxdepth 1 -name '.broker-migration-*' -t
  fail 'Migration restarted running Web service'
 ! systemctl is-active --quiet linux-panel-update.path || fail 'Migration activated update watcher'
 ! systemctl is-enabled --quiet linux-panel-update.path || fail 'Migration enabled update watcher'
-! grep -q '^PANEL_UPDATER_ENABLED=1
-note 'Not tested: machine power loss, interrupted kernel, Web OAuth approval'
- /etc/linux-panel/panel.env ||
+! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
  fail 'Migration enabled Web updater gate'
 bash "$MIGRATION" --apply  # idempotent no-op
 bash "$MIGRATION" --verify
