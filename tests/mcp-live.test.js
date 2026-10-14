@@ -59,6 +59,7 @@ test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permis
   assert.match(unauthed.headers.get('www-authenticate'),/resource_metadata=/);
   const found=await rpc({method:'tools/list'});
   assert.equal(found.status,200,JSON.stringify(found.data));
+  assert.ok(found.data.result?.tools, JSON.stringify(found.data));
   assert.deepEqual(found.data.result.tools.map(x=>x.name),['system.info']);
   const result=await rpc({method:'tools/call',params:{name:'system.info',arguments:{}}});
   assert.equal(result.status,200,JSON.stringify(result.data));
