@@ -10,6 +10,7 @@ WORKER=/usr/local/libexec/linux-panel-update-worker
 PIN=/etc/linux-panel/update-source
 PATH_UNIT=/etc/systemd/system/linux-panel-update.path
 SERVICE_UNIT=/etc/systemd/system/linux-panel-update.service
+RECOVERY_UNIT=/etc/systemd/system/linux-panel-update-recover.service
 BACKUP_DIR=/var/lib/linux-panel-update-root
 RESULT_DIR=/var/lib/linux-panel-update-status
 MODE=''
@@ -155,14 +156,15 @@ base_checks(){
  else block 'Git remote must be credential-free GitHub HTTPS/SSH';fi
  local f
  for f in scripts/update-worker.sh deployment/systemd/linux-panel-update.path \
-   deployment/systemd/linux-panel-update.service;do
+   deployment/systemd/linux-panel-update.service \
+   deployment/systemd/linux-panel-update-recover.service;do
   file "$ROOT/$f" && pass "Source file exists: $f" || block "Missing/unsafe source: $f"
  done
 }
 fresh_checks(){
  base_checks
  local path
- for path in "$WORKER" "$PIN" "$PATH_UNIT" "$SERVICE_UNIT" \
+ for path in "$WORKER" "$PIN" "$PATH_UNIT" "$SERVICE_UNIT" "$RECOVERY_UNIT" \
    "$BACKUP_DIR" "$RESULT_DIR" /var/lib/linux-panel/update-trigger \
    /var/lib/linux-panel/update-processing;do
   if exists "$path";then block "Broker artifact already exists: $path"
@@ -190,7 +192,7 @@ installed_checks(){
   [[ "$(cat "$PIN")" == "$(git_checked remote get-url origin)" ]] &&
    pass 'Trusted remote pin matches checkout' || block 'Trusted remote pin mismatch'
  else block 'Remote pin missing/unsafe';fi
- for path in "$PATH_UNIT" "$SERVICE_UNIT";do
+ for path in "$PATH_UNIT" "$SERVICE_UNIT" "$RECOVERY_UNIT";do
   file "$path" && owner "$path" root && pass "Root-owned unit: $path" ||
    block "Unit missing/unsafe: $path"
  done
@@ -221,6 +223,9 @@ installed_checks(){
  if file "$CONF" && grep -q '^PANEL_UPDATER_ENABLED=1$' "$CONF";then
   warn 'Web updater gate ENABLED (only appropriate after staging sign-off)'
  else pass 'Web updater gate disabled';fi
+ if systemctl is-enabled --quiet linux-panel-update-recover.service;then
+  warn 'Boot recovery service enabled; check activation acceptance'
+ else pass 'Boot recovery service disabled';fi
  if systemctl is-enabled --quiet linux-panel-update.path;then
   warn 'Update watcher ENABLED (only appropriate after staging sign-off)'
  else pass 'Update watcher disabled';fi
@@ -261,6 +266,7 @@ if [[ "$MODE" == apply ]];then
  git_checked remote get-url origin > "$PIN"
  install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update.path" "$PATH_UNIT"
  install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update.service" "$SERVICE_UNIT"
+ install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update-recover.service" "$RECOVERY_UNIT"
  chown -R linuxpanel-updater:linuxpanel "$ROOT"
  chmod -R g+rX,g-w,o-w "$ROOT"
  runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js" ||
@@ -290,13 +296,16 @@ printf 'PANEL_UPDATER_ENABLED=1\n' >> "$tmp"
 chmod 0600 "$tmp";chown root:root "$tmp"
 mv -fT -- "$tmp" "$CONF"
 trap - EXIT
-if ! systemctl enable --now linux-panel-update.path;then
+if ! systemctl enable linux-panel-update-recover.service ||
+   ! systemctl enable --now linux-panel-update.path;then
+ systemctl disable linux-panel-update-recover.service || true
  install -o root -g root -m 0600 "$save" "$CONF"
  die 'Watcher activation failed; previous Web config restored'
 fi
 if ! systemctl restart linux-panel.service ||
    ! systemctl is-active --quiet linux-panel.service;then
  systemctl disable --now linux-panel-update.path || true
+ systemctl disable linux-panel-update-recover.service || true
  install -o root -g root -m 0600 "$save" "$CONF"
  systemctl restart linux-panel.service || true
  die 'Web restart failed; attempted to restore prior configuration and disable watcher'
