@@ -31,7 +31,7 @@ test('production consent allows registered ChatGPT callback, without changing si
   const cookie=login.headers['set-cookie'].split(';')[0],csrf=login.json().csrf;
   const enabled=await app.inject({method:'PUT',url:'/api/extensions/mcp/settings',
     headers:{cookie,host:domain,origin,'x-panel-csrf':csrf},
-    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true}}});
+    payload:{enabled:true,registrationEnabled:true,allowUpdates:true,tools:{'system.info':true}}});
   assert.equal(enabled.statusCode,200,enabled.body);
   const callback='https://chatgpt.com/connector_platform_oauth_redirect';
   const client=await app.inject({method:'POST',url:'/oauth/register',headers:{host:domain},
@@ -46,6 +46,23 @@ test('production consent allows registered ChatGPT callback, without changing si
   });
   const approval=await app.inject({url:'/oauth/authorize?'+query,headers:{host:domain,cookie}});
   assert.equal(approval.statusCode,200,approval.body);
+  // Missing OAuth scope must NEVER implicitly grant update rights.
+  const withoutScope=new URLSearchParams(query);
+  withoutScope.delete('scope');
+  const readOnlyConsent=await app.inject({
+    url:'/oauth/authorize?'+withoutScope,headers:{host:domain,cookie}
+  });
+  assert.equal(readOnlyConsent.statusCode,200,readOnlyConsent.body);
+  assert.match(readOnlyConsent.body,/<code>system:read<\/code>/);
+  assert.doesNotMatch(readOnlyConsent.body,/<code>panel:update<\/code>/);
+  const explicitlyRequested=new URLSearchParams(query);
+  explicitlyRequested.set('scope','panel:update');
+  const updateConsent=await app.inject({
+    url:'/oauth/authorize?'+explicitlyRequested,headers:{host:domain,cookie}
+  });
+  assert.equal(updateConsent.statusCode,200,updateConsent.body);
+  assert.match(updateConsent.body,/<code>panel:update<\/code>/);
+
   assert.match(approval.headers['content-security-policy'],/form-action 'self' https:\/\/chatgpt\.com;/);
   assert.match(approval.headers['content-security-policy'],/frame-ancestors 'none'/);
   assert.equal(approval.headers['referrer-policy'],'origin');
