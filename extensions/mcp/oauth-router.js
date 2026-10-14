@@ -63,7 +63,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     grant_types_supported:supported,
     token_endpoint_auth_methods_supported:['none'],
     code_challenge_methods_supported:['S256'],
-    scopes_supported:['system:read','storage:read','services:read', OFFLINE_SCOPE],
+    scopes_supported:['system:read','storage:read','services:read','panel:update', OFFLINE_SCOPE],
     authorization_response_iss_parameter_supported:true
   });
   const sendMetadata=(request,reply,data)=>{

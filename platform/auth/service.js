@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addAudit } from '../state-store.js';
 import { hashPassword, validPassword, verifyPassword } from './password.js';
+import { newTotpSecret, verifyTotp, newRecoveryCodes, recoveryDigest } from './totp.js';
 
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const LOGIN_WINDOW = 10 * 60 * 1000;
@@ -13,6 +14,8 @@ const forbidden = () => Object.assign(new Error('Insufficient permissions'), { s
 
 export class AuthService {
   #failures = new Map();
+  #accountFailures = new Map();
+  #stepUpFailures = new Map();
   constructor(store) { this.store = store; }
 
   async isInitialized() {
@@ -32,7 +35,7 @@ export class AuthService {
     });
   }
 
-  async login(username, password, ip = 'unknown') {
+  async login(username, password, ip = 'unknown', secondFactor = '') {
     const now = Date.now();
     const key = String(ip).slice(0, 120);
     // Bounded in-memory bookkeeping: random/spoofed addresses cannot grow the
@@ -47,7 +50,17 @@ export class AuthService {
         throw Object.assign(new Error('Login capacity temporarily exceeded'), { statusCode: 429 });
     }
     const attempts = (this.#failures.get(key) ?? []).filter(at => now - at < LOGIN_WINDOW);
-    if (attempts.length >= MAX_FAILURES) {
+    const accountKey = typeof username === 'string' && /^[A-Za-z][A-Za-z0-9_-]{2,31}$/.test(username) ? username.toLowerCase() : '_invalid';
+    const accountAttempts = (this.#accountFailures.get(accountKey) ?? []).filter(at => now - at < LOGIN_WINDOW);
+    // Account dimension reduces distributed guessing; short cooldown prevents permanent lockout.
+    for (const [name, times] of this.#accountFailures) {
+      const fresh = times.filter(at => now - at < LOGIN_WINDOW);
+      if (fresh.length) this.#accountFailures.set(name, fresh);
+      else this.#accountFailures.delete(name);
+    }
+    if (this.#accountFailures.size >= MAX_FAILURE_KEYS && !this.#accountFailures.has(accountKey))
+      throw Object.assign(new Error('Login capacity temporarily exceeded'), { statusCode: 429 });
+    if (attempts.length >= MAX_FAILURES || accountAttempts.length >= 12) {
       this.#failures.set(key, attempts);
       throw Object.assign(new Error('Too many attempts; try again later'), { statusCode: 429 });
     }
@@ -57,12 +70,23 @@ export class AuthService {
     }
     const user = typeof username === 'string' ? state.users.find(u => u.username === username) : null;
     const valid = user && await verifyPassword(password, user.passwordHash);
-    if (!valid) {
+    let acceptedCounter = -1;
+    let usedRecovery = false;
+    if (valid && user.totp?.enabled) {
+      acceptedCounter = verifyTotp(user.totp.secret, secondFactor, now, user.totp.lastCounter ?? -1);
+      usedRecovery = acceptedCounter < 0 && typeof secondFactor === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{8}$/.test(secondFactor) &&
+        user.totp.recoveryHashes?.includes(recoveryDigest(secondFactor));
+    }
+    if (!valid || (user.totp?.enabled && acceptedCounter < 0 && !usedRecovery)) {
       attempts.push(now);
+      accountAttempts.push(now);
       this.#failures.set(key, attempts);
+      this.#accountFailures.set(accountKey, accountAttempts);
       throw invalidCredentials();
     }
     this.#failures.delete(key);
+    this.#accountFailures.delete(accountKey);
     const token = randomBytes(32).toString('base64url');
     const csrf = randomBytes(32).toString('base64url');
     const sessionId = randomUUID();
@@ -71,6 +95,18 @@ export class AuthService {
       if (!current.users.some(u => u.id === user.id && u.passwordHash === user.passwordHash))
         throw unauthorized();
       current.sessions = current.sessions.filter(s => Date.parse(s.expiresAt) > now);
+      const currentUser = current.users.find(u => u.id === user.id);
+      if (currentUser?.totp?.enabled) {
+        if (usedRecovery) {
+          const digest = recoveryDigest(secondFactor);
+          if (!currentUser.totp.recoveryHashes.includes(digest)) throw unauthorized();
+          currentUser.totp.recoveryHashes = currentUser.totp.recoveryHashes.filter(v => v !== digest);
+          addAudit(current, 'auth.recovery.used', user.id);
+        } else {
+          if (acceptedCounter <= (currentUser.totp.lastCounter ?? -1)) throw unauthorized();
+          currentUser.totp.lastCounter = acceptedCounter;
+        }
+      }
       current.sessions.push({
         id: sessionId, tokenHash: digest(token), csrf, userId: user.id,
         createdAt: new Date(now).toISOString(), expiresAt
@@ -114,6 +150,106 @@ export class AuthService {
       current.credentialEpoch = (current.credentialEpoch ?? 0) + 1;
       state.sessions = state.sessions.filter(s => s.userId !== current.id);
       addAudit(state, 'auth.password.changed', current.id);
+    });
+  }
+
+
+  async verifyStepUp(identity,password,code) {
+    const key=identity.session.id;
+    const now=Date.now();
+    for(const [id,times] of this.#stepUpFailures){
+      const fresh=times.filter(t=>now-t<LOGIN_WINDOW);
+      if(fresh.length)this.#stepUpFailures.set(id,fresh);
+      else this.#stepUpFailures.delete(id);
+    }
+    if(this.#stepUpFailures.size>=MAX_FAILURE_KEYS && !this.#stepUpFailures.has(key))
+      throw Object.assign(new Error('Step-up capacity exceeded'),{statusCode:429});
+    const attempts=this.#stepUpFailures.get(key)??[];
+    if(attempts.length>=5)throw Object.assign(new Error('Too many verification attempts'),{statusCode:429});
+    // Charge each attempt (including password verification) to limit online guessing.
+    this.#stepUpFailures.set(key,[...attempts,now]);
+    const user=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
+    if(!user || !await verifyPassword(password,user.passwordHash))
+      throw forbidden();
+    // TOTP is opt-in. A logged-in administrator must always re-enter their
+    // password, and if they enrolled TOTP they must also supply a fresh code.
+    const totpEnabled=user.totp?.enabled===true;
+    const counter=totpEnabled?
+      verifyTotp(user.totp.secret,code,Date.now(),user.totp.lastCounter??-1) : -1;
+    if(totpEnabled && counter<0)throw forbidden();
+    await this.store.mutate(state=>{
+      const current=state.users.find(u=>u.id===identity.user.id);
+      if(!current || current.passwordHash!==user.passwordHash ||
+          !state.sessions.some(s=>s.id===identity.session.id &&
+            s.userId===identity.user.id && Date.parse(s.expiresAt)>Date.now()))
+        throw unauthorized();
+      // No downgrade is possible between password verification and approval.
+      if((current.totp?.enabled===true)!==totpEnabled)throw forbidden();
+      if(totpEnabled){
+        if(counter<=(current.totp.lastCounter??-1))throw forbidden();
+        current.totp.lastCounter=counter;
+      }
+      addAudit(state,'auth.stepup.verified',identity.user.id,
+        totpEnabled?'password+totp':'password');
+    });
+    this.#stepUpFailures.delete(key);
+  }
+
+  async totpStatus(identity) {
+    const user=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
+    return { enabled:user?.totp?.enabled===true, recoveryCodesRemaining:user?.totp?.recoveryHashes?.length??0 };
+  }
+
+  async beginTotp(identity,password) {
+    const user=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
+    if(!user || !await verifyPassword(password,user.passwordHash)) throw invalidCredentials();
+    if(user.totp?.enabled) throw forbidden();
+    const secret = newTotpSecret();
+    await this.store.mutate(state=>{
+      const current=state.users.find(u=>u.id===identity.user.id);
+      if(!current || current.totp?.enabled) throw forbidden();
+      current.totpPending={secret,expiresAt:Date.now()+10*60*1000};
+      addAudit(state,'auth.totp.setup.started',identity.user.id);
+    });
+    return { secret, uri:'otpauth://totp/'+encodeURIComponent('Linux Panel:'+user.username)+'?'+
+      new URLSearchParams({secret,issuer:'Linux Panel',algorithm:'SHA1',digits:'6',period:'30'}) };
+  }
+
+  async enableTotp(identity,code) {
+    const recoveryCodes=newRecoveryCodes();
+    await this.store.mutate(state=>{
+      const user=state.users.find(u=>u.id===identity.user.id);
+      if(!user || user.totp?.enabled || !user.totpPending ||
+          user.totpPending.expiresAt < Date.now()) throw forbidden();
+      const counter=verifyTotp(user.totpPending.secret,code);
+      if(counter < 0) throw Object.assign(new Error('Invalid authenticator code'),{statusCode:400});
+      user.totp={enabled:true,secret:user.totpPending.secret,lastCounter:counter,
+        recoveryHashes:recoveryCodes.map(recoveryDigest)};
+      delete user.totpPending;
+      // Revoke all prior OAuth grants on security-factor changes.
+      user.credentialEpoch=(user.credentialEpoch??0)+1;
+      state.sessions=state.sessions.filter(s=>s.id===identity.session.id);
+      addAudit(state,'auth.totp.enabled',identity.user.id);
+    });
+    return { enabled:true,recoveryCodes };
+  }
+
+  async disableTotp(identity,password,code) {
+    const previous=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
+    if(!previous?.totp?.enabled || !await verifyPassword(password,previous.passwordHash))
+      throw invalidCredentials();
+    await this.store.mutate(state=>{
+      const user=state.users.find(u=>u.id===identity.user.id);
+      if(!user?.totp?.enabled) throw forbidden();
+      const counter=verifyTotp(user.totp.secret,code,Date.now(),user.totp.lastCounter??-1);
+      const digest=typeof code==='string'?recoveryDigest(code):'';
+      const usedRecovery=counter<0 && user.totp.recoveryHashes.includes(digest);
+      if(counter<0 && !usedRecovery) throw forbidden();
+      delete user.totp;
+      delete user.totpPending;
+      user.credentialEpoch=(user.credentialEpoch??0)+1;
+      state.sessions=state.sessions.filter(s=>s.id===identity.session.id);
+      addAudit(state,'auth.totp.disabled',identity.user.id);
     });
   }
 

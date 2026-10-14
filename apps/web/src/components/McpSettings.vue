@@ -1,10 +1,14 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 const props = defineProps({ csrf: { type: String, required: true } });
-const policy = ref({ enabled: false, registrationEnabled: false, tools: {} });
+const policy = ref({ enabled: false, registrationEnabled: false, allowUpdates:false, tools: {} });
 const tools = ref([]);
 const grants = ref([]);
 const installed = ref(null);
+const update=ref(null);
+const totpRequired=ref(false);
+const approvePassword=ref('');
+const approveCode=ref('');
 const error = ref('');
 const message = ref('');
 const busy = ref(false);
@@ -25,6 +29,7 @@ async function load() {
     policy.value = result.policy;
     tools.value = result.tools;
     await loadGrants();
+    await loadUpdate();
   } catch (cause) { error.value = cause.message; }
 }
 async function save() {
@@ -71,6 +76,31 @@ async function restrict(grant,scope) {
   } catch(cause) {error.value=cause.message;}
   finally {busy.value=false;}
 }
+async function loadUpdate(){
+  // The current user's TOTP status controls *presentation*, never server
+  // authorization. A stale UI cannot bypass the backend step-up check.
+  const factorResponse=await fetch('/api/auth/totp');
+  totpRequired.value=factorResponse.ok && (await factorResponse.json()).enabled===true;
+  const response=await fetch('/api/extensions/mcp/update');
+  if(response.ok)update.value=await response.json();
+  else update.value=null;
+}
+async function approveUpdate(){
+  if(!update.value?.pending || busy.value)return;
+  busy.value=true;error.value='';message.value='';
+  try{
+    const response=await fetch('/api/extensions/mcp/update/approve',{
+      method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
+      body:JSON.stringify({id:update.value.pending.id,currentPassword:approvePassword.value,code:approveCode.value})
+    });
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||'Failed to approve');
+    approvePassword.value='';approveCode.value='';
+    message.value='更新已提交至独立执行器；连接可能会短暂中断。';
+    await loadUpdate();
+  }catch(cause){error.value=cause.message;}
+  finally{busy.value=false;}
+}
 onMounted(load);
 </script>
 
@@ -87,6 +117,10 @@ onMounted(load);
         <input type="checkbox" v-model="policy.registrationEnabled" :disabled="!policy.enabled"/>
         允许新 OAuth 客户端注册（连接成功后建议关闭）
       </label>
+      <label class="refresh-choice">
+        <input type="checkbox" v-model="policy.allowUpdates"/>
+        允许 MCP 申请面板更新（需要独立 OAuth Scope、Web 确认和密码复核；TOTP 可选）
+      </label>
       <h4>允许暴露的只读 Action</h4>
       <div v-for="tool in tools" :key="tool.id" class="session-row">
         <div>
@@ -99,6 +133,20 @@ onMounted(load);
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="message" class="notice success-notice" role="status">{{ message }}</p>
       <button class="form-button primary" :disabled="busy" type="button" @click="save">保存 MCP 策略</button>
+      <h4>面板更新申请</h4>
+      <button type="button" :disabled="busy" @click="loadUpdate">刷新更新状态</button>
+      <template v-if="update?.pending">
+        <p>待处理更新：<code>{{ update.pending.from }}</code> → <code>{{ update.pending.target }}</code></p>
+        <p class="muted small">申请 ID：{{ update.pending.id }}；过期时间：{{ update.pending.expiresAt }}</p>
+        <template v-if="!update.pending.approved">
+          <label>管理员当前密码<input type="password" v-model="approvePassword" autocomplete="current-password"/></label>
+          <label v-if="totpRequired">新的 TOTP 六位码<input type="text" v-model.trim="approveCode" autocomplete="one-time-code"/></label>
+          <p v-else class="muted small">当前没有启用 TOTP；确认更新只需要重新验证管理员密码。</p>
+          <button type="button" :disabled="busy" @click="approveUpdate">确认部署以上准确提交</button>
+        </template>
+        <p v-else>已确认，等待独立更新器执行。</p>
+      </template>
+      <p v-if="update?.lastResult">上次执行：{{ update.lastResult.status }} · {{ update.lastResult.sha.slice(0,12) }}</p>
       <h4>已授权客户端</h4>
       <p class="muted small">这些权限是客户端自己的授权范围；上面的 Action 开关是全局暴露白名单，两者取交集。</p>
       <div v-for="grant in grants" :key="grant.id" class="session-row">

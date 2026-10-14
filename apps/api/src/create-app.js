@@ -64,7 +64,7 @@ export async function createApp({
   if (existsSync(mcpPath)) {
     const { registerMcpExtension } = await import(pathToFileURL(mcpPath).href);
     await registerMcpExtension(app, {
-      store, auth, registry, engine,
+      store, auth, registry, engine, root,
       origin: publicOrigin || 'http://127.0.0.1:4188',
       resourceUrl: (publicOrigin || 'http://127.0.0.1:4188') + '/mcp'
     });
@@ -121,8 +121,8 @@ export async function createApp({
 
   app.get('/api/auth/status', async () => ({ initialized: await auth.isInitialized() }));
   app.post('/api/auth/login', async (request, reply) => {
-    const { username, password } = request.body ?? {};
-    const loggedIn = await auth.login(username, password, request.ip);
+    const { username, password, secondFactor } = request.body ?? {};
+    const loggedIn = await auth.login(username, password, request.ip, secondFactor);
     reply.header('Set-Cookie', sessionCookie(loggedIn.token, { secure }));
     return { user: loggedIn.user, csrf: loggedIn.csrf, expiresAt: loggedIn.expiresAt };
   });
@@ -142,6 +142,20 @@ export async function createApp({
     await auth.changePassword(request.panelIdentity, currentPassword, newPassword);
     reply.header('Set-Cookie', clearSessionCookie({ secure }));
     return { ok: true, signedOut: true };
+  });
+  app.get('/api/auth/totp', async request => auth.totpStatus(request.panelIdentity));
+  app.post('/api/auth/totp/setup', async request => {
+    auth.requirePermission(request.panelIdentity,'account:write');
+    return auth.beginTotp(request.panelIdentity,request.body?.currentPassword);
+  });
+  app.post('/api/auth/totp/enable', async request => {
+    auth.requirePermission(request.panelIdentity,'account:write');
+    return auth.enableTotp(request.panelIdentity,request.body?.code);
+  });
+  app.post('/api/auth/totp/disable', async request => {
+    auth.requirePermission(request.panelIdentity,'account:write');
+    await auth.disableTotp(request.panelIdentity,request.body?.currentPassword,request.body?.code);
+    return {ok:true};
   });
   app.get('/api/auth/sessions', async request => ({
     sessions: await auth.listSessions(request.panelIdentity)
@@ -173,7 +187,7 @@ export async function createApp({
   // All existing endpoints pass through the same login/CSRF policy.
   app.get('/api/health', async request => {
     auth.requirePermission(request.panelIdentity, 'system:read');
-    return { status: 'ok', version: '0.3.0', modules: modules.loaded };
+    return { status: 'ok', version: '0.5.0', modules: modules.loaded };
   });
   app.get('/api/modules', async request => {
     auth.requirePermission(request.panelIdentity, 'modules:read');

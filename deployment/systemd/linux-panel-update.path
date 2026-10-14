@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for approved Linux Panel updates
+
+[Path]
+PathExists=/var/lib/linux-panel/update-trigger
+Unit=linux-panel-update.service
+
+[Install]
+WantedBy=multi-user.target
