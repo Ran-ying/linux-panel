@@ -52,3 +52,6 @@ th,td{padding:11px 13px;border-bottom:1px solid #304258;vertical-align:top}
 th{color:#b8cbe0;background:#1e3145;white-space:nowrap}
 td{overflow-wrap:anywhere}
 @media(max-width:730px){.columns{grid-template-columns:1fr}.layout{padding:24px 14px}.toolbar,.progress-head{flex-wrap:wrap}}
+
+.refresh-choice{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:15px;font-size:.85rem;font-weight:500;color:#d4e5f1;cursor:pointer}
+.refresh-choice input{accent-color:#249aaf;width:16px;height:16px}

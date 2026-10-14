@@ -14,7 +14,6 @@ const makeAction = (id, overrides = {}) => ({
     type: 'object', properties: { count: { type: 'integer' } },
     required: ['count'], additionalProperties: false
   },
-  presentation: { type: 'metrics', fields: [{ key: 'count', label: '总计' }] },
   ...overrides
 });
 
@@ -23,12 +22,11 @@ test('module owns its actions and prevents duplicate registration', () => {
   registry.register('demo', makeAction('demo.list'));
   assert.equal(registry.list('web').length, 1);
   assert.equal(registry.list('mcp').length, 0);
-  assert.equal(registry.list('web')[0].presentation.type, 'metrics');
+  assert.equal(Object.hasOwn(registry.list('web')[0], 'presentation'), false);
   assert.equal(registry.list('web')[0].outputSchema.type, 'object');
   assert.equal(Object.hasOwn(registry.list('web')[0], 'execute'), false);
   assert.throws(() => registry.register('other', makeAction('demo.restart')), /must start/);
   assert.throws(() => registry.register('demo', makeAction('demo.list')), /Duplicate/);
-  assert.throws(() => registry.register('demo', makeAction('demo.bad', { presentation: { type: 'arbitrary-html' } })), /Unknown presentation/);
   registry.unregisterModule('demo');
   assert.equal(registry.list('web').length, 0);
 });
