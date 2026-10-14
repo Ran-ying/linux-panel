@@ -1,42 +1,61 @@
 # Linux Panel
 
-以模块化、可验证、最小权限为目标的 Linux 管理平台：**Fastify + Vue 3 + Auth + Action Engine + 可选 MCP 扩展**。已经完成的 v0.3 是私人的 HTTPS 公网登录面板；v0.4 加入了 OAuth 授权连接和由面板控制的只读 MCP 工具。
+**Linux Panel** 是基于 Node.js (Fastify) + Vue 3 的模块化 Linux 管理面板。业务能力统一定义为 Action，Web UI 与可选的 OAuth 保护的 MCP 接口共享这些能力。
 
-> **注意：代码通过 CI ≠ 已经过 ChatGPT 公网端到端验证。** MCP 默认关闭；先在测试/受控环境执行部署与授权测试。当前临时服务器仍是已结束维护的 CentOS 7，需保持迁移计划。
+*A modular Node.js Linux panel with a web dashboard and an optional OAuth-protected MCP endpoint.*
 
-## 能力
+> 仍在开发阶段：单管理员、单实例、只读操作为主。未经过独立安全审计。MCP 和客户端注册默认关闭。
 
-- 统一平台身份系统：本地 CLI 初始化的管理员、scrypt 密码、持久会话、Web Cookie、CSRF、服务端权限。
-- Web 面板固定存在：概览、账户、面板设置、会话和审计。没有任何业务模块仍能登录和进行基础配置。
-- 只读业务 Actions：`system.info`、`system.cpu`、`system.memory`、`storage.usage`、`services.list`。
-- **MCP 扩展**：`/mcp` Streamable HTTP、OAuth Authorization Code + PKCE、RFC 9728/RFC 8414 发现、动态公开客户端注册、Bearer Token 和刷新、撤销授权。
-- **Web MCP 管理**：总开关、允许注册新客户端、每个工具白名单、每个客户端 Scope 收窄、查看和撤销客户端授权。
-- 所有 MCP 操作必须满足：用户权限 ∩ OAuth Scope ∩ Web 工具白名单。默认均不开放，且只读 Action 才有资格暴露；无匿名执行。
+## 功能
 
-## 本地测试
+- 无默认密码的管理员账户、本地初始化、会话、CSRF 和审计事件。
+- 系统、CPU、内存、磁盘及 systemd 服务只读信息。
+- Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
+- MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
+- Git + systemd + Nginx HTTPS，独立非 root 服务账户。
 
-```sh
-git pull --ff-only origin main
-npm ci
-npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund
-npm test
-npm run check
-npm run build:web
+## 安装
+
+目标系统：Ubuntu 24.04 LTS / Debian 12+；推荐 Node.js 24 LTS。**CentOS 7 不受自动安装脚本支持。**
+
+完整的 **手动分步安装** 和 **自动脚本部署** 请看 [docs/INSTALL.md](docs/INSTALL.md)。准备好公网 DNS、Node.js、Git、Nginx 和合法 HTTPS 证书后：
+
+```bash
+git clone https://github.com/Ran-ying/linux-panel.git
+cd linux-panel
+less scripts/install.sh
+sudo bash scripts/install.sh \
+  --domain panel.example.com \
+  --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
+  --key /etc/letsencrypt/live/panel.example.com/privkey.pem
 ```
 
-**新安装才运行一次：** `npm run admin:init`，在交互式终端设置管理员密码。
+已有独立 TLS 反向代理，可用 `--no-nginx` 安装后手动配置 Nginx/Caddy/宝塔；需要自行完成 OAuth 与登录限流。
 
-开发进程分两个终端：`npm run dev:api`、`npm run dev:web`，浏览器 `http://127.0.0.1:5173`。生产环境只运行 Fastify 和已构建的网页。
+本地开发：
 
-## 私人公网预览
+```bash
+npm ci
+npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock
+npm run check && npm test && npm run build:web
+npm run dev:api
+# 新终端运行：npm run dev:web
+```
 
-部署地址 `https://uspanel.rany.ing`，受保护的 MCP 入口 `https://uspanel.rany.ing/mcp`。继续采用宝塔 Nginx HTTPS → `127.0.0.1:4188`，systemd 非 root `linuxpanel` 单实例。
+## 项目结构
 
-- `docs/deployment.md`：v0.3 的生产部署规范和手工验收。
-- **`docs/mcp.md`：v0.4 的依赖安装、OAuth、MCP 权限配置、ChatGPT 接入与回滚。**
-- `docs/security.md`：身份、Token、可信代理等安全约束。
-- `deployment/`：独立 Nginx、systemd、环境变量示例。
+```text
+apps/api/          Fastify API
+apps/web/          Vue 3 管理台
+core/              Action 注册 / 验证 / 执行
+modules/           业务 Action
+extensions/mcp/    可选 MCP 与 OAuth
+platform/          身份认证 / 权限 / 状态存储 / HTTP 安全
+deployment/        systemd / Nginx 模板
+scripts/           管理员初始化 / 安装 / 更新
+tests/             Node 单元与集成测试
+```
 
-**不要把 MCP 当作公开无认证接口。** 首次连接时应在 Web 设置中明确开启服务和只读工具，临时允许新 OAuth 客户端注册，完成 ChatGPT 授权后关闭注册入口。未认证请求应返回 401；关闭 MCP 则应返回 404。
+更多文档：[架构](docs/architecture.md) · [MCP](docs/mcp.md) · [安装](docs/INSTALL.md) · [升级](docs/UPGRADING.md) · [安全](docs/security.md) · [公开审查](docs/PUBLIC-RELEASE.md)
 
-任何部署到 VPS 的操作需要用户或有服务器权限的 Codex 完成。开发分支未合并前，不得以此说明现有公网环境已实现 MCP。若用户的 ChatGPT 套餐暂不支持自定义 MCP 连接，需按产品可用性要求测试或等待，而不是绕过服务器 OAuth。
+许可证见 [LICENSE](LICENSE)。请勿把含密码、Cookie、Token 的数据文件推送到 GitHub。
