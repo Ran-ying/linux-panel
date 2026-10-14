@@ -120,8 +120,10 @@ install -o root -g root -m 0644 \
  "$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update-guard.conf" \
  /etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf
 systemctl daemon-reload
-[[ "$(systemctl show linux-panel.service -p Conditions --value)" == *"active-transaction"* ]] ||
- fail 'Systemd did not load transaction boot guard'
+systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' ||
+ fail 'Systemd did not load durable transaction guard'
+systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start' ||
+ fail 'Systemd did not load live-worker startup permit'
 [[ "$(systemctl show linux-panel-update.service -p ProtectSystem --value)" == strict ]] ||
  fail 'ProtectSystem not strict'
 [[ "$(systemctl show linux-panel-update.service -p NoNewPrivileges --value)" == yes ]] ||
