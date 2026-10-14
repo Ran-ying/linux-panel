@@ -1,7 +1,7 @@
 import { addAudit } from './state-store.js';
 
 // A missing v0.4 policy always fails closed. v0.3 state files need no migration.
-export const defaultMcpPolicy = () => ({ enabled: false, tools: {} });
+export const defaultMcpPolicy = () => ({ enabled: false, registrationEnabled: false, tools: {} });
 export const forbidden = message => Object.assign(new Error(message), { statusCode: 403 });
 export const missing = message => Object.assign(new Error(message), { statusCode: 404 });
 
@@ -26,16 +26,16 @@ export function actionAllowed(state, action) {
  */
 export async function setMcpPolicy(store, registry, input, actor) {
   if (!input || typeof input !== 'object' || Array.isArray(input) ||
-      typeof input.enabled !== 'boolean' || !input.tools ||
+      typeof input.enabled !== 'boolean' || typeof input.registrationEnabled !== 'boolean' || !input.tools ||
       typeof input.tools !== 'object' || Array.isArray(input.tools) ||
-      Object.keys(input).some(key => !['enabled','tools'].includes(key)))
+      Object.keys(input).some(key => !['enabled','registrationEnabled','tools'].includes(key)))
     throw Object.assign(new Error('Invalid MCP policy'), { statusCode: 400 });
   const known = new Set(exposedReadActions(registry).map(a => a.id));
   for (const [id, enabled] of Object.entries(input.tools)) {
     if (!known.has(id) || typeof enabled !== 'boolean')
       throw Object.assign(new Error('Unknown or invalid MCP tool: ' + id), { statusCode: 400 });
   }
-  const cleaned = { enabled: input.enabled, tools: Object.fromEntries(
+  const cleaned = { enabled: input.enabled, registrationEnabled: input.enabled && input.registrationEnabled, tools: Object.fromEntries(
     [...known].map(id => [id, input.tools[id] === true])
   ) };
   await store.mutate(state => {

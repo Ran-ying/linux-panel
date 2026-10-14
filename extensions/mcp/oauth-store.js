@@ -58,7 +58,8 @@ export class OAuthStore {
     };
     await this.store.mutate(state => {
       const mcp = oauthData(state);
-      if (!mcpPolicy(state).enabled) throw Object.assign(new Error('MCP disabled'), { statusCode: 404 });
+      if (!mcpPolicy(state).enabled || !mcpPolicy(state).registrationEnabled)
+        throw Object.assign(new Error('New OAuth clients registration disabled'), { statusCode: 403 });
       if (mcp.clients.length >= MAX_CLIENTS)
         throw Object.assign(new Error('OAuth client registration limit reached'), { statusCode: 429 });
       mcp.clients.push(client);

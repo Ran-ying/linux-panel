@@ -28,7 +28,7 @@ test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permis
   const manager=new ModuleManager(join(process.cwd(),'modules'),registry);
   await manager.loadAll();
   await setMcpPolicy(store,registry,{
-    enabled:true,tools:{'system.info':true,'system.cpu':false,'storage.usage':false,
+    enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.cpu':false,'storage.usage':false,
       'system.memory':false,'services.list':false}
   },user.id);
   const oauth=new OAuthStore(store,registry,resource);
@@ -65,7 +65,7 @@ test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permis
   assert.equal(result.status,200,JSON.stringify(result.data));
   const output=JSON.parse(result.data.result.content[0].text);
   assert.equal(typeof output.hostname,'string');
-  await setMcpPolicy(store,registry,{enabled:true,tools:{'storage.usage':true}},user.id);
+  await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'storage.usage':true}},user.id);
   const hidden=await rpc({method:'tools/list'});
   assert.equal(hidden.status,200,JSON.stringify(hidden.data));
   assert.ok(hidden.data.result?.tools, JSON.stringify(hidden.data));

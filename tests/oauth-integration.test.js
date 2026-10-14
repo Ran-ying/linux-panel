@@ -29,7 +29,7 @@ async function fixture(t) {
   const cookie=login.headers['set-cookie'].split(';')[0],csrf=login.json().csrf;
   const enabled=await app.inject({method:'PUT',url:'/api/extensions/mcp/settings',
     headers:{cookie,'x-panel-csrf':csrf},
-    payload:{enabled:true,tools:{'system.info':true,'system.cpu':true,'storage.usage':true}}});
+    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.cpu':true,'storage.usage':true}}});
   assert.equal(enabled.statusCode,200);
   return {app,store,cookie,csrf};
 }
@@ -117,7 +117,7 @@ test('OAuth metadata and client enrollment are closed while MCP is disabled',asy
   const {app,cookie,csrf}=await fixture(t);
   await app.inject({method:'PUT',url:'/api/extensions/mcp/settings',
     headers:{cookie,'x-panel-csrf':csrf},
-    payload:{enabled:false,tools:{'system.info':true}}});
+    payload:{enabled:false,registrationEnabled:false,tools:{'system.info':true}}});
   assert.equal((await app.inject('/.well-known/oauth-authorization-server')).statusCode,404);
   assert.equal((await app.inject({method:'POST',url:'/oauth/register',
     payload:{client_name:'foo',redirect_uris:['https://client.example/cb']}})).statusCode,404);

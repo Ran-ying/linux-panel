@@ -28,10 +28,10 @@ test('MCP settings are session and CSRF protected; /mcp remains fail-closed', as
   assert.equal(loaded.statusCode,200);
   assert.equal(loaded.json().policy.enabled,false);
   assert.equal(loaded.json().tools.length,5);
-  const policy={enabled:true,tools:{'system.info':true,'storage.usage':true}};
+  const policy={enabled:true,registrationEnabled:true,tools:{'system.info':true,'storage.usage':true}};
   assert.equal((await app.inject({method:'PUT',url:target,headers:{cookie},payload:policy})).statusCode,403);
   assert.equal((await app.inject({method:'PUT',url:target,headers:{cookie,'x-panel-csrf':csrf},
-    payload:{enabled:true,tools:{'service.hack':true}}})).statusCode,400);
+    payload:{enabled:true,registrationEnabled:true,tools:{'service.hack':true}}})).statusCode,400);
   assert.equal((await app.inject({method:'PUT',url:target,headers:{cookie,'x-panel-csrf':csrf},
     payload:policy})).statusCode,200);
   const enabled=await app.inject({url:target,headers:{cookie}});

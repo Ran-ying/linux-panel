@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 const props = defineProps({ csrf: { type: String, required: true } });
-const policy = ref({ enabled: false, tools: {} });
+const policy = ref({ enabled: false, registrationEnabled: false, tools: {} });
 const tools = ref([]);
 const grants = ref([]);
 const installed = ref(null);
@@ -82,6 +82,10 @@ onMounted(load);
       <p class="muted small">MCP 是独立传输扩展，共用面板 Auth 身份。启用开关不等于允许匿名访问；没有 OAuth 授权时，/mcp 仍会拒绝请求。</p>
       <label class="refresh-choice">
         <input type="checkbox" v-model="policy.enabled" /> 启用 MCP 端点
+      </label>
+      <label class="refresh-choice">
+        <input type="checkbox" v-model="policy.registrationEnabled" :disabled="!policy.enabled"/>
+        允许新 OAuth 客户端注册（完成 ChatGPT 连接后建议关闭）
       </label>
       <h4>允许暴露的只读 Action</h4>
       <div v-for="tool in tools" :key="tool.id" class="session-row">
