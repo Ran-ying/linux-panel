@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { createApp } from '../apps/api/src/create-app.js';
 import { AuthService } from '../platform/auth/service.js';
 import { StateStore } from '../platform/state-store.js';
+import { panelContentSecurityPolicy } from '../platform/http-security.js';
 
 const origin='http://127.0.0.1:4188',resource=origin+'/mcp';
 test('ChatGPT OAuth extension params and origin-only resource do not bypass PKCE',async t=>{
@@ -45,6 +46,12 @@ test('ChatGPT OAuth extension params and origin-only resource do not bypass PKCE
   // A normal browser form navigation otherwise sends Origin: null under
   // the application's global Referrer-Policy: no-referrer.
   assert.equal(consent.headers['referrer-policy'],'origin');
+  assert.match(consent.headers['content-security-policy'],
+    /form-action 'self' https:\/\/chatgpt\.com;/);
+  assert.match(consent.headers['content-security-policy'],/frame-ancestors 'none'/);
+  assert.doesNotMatch(consent.headers['content-security-policy'],/evil\.example/);
+  assert.equal(panelContentSecurityPolicy().includes("form-action 'self';"),true);
+  assert.doesNotMatch(panelContentSecurityPolicy(),/https:\/\/chatgpt\.com/);
   assert.match(consent.body,/<meta name="referrer" content="origin">/);
   assert.match(consent.body,/system:read/);
   assert.match(consent.body,/storage:read/);
@@ -94,4 +101,11 @@ test('ChatGPT OAuth extension params and origin-only resource do not bypass PKCE
   // Duplicate security-critical keys remain forbidden.
   const duplicated=await app.inject({url:'/oauth/authorize?'+query+'&client_id=another',headers:{cookie}});
   assert.equal(duplicated.statusCode,400);
+});
+
+test('consent CSP adds only registered redirect origin, not arbitrary OAuth parameters',()=>{
+  assert.match(panelContentSecurityPolicy('https://chatgpt.com'),
+    /form-action 'self' https:\/\/chatgpt\.com;/);
+  assert.throws(()=>panelContentSecurityPolicy("https://evil.example'; script-src *"),/Invalid|URL/);
+  assert.throws(()=>panelContentSecurityPolicy('http://evil.example'),/Invalid/);
 });
