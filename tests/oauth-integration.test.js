@@ -109,16 +109,19 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
   assert.ok(valid);
   assert.deepEqual(valid.scopes,['system:read','storage:read']);
   const grants=(await app.inject({url:'/api/extensions/mcp/grants',headers:{cookie}})).json().grants;
-  assert.equal(grants.length,1);
-  assert.deepEqual(grants[0].scopes,['system:read','storage:read']);
-  const restricted=await app.inject({method:'PUT',url:'/api/extensions/mcp/grants/'+grants[0].id,
+  // Each approval creates a separate revocable grant. The first code was
+  // deliberately burned by the invalid PKCE attempt; the second is active.
+  assert.equal(grants.length,2);
+  const latestGrant=grants.at(-1);
+  assert.deepEqual(latestGrant.scopes,['system:read','storage:read']);
+  const restricted=await app.inject({method:'PUT',url:'/api/extensions/mcp/grants/'+latestGrant.id,
     headers:{cookie,'x-panel-csrf':csrf},payload:{scopes:['system:read']}});
   assert.equal(restricted.statusCode,200,restricted.body);
   const refreshed=await getToken({client_id:id,grant_type:'refresh_token',
     refresh_token:tokens.refresh_token,resource});
   assert.equal(refreshed.statusCode,200,refreshed.body);
   assert.deepEqual((await storeOAuth.verifyAccessToken(refreshed.json().access_token)).scopes,['system:read']);
-  const revoked=await app.inject({method:'DELETE',url:'/api/extensions/mcp/grants/'+grants[0].id,
+  const revoked=await app.inject({method:'DELETE',url:'/api/extensions/mcp/grants/'+latestGrant.id,
     headers:{cookie,'x-panel-csrf':csrf}});
   assert.equal(revoked.statusCode,200);
   assert.equal(await storeOAuth.verifyAccessToken(tokens.access_token),null);
