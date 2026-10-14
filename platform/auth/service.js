@@ -169,15 +169,28 @@ export class AuthService {
     // Charge each attempt (including password verification) to limit online guessing.
     this.#stepUpFailures.set(key,[...attempts,now]);
     const user=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
-    if(!user?.totp?.enabled || !await verifyPassword(password,user.passwordHash))
+    if(!user || !await verifyPassword(password,user.passwordHash))
       throw forbidden();
-    const counter=verifyTotp(user.totp.secret,code,Date.now(),user.totp.lastCounter??-1);
-    if(counter<0)throw forbidden();
+    // TOTP is opt-in. A logged-in administrator must always re-enter their
+    // password, and if they enrolled TOTP they must also supply a fresh code.
+    const totpEnabled=user.totp?.enabled===true;
+    const counter=totpEnabled?
+      verifyTotp(user.totp.secret,code,Date.now(),user.totp.lastCounter??-1) : -1;
+    if(totpEnabled && counter<0)throw forbidden();
     await this.store.mutate(state=>{
       const current=state.users.find(u=>u.id===identity.user.id);
-      if(!current?.totp?.enabled || counter<=(current.totp.lastCounter??-1))throw forbidden();
-      current.totp.lastCounter=counter;
-      addAudit(state,'auth.stepup.verified',identity.user.id);
+      if(!current || current.passwordHash!==user.passwordHash ||
+          !state.sessions.some(s=>s.id===identity.session.id &&
+            s.userId===identity.user.id && Date.parse(s.expiresAt)>Date.now()))
+        throw unauthorized();
+      // No downgrade is possible between password verification and approval.
+      if((current.totp?.enabled===true)!==totpEnabled)throw forbidden();
+      if(totpEnabled){
+        if(counter<=(current.totp.lastCounter??-1))throw forbidden();
+        current.totp.lastCounter=counter;
+      }
+      addAudit(state,'auth.stepup.verified',identity.user.id,
+        totpEnabled?'password+totp':'password');
     });
     this.#stepUpFailures.delete(key);
   }

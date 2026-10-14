@@ -10,7 +10,7 @@
 - API 绑定 `127.0.0.1`，对公网只开放 Nginx HTTPS；设置 CSP、HSTS 和其他响应头。
 - MCP 默认关闭，新客户端注册与每个 Action 白名单均默认关闭。
 - OAuth Authorization Code + PKCE S256，Token 绑定 MCP 资源，客户端 Scope 与用户权限和 Action 白名单取交集；撤销/密码变更导致旧授权失效。
-- MCP 提供只读系统信息。v0.5 可选的 `panel.update.request` **仅创建准确 Git SHA 的更新申请**，必须先授予独立 OAuth Scope 并由 Web 管理员重新输入密码/TOTP 确认；实际更新由单独安装、root 固定脚本 + 非 root 构建账号执行，不开放任意 SSH Shell。
+- MCP 提供只读系统信息。v0.5 可选的 `panel.update.request` **仅创建准确 Git SHA 的更新申请**，必须先授予独立 OAuth Scope 并由 Web 管理员重新输入密码确认；若管理员已启用 TOTP，还须输入新的动态验证码；实际更新由单独安装、root 固定脚本 + 非 root 构建账号执行，不开放任意 SSH Shell。
 - 更新 Broker 独占 root 所有目录保存锁和备份，更新状态文件只对 Web 服务账号可读；Git/npm 由独立 updater 用户执行，避免以 root 运行不可信依赖构建代码。
 - 登录及 OAuth 注册有应用层速率限制；公网还需要独立 Nginx 限流。
 

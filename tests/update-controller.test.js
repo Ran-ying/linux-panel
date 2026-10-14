@@ -22,7 +22,7 @@ test('updater disabled unless explicitly opted in',async t=>{
   const controller=createUpdateController({store,root,auth:new AuthService(store),enabled:false});
   await assert.rejects(controller.request({userId:'u',clientId:'c'}),{statusCode:404});
 });
-test('MCP may only propose the pinned origin/main SHA; approval needs browser password+TOTP',async t=>{
+test('MCP may only propose the pinned origin/main SHA; approval requires Web password and optional TOTP',async t=>{
   const dir=await mkdtemp(join(tmpdir(),'lp-update-'));
   t.after(()=>rm(dir,{recursive:true,force:true}));
   const bare=join(dir,'remote.git'),repo=join(dir,'checkout');

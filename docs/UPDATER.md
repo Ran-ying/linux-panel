@@ -8,7 +8,7 @@ The tool is intentionally **not** an arbitrary command executor.
 - The MCP tool can propose **only one Git commit SHA**. No shell command,
   branch name, arbitrary URL, or user-provided script can be executed.
 - The Web administrator must inspect the old/new SHA and confirm with their
-  active browser session + CSRF + password + a **fresh TOTP code**.
+  active browser session + CSRF + password re-verification. **TOTP is optional**: if the administrator enrolled it, a fresh TOTP code is mandatory; otherwise, the password suffices.
 - A root-owned systemd path watcher invokes a fixed script when the approval
   marker is created. It validates the SHA equals the trusted origin/main HEAD
   and that it is a fast-forward update.
@@ -74,8 +74,7 @@ supported Linux OS. Do not assume CI running Ubuntu verifies CentOS 7.
 
 ## Once installed: end-to-end update workflow
 
-1. Log into Web → Security → enroll TOTP and safely store recovery codes.
-   Enrollment invalidates previous OAuth tokens; reconnect your AI client.
+1. Log into Web → Security. TOTP enrollment is **optional**. If enabled, save the recovery codes offline; enrollment invalidates existing OAuth tokens and requires reconnecting the AI client. No authentication app is needed when TOTP is off.
 2. Web → MCP settings: enable MCP, temporarily allow registration, and
    explicitly tick **Allow update requests**. Keep individual read tools
    scoped to your needs.
@@ -85,7 +84,7 @@ supported Linux OS. Do not assume CI running Ubuntu verifies CentOS 7.
    It reads the full SHA, proposes it via `panel.update.request`, then
    returns an approval-required response. **It has not updated anything.**
 5. Web → MCP settings → update request: verify old → proposed Git SHA,
-   password, fresh TOTP; click approve.
+   password, and a fresh TOTP code **only if you enabled TOTP**; click approve.
 6. The path watcher executes tests, syntax, frontend build and restart.
    The AI connection may temporarily disconnect. Reconnect and inspect
    the update status and system service after the worker completes.

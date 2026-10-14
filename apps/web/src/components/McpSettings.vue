@@ -6,6 +6,7 @@ const tools = ref([]);
 const grants = ref([]);
 const installed = ref(null);
 const update=ref(null);
+const totpRequired=ref(false);
 const approvePassword=ref('');
 const approveCode=ref('');
 const error = ref('');
@@ -76,6 +77,10 @@ async function restrict(grant,scope) {
   finally {busy.value=false;}
 }
 async function loadUpdate(){
+  // The current user's TOTP status controls *presentation*, never server
+  // authorization. A stale UI cannot bypass the backend step-up check.
+  const factorResponse=await fetch('/api/auth/totp');
+  totpRequired.value=factorResponse.ok && (await factorResponse.json()).enabled===true;
   const response=await fetch('/api/extensions/mcp/update');
   if(response.ok)update.value=await response.json();
   else update.value=null;
@@ -114,7 +119,7 @@ onMounted(load);
       </label>
       <label class="refresh-choice">
         <input type="checkbox" v-model="policy.allowUpdates"/>
-        允许 MCP 申请面板更新（需要单独 OAuth Scope 和 Web 双因素确认）
+        允许 MCP 申请面板更新（需要独立 OAuth Scope、Web 确认和密码复核；TOTP 可选）
       </label>
       <h4>允许暴露的只读 Action</h4>
       <div v-for="tool in tools" :key="tool.id" class="session-row">
@@ -135,7 +140,8 @@ onMounted(load);
         <p class="muted small">申请 ID：{{ update.pending.id }}；过期时间：{{ update.pending.expiresAt }}</p>
         <template v-if="!update.pending.approved">
           <label>管理员当前密码<input type="password" v-model="approvePassword" autocomplete="current-password"/></label>
-          <label>新的 TOTP 六位码<input type="text" v-model.trim="approveCode" autocomplete="one-time-code"/></label>
+          <label v-if="totpRequired">新的 TOTP 六位码<input type="text" v-model.trim="approveCode" autocomplete="one-time-code"/></label>
+          <p v-else class="muted small">当前没有启用 TOTP；确认更新只需要重新验证管理员密码。</p>
           <button type="button" :disabled="busy" @click="approveUpdate">确认部署以上准确提交</button>
         </template>
         <p v-else>已确认，等待独立更新器执行。</p>

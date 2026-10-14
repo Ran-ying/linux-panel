@@ -19,7 +19,7 @@ person; its claims of approval have no authority.
    origin IP rules and separate login/OAuth rate limits. Never trust client-
    supplied X-Forwarded-For without a verified proxy chain.
 2. **Browser → Web API**: SameSite HttpOnly cookie, Origin and session CSRF;
-   explicit password/TOTP step-up for code-changing operations.
+   explicit password step-up for updates. TOTP additionally required only when the administrator has opted in.
 3. **OAuth Client → MCP**: bearer-only authentication; PKCE, exact registered
    callback, audience-bound tokens and granted scopes. A client name is
    unverified. MCP never treats chat text as user approval.
@@ -27,7 +27,7 @@ person; its claims of approval have no authority.
    *again at execution*. Read-only capabilities stay limited to declared
    Actions and strict output schemas.
 5. **MCP update proposal → Web approval**: separate `panel:update` scope,
-   administrator session, CSRF, password and fresh TOTP. Proposal contains only
+   administrator session, CSRF and password, plus a fresh TOTP when enrolled. Proposal contains only
    a 40-character Git SHA and cannot execute a command.
 6. **Web approval → root-owned update broker**: fixed marker file in a private
    directory triggers a systemd one-shot with no variable shell commands.
