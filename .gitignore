@@ -12,3 +12,9 @@ coverage/
 
 # Panel identity and local persistent state (never commit)
 data/
+
+# Never include local deployment runtimes, TLS keys or state backups
+runtime/
+*.bak
+*.pem
+panel-state.json

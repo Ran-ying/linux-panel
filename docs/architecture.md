@@ -1,67 +1,30 @@
-# Linux Panel 架构 v0.2
+# Linux Panel v0.4 架构
 
-## 能力边界与展示边界
-
-**Action 提供能力，Core 负责验证和执行，Web 负责展示与调用策略，MCP 适配器只将 Action 暴露为工具。**
+## 核心边界
 
 ```text
-modules/system/actions/memory.js     模块的业务能力
-  ├─ inputSchema / outputSchema      API 契约
-  └─ execute()                       读取真实主机信息
-           │
-           ▼
-ActionRegistry → ActionEngine → {action, result}
-                                  │
-     ┌────────────────────────────┴──────────────────────┐
-     ▼                                                   ▼
-Web API: /api/actions/…                             MCP Adapter（未实现）
-     │                                                   │
-     │                                                   └── 同一份 JSON，无 UI 字段
-     ▼
-Web UI (Vue)
-     ▲
-     │ GET /api/web/presentations
-     │
-modules/system/ui/presentations.js
-     ├─ renderer: progress / metrics / table
-     ├─ 字段映射、标签和格式
-     └─ refreshIntervalMs（Web 可选策略；不是服务器计划任务）
+modules/{system,storage,services}/actions    真正的只读系统能力
+                 |
+          ActionRegistry
+                 |
+          ActionEngine / JSON Schema
+          /                        \
+Web API + Vue 3                   MCP Streamable HTTP
+  Web Cookie/CSRF                  OAuth Bearer / PKCE
+  独立 UI presentations            Scope + MCP allowlist
+       |                                 |
+  GET/POST /api/*                     /mcp
 ```
 
-模块仍独立：`modules/<id>/actions/` 定义真实行为；`modules/<id>/ui/` 只声明 Web 需要的静态展示元数据。内置可信模块从 manifest 加载，Web Adapter 读取其 UI 描述文件并验证仅引用**同一模块里对 Web 可见**的 Action 及已声明的 outputSchema 字段。
+- **平台层**：`platform/auth` 管理管理员、会话及权限；`platform/state-store.js` 负责单进程 JSON 原子持久化。
+- **Core**：注册 Action（名称、输入/输出 Schema、授权元数据），验证及执行。UI 配置不能获得额外执行权限。
+- **模块**：放在 `modules/*`，一个模块拥有自己的 Actions 及可选 UI presentations。
+- **Web**：`apps/api` Fastify、`apps/web` Vue 3。Web 负责布局、进度条/表格/指标及刷新策略。
+- **MCP**：`extensions/mcp` 是独立可选传输适配器，复用业务 Action，**不依赖 Vue**。默认关闭，所有新工具默认不可见。
+- **OAuth**：内置 Auth 登录确认、PKCE S256、Bearer Token、资源受众绑定、客户端单独 Scope 授权与即时撤销。实际执行需要 用户权限 ∩ Token Scope ∩ Action 白名单。
 
-## 数据契约
+## 当前限制
 
-- Action 的 `outputSchema` 是 JSON Schema。ActionEngine 使用 AJV 验证结果，不向外暴露不符合 Schema 的数据。
-- ActionRegistry 的 `list('web')` 和 `list('mcp')` 只包含能力元数据，不含 UI 展示策略。
-- Web-only 接口 `GET /api/web/presentations` 返回 `{ presentations: [{actionId, renderer, ..., refreshIntervalMs}] }`；它不修改 Registry，也不创建任何系统操作。
-- 支持 `metrics`、`progress`、`table`；无配置时可退化为 JSON。所有渲染都是可信 Web 代码，UI 文件不允许提交任意 HTML/JS 字符串让客户端执行。
-- Web 可为可信且无需必填输入的只读 Action 声明 `loadOnEnter: true`，进入模块时只执行一次初始读取（不会为其他 Action 隐式授予权限）；若页面提供自动刷新选项，用户勾选后按模块 UI 配置轮询，仅在可见页面执行，避免并发请求；切换 Action 或卸载页面时停止。后端永远不自行定时执行 Action。
-- 操作计划仅解释只读采集方式；不是具备服务器审批绑定的操作计划。
-- `kind:read` 和 `permission` 目前仅是可信模块约定，**不代表实际隔离或授权**。Web UI 不能提高权限。
+仅限单管理员、单个 Node 进程、单机 JSON 存储，不支持水平扩容；没有任意 Shell、文件系统写入或特权 Broker。多管理员、2FA、第三方扩展隔离需要另行设计。根文件系统是使用 `fs.statfs` 读取，内存使用 `/proc/meminfo`，CPU 采样 `os.cpus`，服务清单读取 systemctl。
 
-## 数据来源
-
-- `storage.usage`：使用 `fs.promises.statfs('/', {bigint:true})` 计算根文件系统容量。区别 `bfree` 和 `bavail`。
-- `system.memory`：Linux 读 `/proc/meminfo` 的 `MemAvailable`；macOS 的 `os.freemem()` 是估算。
-- `system.cpu`：`os.cpus()` 两次累计计数器之差，获得短时使用率。
-- `services.list`：Linux 运行 `systemctl list-units` 解析数据，保留未识别行；Mac 显示 mock。
-
-## 安全边界与后续
-
-v0.2 无登录、独立服务端权限系统、审计、特权 Broker、MCP transport。后端只监听 `127.0.0.1`，禁止公网发布；今后暴露远程访问前必须完成鉴权。MCP 只通过适配器复用 Action 的业务契约，不应该依赖 Vue UI 配置。
-
-## Web 模块导航与 Action 流式布局
-
-Web 通过 `GET /api/modules` 获取 ModuleManager 的已加载模块（名称、ID、版本），通过 `GET /api/actions` 获取 Web 可见的 Action 元数据；前端只按 `moduleId` 分组，不硬编码模块 ID 或 Action 列表。
-
-- 左侧只显示已加载模块名称，不再显示 Action 子菜单。
-- 选择模块后，右侧按注册顺序从上到下流式展示该模块所有 Web 可见 Action；每个卡片独立维护结果、预览和刷新状态。
-- 模块导航不改变 Action 执行、Web/MCP 权限边界、输出 Schema 或 Web 专属刷新设置。
-- 模块即使没有 Web Action 也能显示，明确标记为空；后续添加新模块不需要修改导航组件。
-
-### 流式页面行为
-
-- 每个 Action 卡片可分别查看数据、JSON 或操作计划；切换模块时销毁旧卡片并中止未完成的前端请求。
-- 后端 Action 不知道页面卡片的位置，也不知道展示或自动刷新策略；MCP 不使用这些配置。
-- 前端自动刷新仍需用户启用，页面隐藏时暂停；同一 Action 不叠加并发请求。
+部署：[INSTALL.md](INSTALL.md) · OAuth：[mcp.md](mcp.md) · 升级：[UPGRADING.md](UPGRADING.md)。

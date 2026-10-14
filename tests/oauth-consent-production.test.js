@@ -9,8 +9,8 @@ import { AuthService } from '../platform/auth/service.js';
 import { StateStore } from '../platform/state-store.js';
 
 test('production consent allows registered ChatGPT callback, without changing site-wide CSP',async t=>{
-  const origin='https://uspanel.rany.ing';
-  const domain='uspanel.rany.ing';
+  const origin='https://panel.example.com';
+  const domain='panel.example.com';
   const folder=await mkdtemp(join(tmpdir(),'oauth-csp-prod-'));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const statePath=join(folder,'state.json');
