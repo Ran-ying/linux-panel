@@ -145,8 +145,10 @@ base_checks(){
  else
   block 'Git status failed; checkout cleanliness unverified';return
  fi
- git_remote="$(git_checked remote get-url origin 2>/dev/null)" ||
-  {block 'Git remote unreadable';return;}
+ if ! git_remote="$(git_checked remote get-url origin 2>/dev/null)";then
+  block 'Git remote unreadable'
+  return
+ fi
  if [[ "${git_remote-}" =~ ^https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?$ ||
        "${git_remote-}" =~ ^git@github[.]com:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?$ ]];then
   pass 'Pinned GitHub remote URL has no embedded secrets'
