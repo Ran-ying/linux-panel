@@ -8,6 +8,8 @@ import { createApp } from '../apps/api/src/create-app.js';
 import { AuthService } from '../platform/auth/service.js';
 import { StateStore } from '../platform/state-store.js';
 import { OAuthStore } from '../extensions/mcp/oauth-store.js';
+import { ActionRegistry } from '../core/action-registry.js';
+import { ModuleManager } from '../core/module-manager.js';
 
 const origin='http://127.0.0.1:4188',resource=origin+'/mcp';
 async function fixture(t) {
@@ -86,11 +88,12 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
   const tokens=issued.json();
   assert.equal(tokens.token_type,'Bearer');
   assert.ok(tokens.refresh_token);
-  const storeOAuth=new OAuthStore(store,{list:()=>[]},resource);
+  const registry=new ActionRegistry();
+  await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
+  const storeOAuth=new OAuthStore(store,registry,resource);
   const valid=await storeOAuth.verifyAccessToken(tokens.access_token);
-  // The fake registry has no MCP tools, so the token's effective scopes are empty.
   assert.ok(valid);
-  assert.deepEqual(valid.scopes,[]);
+  assert.deepEqual(valid.scopes,['system:read','storage:read']);
   const grants=(await app.inject({url:'/api/extensions/mcp/grants',headers:{cookie}})).json().grants;
   assert.equal(grants.length,1);
   assert.deepEqual(grants[0].scopes,['system:read','storage:read']);
@@ -100,6 +103,7 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
   const refreshed=await getToken({client_id:id,grant_type:'refresh_token',
     refresh_token:tokens.refresh_token,resource});
   assert.equal(refreshed.statusCode,200,refreshed.body);
+  assert.deepEqual((await storeOAuth.verifyAccessToken(refreshed.json().access_token)).scopes,['system:read']);
   const revoked=await app.inject({method:'DELETE',url:'/api/extensions/mcp/grants/'+grants[0].id,
     headers:{cookie,'x-panel-csrf':csrf}});
   assert.equal(revoked.statusCode,200);
@@ -119,4 +123,29 @@ test('OAuth metadata and client enrollment are closed while MCP is disabled',asy
     payload:{client_name:'foo',redirect_uris:['https://client.example/cb']}})).statusCode,404);
   assert.equal((await app.inject({method:'POST',url:'/mcp',
     payload:{jsonrpc:'2.0',id:1,method:'tools/list'}})).statusCode,404);
+});
+
+test('changing Web password invalidates previous MCP access and refresh credentials',async t=>{
+  const {app,store,cookie,csrf}=await fixture(t);
+  const registered=await app.inject({method:'POST',url:'/oauth/register',
+    payload:{client_name:'Test client',redirect_uris:['https://client.example/cb']}});
+  const clientId=registered.json().client_id;
+  const registry=new ActionRegistry();
+  await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
+  const data=new OAuthStore(store,registry,resource);
+  const identity=(await store.snapshot()).users[0];
+  const grant=await data.createGrant(clientId,identity.id,['system:read'],resource);
+  const {secret}=await import('../extensions/mcp/oauth-store.js');
+  const access=secret(),refresh=secret();
+  await data.saveToken({accessToken:access,accessTokenExpiresAt:new Date(Date.now()+3600000),
+    refreshToken:refresh,refreshTokenExpiresAt:new Date(Date.now()+7200000),scope:['system:read']},
+    await data.client(clientId),{id:identity.id,grantId:grant.id,resource});
+  assert.ok(await data.verifyAccessToken(access));
+  const changed=await app.inject({method:'POST',url:'/api/auth/password',
+    headers:{cookie,'x-panel-csrf':csrf},
+    payload:{currentPassword:'a very long passphrase for oauth test',
+      newPassword:'some other long password for test 2026'}});
+  assert.equal(changed.statusCode,200);
+  assert.equal(await data.verifyAccessToken(access),null);
+  assert.equal(await data.getRefreshToken(refresh),null);
 });

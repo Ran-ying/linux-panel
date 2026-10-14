@@ -13,7 +13,7 @@ export const oauthData = state => {
   return state.mcp;
 };
 const active = value => value && Date.parse(value) > Date.now();
-const MAX_CLIENTS = 60, MAX_GRANTS = 100;
+const MAX_CLIENTS = 60, MAX_GRANTS = 100, MAX_CODES = 150, MAX_TOKENS = 500;
 
 export function allowedScopes(registry, state) {
   if (!mcpPolicy(state).enabled) return [];
@@ -87,7 +87,10 @@ export class OAuthStore {
     if (!client || !Array.isArray(scopes) || !scopes.length ||
         scopes.some(s=>!allowed.has(s)))
       throw Object.assign(new Error('Requested scopes are not available'), { statusCode: 400 });
+    const user=state.users.find(u=>u.id===userId);
+    if (!user) throw Object.assign(new Error('User not found'), { statusCode:401 });
     const grant = { id: randomUUID(), clientId, userId, resource,
+      credentialEpoch:user.credentialEpoch??0,
       scopes: [...new Set(scopes)], revoked:false, createdAt:new Date().toISOString() };
     await this.store.mutate(current=>{
       const mcp=oauthData(current);
@@ -113,6 +116,7 @@ export class OAuthStore {
     const grant=record && state.mcp?.grants?.find(g=>g.id===record.grantId && !g.revoked);
     const user=grant && state.users.find(u=>u.id===grant.userId);
     if (!user || !grant || grant.resource!==this.resourceUrl ||
+        (user.credentialEpoch??0)!==(grant.credentialEpoch??0) ||
         record.clientId!==grant.clientId) return null;
     const allowed = new Set(allowedScopes(this.registry,state));
     const scopes=record.scopes.filter(s=>grant.scopes.includes(s) && allowed.has(s));
@@ -153,7 +157,13 @@ export class OAuthStore {
       userId:user.id,grantId:user.grantId,resource:user.resource,
       codeChallenge:code.codeChallenge,codeChallengeMethod:code.codeChallengeMethod
     };
-    await this.store.mutate(state=>oauthData(state).codes.push(record));
+    await this.store.mutate(state=>{
+      const mcp=oauthData(state);
+      mcp.codes=mcp.codes.filter(c=>active(c.expiresAt));
+      if (mcp.codes.length>=MAX_CODES)
+        throw Object.assign(new Error('Authorization code capacity exceeded'), {statusCode:429});
+      mcp.codes.push(record);
+    });
     return {...code,client,user};
   }
   async getCode(token) {
@@ -163,7 +173,8 @@ export class OAuthStore {
     const grant=state.mcp?.grants?.find(g=>g.id===record.grantId && !g.revoked);
     const client=await this.client(record.clientId);
     const user=grant && state.users.find(u=>u.id===record.userId);
-    if (!grant || !client || !user || grant.resource!==record.resource) return null;
+    if (!grant || !client || !user || grant.resource!==record.resource ||
+        (user.credentialEpoch??0)!==(grant.credentialEpoch??0)) return null;
     return {
       authorizationCode:token,expiresAt:new Date(record.expiresAt),redirectUri:record.redirectUri,
       scope:record.scope,codeChallenge:record.codeChallenge,codeChallengeMethod:record.codeChallengeMethod,
@@ -192,6 +203,8 @@ export class OAuthStore {
           grant.resource!==this.resourceUrl) throw Object.assign(new Error('Grant invalid'),{statusCode:401});
       mcp.tokens=mcp.tokens.filter(t=>active(t.accessExpiresAt) ||
         (t.refreshExpiresAt && active(t.refreshExpiresAt)));
+      if (mcp.tokens.length>=MAX_TOKENS)
+        throw Object.assign(new Error('OAuth token capacity exceeded'), {statusCode:429});
       mcp.tokens.push(value);
       addAudit(state,'mcp.token.issued',user.id,client.id);
     });
@@ -204,7 +217,8 @@ export class OAuthStore {
     const grant=state.mcp?.grants?.find(g=>g.id===record.grantId && !g.revoked);
     const user=grant && state.users.find(u=>u.id===record.userId);
     const client=await this.client(record.clientId);
-    if(!grant||!user||!client||grant.resource!==this.resourceUrl)return null;
+    if(!grant||!user||!client||grant.resource!==this.resourceUrl ||
+       (user.credentialEpoch??0)!==(grant.credentialEpoch??0))return null;
     return { refreshToken:token,refreshTokenExpiresAt:new Date(record.refreshExpiresAt),
       scope:record.scopes,client,user:{id:user.id,grantId:grant.id,resource:grant.resource} };
   }
