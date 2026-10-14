@@ -2,6 +2,8 @@
 # Installed as /usr/local/libexec/linux-panel-update-worker, root-owned 0755.
 # This fixed broker intentionally accepts NO command-line arguments.
 set -Eeuo pipefail
+# Root commands must NEVER resolve executables from the updater-owned checkout.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 ROOT=/opt/linux-panel
 STATE=/var/lib/linux-panel
@@ -11,7 +13,7 @@ RESULT="$STATE/update-result"
 EXPECTED_REMOTE=/etc/linux-panel/update-source
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
-as_updater(){ runuser -u "$USER" -- "$@"; }
+as_updater(){ /usr/sbin/runuser -u "$USER" -- /usr/bin/env PATH=/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
   local status="$1"
   printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$RESULT"

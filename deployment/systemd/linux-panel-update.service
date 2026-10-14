@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=oneshot
 User=root
 Group=root
-Environment=PATH=/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/libexec/linux-panel-update-worker
 UMask=0077
 NoNewPrivileges=true
