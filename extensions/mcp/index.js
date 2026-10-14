@@ -30,11 +30,16 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     const [{ createMcpHandler, McpServer }, { toNodeHandler }, z] = await Promise.all([
       import('@modelcontextprotocol/server'), import('@modelcontextprotocol/node'), import('zod/v4')
     ]);
-    const handler = createMcpHandler(({ authInfo } = {}) => {
+    const handler = createMcpHandler(async ({ authInfo } = {}) => {
+    const snapshot = await store.snapshot();
+    const permitted = new Set(authInfo?.scopes ?? []);
+    const visible = exposedReadActions(registry).filter(a =>
+      snapshot.mcp?.policy?.tools?.[a.id] === true && permitted.has(a.permission));
+
     const server = new McpServer({ name: 'linux-panel', version: '0.4.0' });
     // Always register only the actions advertised for MCP. Runtime handler
     // rechecks the policy so revoking a grant or a tool applies immediately.
-    for (const action of exposedReadActions(registry)) {
+    for (const action of visible) {
       server.registerTool(action.id, {
         description: action.description || action.title,
         inputSchema: z.object({}).strict(),
@@ -61,6 +66,8 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
   app.all('/mcp', async (request, reply) => {
     const state = await store.snapshot();
     if (!mcpPolicy(state).enabled) return reply.code(404).send({ error: 'MCP module disabled' });
+    if (request.headers.origin && request.headers.origin !== origin)
+      return reply.code(403).send({ error: 'MCP Origin not allowed' });
     const bearer = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.authorization ?? '');
     const verified = bearer ? await tokens.verifyAccessToken(bearer[1]) : null;
     if (!verified) {
