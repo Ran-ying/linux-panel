@@ -21,6 +21,7 @@ install -d -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 "$ROOT/scripts/update-worker.sh" /usr/local/libexec/linux-panel-update-worker
 install -d -o root -g root -m 0755 /etc/linux-panel
 install -d -o root -g root -m 0700 /var/lib/linux-panel-update-root
+install -d -o root -g linuxpanel -m 0750 /var/lib/linux-panel-update-status
 printf '%s\n' "$REMOTE" > /etc/linux-panel/update-source
 chown root:root /etc/linux-panel/update-source
 chmod 0600 /etc/linux-panel/update-source

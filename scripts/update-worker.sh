@@ -10,7 +10,7 @@ STATE=/var/lib/linux-panel
 ROOT_BACKUP=/var/lib/linux-panel-update-root
 MARKER="$STATE/update-trigger"
 PROCESSING="$STATE/update-processing"
-RESULT="$STATE/update-result"
+RESULT=/var/lib/linux-panel-update-status/result.json
 EXPECTED_REMOTE=/etc/linux-panel/update-source
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
@@ -19,8 +19,8 @@ record(){
   local status="$1" tmp
   tmp="$(mktemp "$ROOT_BACKUP/.update-result.XXXXXXXX")"
   printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$tmp"
-  chmod 0600 "$tmp"
-  chown linuxpanel:linuxpanel "$tmp"
+  chmod 0640 "$tmp"
+  chown root:linuxpanel "$tmp"
   mv -fT -- "$tmp" "$RESULT"
 }
 [[ "$#" -eq 0 && "$EUID" -eq 0 ]] || exit 2

@@ -13,7 +13,7 @@ const TTL=15*60*1000;
 
 export function createUpdateController({store,root,auth,enabled=process.env.PANEL_UPDATER_ENABLED==='1',
     triggerPath=process.env.PANEL_UPDATE_TRIGGER ?? '/var/lib/linux-panel/update-trigger',
-    resultPath=process.env.PANEL_UPDATE_RESULT ?? '/var/lib/linux-panel/update-result'}) {
+    resultPath=process.env.PANEL_UPDATE_RESULT ?? '/var/lib/linux-panel-update-status/result.json'}) {
   const ensure=async state=>{
     if(!enabled || !mcpPolicy(state).enabled || mcpPolicy(state).allowUpdates!==true)
       throw error('Update integration disabled',404);
