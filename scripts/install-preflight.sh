@@ -3,14 +3,14 @@
 # Sourced by install.sh after validating CLI arguments; NO host mutations.
 lp_preflight() {
   local blockers=0 warnings=0 os_id='' os_version='' systemd_version=''
-  local node_major='' node_minor='' node_version='' nginx_version=''
+  local node_major='' node_minor='' node_version=''
   local memory_kib='' swap_kib='' free_kib='' disk_kib=''
   lp_report() {
     printf '[%-5s] %s\n' "$1" "$2"
     case "$1" in BLOCK) blockers=$((blockers+1));; WARN) warnings=$((warnings+1));; esac
   }
   printf 'Linux Panel install preflight (read-only)\n'
-  printf '  Domain: %s | Nginx managed by installer: %s\n' "$DOMAIN" "$([[ "$NO_NGINX" == 1 ]] && echo no || echo yes)"
+  printf '  HTTP listener: %s:%s | Public origin: %s\n' "$LP_HOST" "$LP_PORT" "$LP_PUBLIC_ORIGIN"
 
   if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -78,10 +78,10 @@ lp_preflight() {
   done
 
   if command -v ss >/dev/null 2>&1; then
-    if [[ -n "$(ss -H -ltn '( sport = :4188 )' 2>/dev/null)" ]]; then
-      lp_report BLOCK 'Port 4188 is already listening; stop or reconfigure the conflicting service before installing.'
+    if [[ -n "$(ss -H -ltn "( sport = :$LP_PORT )" 2>/dev/null)" ]]; then
+      lp_report BLOCK "Port $LP_PORT is already listening; choose another --port or inspect the process."
     else
-      lp_report PASS 'Port 4188 appears free (rechecked during installation).'
+      lp_report PASS "Port $LP_PORT appears free (rechecked during installation)."
     fi
   fi
   for target in /opt/linux-panel /etc/systemd/system/linux-panel.service /etc/linux-panel/panel.env /var/lib/linux-panel/panel-state.json; do
@@ -125,60 +125,6 @@ lp_preflight() {
     lp_report BLOCK '/proc/meminfo unavailable.'
   fi
 
-  if (( NO_NGINX == 0 )); then
-    if ! command -v nginx >/dev/null 2>&1; then
-      lp_report BLOCK 'Nginx missing: install supported Nginx, or use --no-nginx for an existing reverse proxy.'
-    else
-      nginx_version="$(nginx -v 2>&1 | sed -n 's|.*nginx/\([0-9][0-9.]*\).*|\1|p' | head -1)"
-      local nginx_major='' nginx_minor=''
-      IFS=. read -r nginx_major nginx_minor _ <<< "$nginx_version"
-      if [[ "$nginx_major" =~ ^[0-9]+$ && "$nginx_minor" =~ ^[0-9]+$ ]] &&
-        { (( nginx_major > 1 )) || (( nginx_major == 1 && nginx_minor >= 18 )); }; then
-        lp_report PASS "Nginx $nginx_version (minimum 1.18)"
-      else
-        lp_report BLOCK "Nginx ${nginx_version:-unknown} unsupported: require >= 1.18. Upgrade manually without interrupting existing sites, then retry."
-      fi
-      if nginx -t >/dev/null 2>&1; then
-        lp_report PASS 'Existing Nginx configuration validates.'
-      else
-        lp_report BLOCK 'nginx -t failed (or insufficient permissions); fix existing configuration or use sudo for preflight.'
-      fi
-    fi
-    if [[ "$CERT" != /* || "$KEY" != /* || ! -r "$CERT" || ! -r "$KEY" || ! -f "$CERT" || ! -f "$KEY" ]]; then
-      lp_report BLOCK 'Provide readable absolute TLS --cert and --key paths; never stop the existing Nginx to obtain them.'
-    fi
-    for target in /etc/nginx/sites-available/linux-panel.conf /etc/nginx/sites-enabled/linux-panel.conf /etc/nginx/conf.d/linux-panel-limits.conf /etc/nginx/snippets/linux-panel-proxy.inc; do
-      if [[ -e "$target" || -L "$target" ]]; then
-        lp_report BLOCK "Nginx target $target already exists: refusing to overwrite."
-      fi
-    done
-    for folder in /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d /etc/nginx/snippets; do
-      [[ -d "$folder" ]] || lp_report BLOCK "Nginx directory $folder missing. Use --no-nginx for a custom layout."
-    done
-    if command -v nginx >/dev/null 2>&1; then
-      # Read the complete dump before testing to avoid grep -q SIGPIPE
-      # suppressing a hit under pipefail. Literal domain comparison avoids
-      # regex wildcard false matches and includes alternate server_name entries.
-      local nginx_dump=''
-      nginx_dump="$(nginx -T 2>/dev/null || true)"
-      if awk -v domain="$DOMAIN" '
-        /^[[:space:]]*server_name[[:space:]]/ {
-          for (i=2; i<=NF; i++) {
-            name=$i; sub(/;$/, "", name)
-            if (name == domain) found=1
-          }
-        }
-        END { exit(!found) }
-      ' <<< "$nginx_dump"; then
-        lp_report BLOCK "Existing Nginx server_name $DOMAIN found: choose a dedicated hostname."
-      fi
-      if grep -Eq 'zone=lp_(login|oauth_register|oauth_token):' <<< "$nginx_dump"; then
-        lp_report BLOCK 'Existing Nginx limit_req_zone lp_* conflicts with installer-managed zones; use --no-nginx and integrate manually.'
-      fi
-    fi
-  else
-    lp_report WARN 'Nginx/HTTPS integration skipped (--no-nginx); operator must configure secure reverse proxy, throttling, and certificate.'
-  fi
   printf 'Preflight summary: %d blocker(s), %d warning(s).\n' "$blockers" "$warnings"
   (( blockers == 0 ))
 }

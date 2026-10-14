@@ -1,156 +1,131 @@
 #!/usr/bin/env bash
-# Linux Panel first-install helper for supported Debian/Ubuntu systemd hosts.
-# Preconditions: Node.js 24 LTS, npm, git, Nginx and a valid TLS certificate.
-# Does not overwrite existing installations, credentials or web sites.
+# Linux Panel first-install helper. ONLY manages its own Node app, account and
+# systemd service. It never reads/writes Nginx, proxy, DNS, firewall or TLS files.
 set -Eeuo pipefail
 umask 027
-
 usage() {
   cat <<'USAGE'
 Usage:
-  sudo bash scripts/install.sh --domain panel.example.com \
-    --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
-    --key /etc/letsencrypt/live/panel.example.com/privkey.pem
+  sudo bash scripts/install.sh --host 127.0.0.1 --port 4188 \
+    --node-bin /opt/node24/bin/node [--preflight]
 
 Options:
-  --domain FQDN       Public HTTPS hostname (required)
-  --cert FILE         Existing TLS certificate (required unless --no-nginx)
-  --key FILE          Existing TLS private key (required unless --no-nginx)
-  --no-nginx          Set up only Node/systemd; configure your own HTTPS reverse proxy
-  --node-bin FILE     Use isolated Node binary (and npm in same directory);
-                      do not replace the system's Node used by other services
-  --preflight         Check host prerequisites and conflicts; make NO changes
-  --repo URL          Clone URL (default: https://github.com/Ran-ying/linux-panel.git)
-  --ref BRANCH        Git branch to clone (default: main)
-  --help              Show this usage
+  --host ADDRESS      HTTP listen address: 127.0.0.1 (default), or 0.0.0.0
+  --port PORT         HTTP listen port 1024..65535 (default 4188)
+  --public-origin URL Canonical external HTTPS origin for OAuth/login when
+                      using a reverse proxy or public listener.
+                      Default for loopback: http://127.0.0.1:PORT
+  --node-bin FILE     Dedicated Node binary (npm in the same directory)
+  --preflight         Read-only compatibility and port-conflict report
+  --repo URL          Trusted Git repository URL (default GitHub main repo)
+  --ref BRANCH        Git branch to clone (default main)
+  --help              Print usage
 
-This is a FRESH install, not an updater. Aborts if /opt/linux-panel or
-the service/data already exist. Never pipe an unreviewed installer into root.
+Installer never touches third-party reverse proxies, websites, firewall or
+TLS certificates. 0.0.0.0 requires an HTTPS --public-origin and an operator-
+managed TLS reverse proxy/firewall. Raw HTTP on a public network is unsafe.
+Fresh install only; refuses existing code, service and private state.
 USAGE
 }
-
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 log() { printf '[linux-panel] %s\n' "$*"; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Missing program: $1"; }
-DOMAIN='' CERT='' KEY='' REPO='https://github.com/Ran-ying/linux-panel.git' REF='main' NO_NGINX=0 LP_REQUESTED_NODE_BIN='' PREFLIGHT_ONLY=0
+LP_HOST='127.0.0.1'
+LP_PORT='4188'
+LP_PUBLIC_ORIGIN=''
+LP_ORIGIN_EXPLICIT=0
+LP_REQUESTED_NODE_BIN=''
+REPO='https://github.com/Ran-ying/linux-panel.git'
+REF='main'
+PREFLIGHT_ONLY=0
 while (($#)); do
   case "$1" in
-    --domain|--cert|--key|--repo|--ref|--node-bin)
-      (($# >= 2)) || die "Missing value after $1"
+    --host|--port|--public-origin|--repo|--ref|--node-bin)
+      (($#>=2)) || die "Missing value after $1"
       case "$1" in
-        --domain) DOMAIN="$2";; --cert) CERT="$2";; --key) KEY="$2";;
+        --host) LP_HOST="$2";; --port) LP_PORT="$2";;
+        --public-origin) LP_PUBLIC_ORIGIN="$2"; LP_ORIGIN_EXPLICIT=1;;
         --repo) REPO="$2";; --ref) REF="$2";;
         --node-bin) LP_REQUESTED_NODE_BIN="$2";;
       esac; shift 2;;
-    --no-nginx) NO_NGINX=1; shift;;
     --preflight) PREFLIGHT_ONLY=1; shift;;
-    -h|--help) usage; exit 0;;
-    *) die "Unknown argument: $1";;
+    --help|-h) usage; exit 0;;
+    *) die "Unknown option: $1; see --help. Proxy/TLS configuration is outside this installer.";;
   esac
 done
-
-[[ -n "$DOMAIN" && "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die 'Invalid --domain'
-[[ "$DOMAIN" == *.* && ! "$DOMAIN" == *..* && "${#DOMAIN}" -le 253 ]] || die 'Use a valid DNS hostname'
+[[ "$LP_HOST" == '127.0.0.1' || "$LP_HOST" == '0.0.0.0' ]] ||
+  die 'Listen --host must be 127.0.0.1 or 0.0.0.0'
+[[ "$LP_PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$LP_PORT>=1024 && 10#$LP_PORT<=65535)) ||
+  die 'Listen --port must be an integer from 1024 to 65535'
+LP_PORT="$((10#$LP_PORT))"
 [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ && "$REF" != *..* ]] || die 'Invalid --ref'
-[[ "$CERT" =~ ^[A-Za-z0-9_./-]*$ && "$KEY" =~ ^[A-Za-z0-9_./-]*$ ]] || die 'Unsafe TLS certificate or key filename'
 [[ "$REPO" =~ ^(https://|git@github.com:|ssh://) ]] || die 'Use a trusted HTTPS/SSH Git clone URL'
-# The compatibility gate must execute before clone, dependency installation,
-# account creation, service changes, or Nginx writes.
+if [[ -z "$LP_PUBLIC_ORIGIN" ]]; then
+  [[ "$LP_HOST" == '127.0.0.1' ]] ||
+    die '0.0.0.0 requires explicit HTTPS --public-origin plus operator-managed TLS and firewall'
+  LP_PUBLIC_ORIGIN="http://127.0.0.1:$LP_PORT"
+else
+  [[ "$LP_PUBLIC_ORIGIN" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$ ]] ||
+    die '--public-origin must be an exact HTTPS origin without a path/trailing slash'
+fi
 # shellcheck source=scripts/install-preflight.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install-preflight.sh"
 if ! lp_preflight; then
-  die 'Preflight blocked installation. Resolve BLOCK items and rerun --preflight; no changes were made.'
+  die 'Preflight blocked installation. Resolve BLOCK items and retry. No installation changes were made.'
 fi
-if (( PREFLIGHT_ONLY == 1 )); then
-  log 'All mandatory checks passed. Nothing was installed or modified.'
+if ((PREFLIGHT_ONLY)); then
+  log 'All mandatory checks passed. No installation changes were made.'
   exit 0
 fi
-((EUID == 0)) || die "Run installation with sudo/root; --preflight can run read-only."
+((EUID==0)) || die 'Run actual installation as root/sudo'
 if [[ -n "$LP_REQUESTED_NODE_BIN" ]]; then
-  # npm and package lifecycle scripts must use the same isolated Node as the service.
   export PATH="$(dirname "$NODE_BIN"):$PATH"
 fi
-[[ -r /etc/os-release ]] || die 'Cannot determine OS'
-. /etc/os-release
-[[ "$ID" == ubuntu || "$ID" == debian ]] || die 'Use supported Debian/Ubuntu with systemd; other distros use the manual guide'
 need systemctl; need git; need runuser; need install; need sed; need df
-# NODE_BIN and NPM_BIN were validated by install-preflight.sh.
-(( $(df -Pk /opt | awk 'NR==2 {print $4}') >= 1048576 )) || die 'Need >=1 GiB free disk space on /opt filesystem'
-[[ ! -e /opt/linux-panel ]] || die '/opt/linux-panel exists; use docs/UPGRADING.md'
-[[ ! -e /etc/systemd/system/linux-panel.service ]] || die 'Service unit already exists'
-[[ ! -e /var/lib/linux-panel/panel-state.json ]] || die 'Existing user state detected; refusing to overwrite'
-if ((NO_NGINX == 0)); then
-  need nginx
-  [[ "$CERT" == /* && "$KEY" == /* ]] || die 'TLS paths must be absolute'
-  [[ -f "$CERT" && -r "$CERT" && -f "$KEY" && -r "$KEY" ]] || die 'Existing TLS --cert and --key must be readable'
-  [[ -d /etc/nginx/conf.d && -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]] || die 'Use Debian/Ubuntu standard Nginx layout or --no-nginx'
-  [[ ! -e /etc/nginx/sites-available/linux-panel.conf ]] || die 'Nginx linux-panel.conf already exists'
-  [[ ! -e /etc/nginx/sites-enabled/linux-panel.conf ]] || die 'Nginx site link already exists'
-  [[ ! -e /etc/nginx/conf.d/linux-panel-limits.conf ]] || die 'Nginx limit config already exists'
-  [[ -d /etc/nginx/snippets && ! -e /etc/nginx/snippets/linux-panel-proxy.inc ]] || die 'Nginx snippets directory or target file unsuitable'
-  # Re-evaluate before writing, without allowing nginx SIGPIPE under pipefail
-  # to mask duplicate hostnames in a shared Nginx configuration.
-  NGINX_DUMP="$(nginx -T 2>/dev/null)" || die 'Cannot inspect existing Nginx configuration'
-  if awk -v domain="$DOMAIN" '
-    /^[[:space:]]*server_name[[:space:]]/ {
-      for (i=2; i<=NF; i++) {
-        name=$i; sub(/;$/, "", name)
-        if (name == domain) found=1
-      }
-    }
-    END { exit(!found) }
-  ' <<< "$NGINX_DUMP"; then
-    die "An Nginx server_name for $DOMAIN already exists; stop to avoid overriding it"
-  fi
-  unset NGINX_DUMP
-fi
-log "Cloning $REPO ($REF). This requires access if the repository is private."
+[[ ! -e /opt/linux-panel && ! -L /opt/linux-panel ]] || die '/opt/linux-panel exists; follow upgrade docs'
+[[ ! -e /etc/systemd/system/linux-panel.service && ! -L /etc/systemd/system/linux-panel.service ]] ||
+  die 'Service unit already exists'
+[[ ! -e /var/lib/linux-panel/panel-state.json && ! -L /var/lib/linux-panel/panel-state.json ]] ||
+  die 'Existing private state detected; stop'
+[[ ! -e /etc/linux-panel/panel.env && ! -L /etc/linux-panel/panel.env ]] ||
+  die 'Existing panel.env detected; stop'
+log "Cloning trusted source $REPO ($REF)"
 git clone --depth 1 --single-branch --branch "$REF" "$REPO" /opt/linux-panel
 cd /opt/linux-panel
-log 'Installing locked root dependencies and optional MCP extension dependencies'
+log 'Installing dependencies and running tests/builds (resource-intensive)'
 "$NPM_BIN" ci --no-audit --no-fund
 "$NPM_BIN" install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock
-log 'Checking, testing and building the frontend'
 "$NPM_BIN" run check
 "$NPM_BIN" test
 "$NPM_BIN" run build:web
 if ! id linuxpanel >/dev/null 2>&1; then
   useradd --system --home-dir /var/lib/linux-panel --shell /usr/sbin/nologin linuxpanel
 fi
-# Root-only nvm installations often fail for the non-root service account.
-runuser -u linuxpanel -- "$NODE_BIN" -v >/dev/null || die "Node at $NODE_BIN cannot run as linuxpanel; install system-wide Node.js"
+runuser -u linuxpanel -- "$NODE_BIN" -v >/dev/null ||
+  die 'Selected Node binary cannot run as linuxpanel'
 install -d -o linuxpanel -g linuxpanel -m 0700 /var/lib/linux-panel
 install -d -o root -g root -m 0755 /etc/linux-panel
-[[ ! -e /etc/linux-panel/panel.env ]] || die 'Existing /etc/linux-panel/panel.env detected'
-printf 'PANEL_PUBLIC_ORIGIN=https://%s\nPANEL_DATA_DIR=/var/lib/linux-panel\n' "$DOMAIN" > /etc/linux-panel/panel.env
+printf 'PANEL_LISTEN_HOST=%s\nPANEL_LISTEN_PORT=%s\nPANEL_DATA_DIR=/var/lib/linux-panel\n' \
+  "$LP_HOST" "$LP_PORT" > /etc/linux-panel/panel.env
+# For loopback-only mode, derive the Origin from the effective port each boot,
+# including after a Web-approved listener change.
+if (( LP_ORIGIN_EXPLICIT )); then
+  printf 'PANEL_PUBLIC_ORIGIN=%s\n' "$LP_PUBLIC_ORIGIN" >> /etc/linux-panel/panel.env
+fi
 chmod 0600 /etc/linux-panel/panel.env
-# Code must stay root-owned and readable by the unprivileged service user.
 chown -R root:linuxpanel /opt/linux-panel
 chmod -R g+rX,g-w,o-w /opt/linux-panel
-log 'Create your administrator account interactively; no default password is used'
+log 'Initialize admin credentials interactively (only once)'
 runuser -u linuxpanel -- env PANEL_DATA_DIR=/var/lib/linux-panel "$NODE_BIN" /opt/linux-panel/scripts/admin-init.js admin
-sed "s|ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" deployment/systemd/linux-panel.service.example \
-  | sed 's/^Description=.*/Description=Linux Panel (systemd service)/' \
-  > /etc/systemd/system/linux-panel.service
+sed "s|ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" \
+  deployment/systemd/linux-panel.service.example > /etc/systemd/system/linux-panel.service
 chmod 0644 /etc/systemd/system/linux-panel.service
 systemctl daemon-reload
 systemctl enable --now linux-panel.service
-systemctl is-active --quiet linux-panel.service || die 'Linux Panel failed to start; check journalctl -u linux-panel'
-if ((NO_NGINX == 0)); then
-  # Substitute user-supplied fields only after constraining to safe filesystem strings.
-  [[ "$CERT" != *'|'* && "$KEY" != *'|'* && "$CERT" != *$'\n'* && "$KEY" != *$'\n'* ]] || die 'Unsupported TLS filename'
-  sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__CERT__|$CERT|g" -e "s|__KEY__|$KEY|g" \
-    deployment/nginx/linux-panel-public.conf.template > /etc/nginx/sites-available/linux-panel.conf
-  install -m 0644 deployment/nginx/linux-panel-limits.conf /etc/nginx/conf.d/linux-panel-limits.conf
-  install -m 0644 deployment/nginx/linux-panel-proxy.inc /etc/nginx/snippets/linux-panel-proxy.inc
-  ln -s /etc/nginx/sites-available/linux-panel.conf /etc/nginx/sites-enabled/linux-panel.conf
-  if ! nginx -t; then
-    rm -f /etc/nginx/sites-enabled/linux-panel.conf /etc/nginx/sites-available/linux-panel.conf /etc/nginx/conf.d/linux-panel-limits.conf /etc/nginx/snippets/linux-panel-proxy.inc
-    die 'Nginx config rejected; proxy files rolled back. The application service is running locally.'
-  fi
-  systemctl reload nginx || die 'Nginx reload failed; inspect nginx logs'
-fi
-log "Installed to /opt/linux-panel; data: /var/lib/linux-panel"
-log "MCP and new OAuth client registration are OFF until enabled from the Web UI."
-log "Check: https://$DOMAIN/api/auth/status"
-log 'For future upgrades read docs/UPGRADING.md. Do not run install.sh again.'
+systemctl is-active --quiet linux-panel.service ||
+  die 'Service failed to start; inspect journalctl -u linux-panel'
+log "Installed Linux Panel at $LP_HOST:$LP_PORT"
+log 'No reverse proxy, DNS, firewall or certificates were touched.'
+log "Canonical origin: $LP_PUBLIC_ORIGIN"
+log 'MCP and automatic updater are OFF by default.'
+log 'Run preflight checks before installing. See docs/INSTALL.md for operations.'

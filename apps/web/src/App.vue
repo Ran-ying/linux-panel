@@ -2,6 +2,7 @@
 import { onMounted, ref, computed } from 'vue';
 import ActionCard from './components/ActionCard.vue';
 import UpdateManager from './components/UpdateManager.vue';
+import ListenerManager from './components/ListenerManager.vue';
 import LoginPanel from './components/LoginPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import { buildModuleNavigation } from './module-navigation.js';
@@ -143,9 +144,11 @@ onMounted(async () => {
         </div>
         <UpdateManager v-if="activeGroup.id === 'panel'" :csrf="session.csrf"
           @unauthorized="signOutLocally" />
-        <div v-if="activeGroup.actions.some(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.'))"
+        <ListenerManager v-if="activeGroup.id === 'panel'" :csrf="session.csrf"
+          @unauthorized="signOutLocally" />
+        <div v-if="activeGroup.actions.some(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))"
           class="action-flow">
-          <ActionCard v-for="action in activeGroup.actions.filter(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.'))"
+          <ActionCard v-for="action in activeGroup.actions.filter(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))"
             :key="action.id" :action="action" :presentation="presentations[action.id] ?? null"
             :csrf="session.csrf" @unauthorized="signOutLocally" />
         </div>

@@ -12,39 +12,31 @@
 - 系统、CPU、内存、磁盘及 systemd 服务只读信息。
 - Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
 - MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
-- Git + systemd + Nginx HTTPS，独立非 root 服务账户。
+- Git + systemd + 独立非 root 服务账户。只提供可配置的 HTTP 监听端口，Nginx/Caddy/HTTPS/防火墙完全由管理员自行管理。
 - **面板更新是标准 Action**：`panel.update.status`（只读）、`panel.update.check`（只读检查）、`panel.update.request`（创建申请），Web 和 MCP 走同一个 Action Engine；后者需 Web 管理员独立确认密码（TOTP 若已启用则额外验证），由受限 systemd Broker 进行实际更新（首次安装须管理员处理）。
 
-## 安装（先预检、修复 BLOCK、再安装）
+## 安装（不依赖 Nginx）
 
-目标系统：Ubuntu 24.04+ / Debian 12+、systemd >=240、Node.js 24 LTS（另接受 Node 22.12+ 的 22.x 系列）；共享服务器可使用独立 Node24，不替换 PM2/其他程序的系统 Node。**CentOS 7 不支持自动安装或更新 Broker**。
+默认只监听 `127.0.0.1:4188`。安装器只管理自己的 Node 服务和 systemd，不检查、安装、修改或重载 Nginx、证书、DNS 与防火墙；可使用任何自管反向代理，也可以通过 SSH 隧道在本机访问。
 
 ```bash
-# 1. 拉取并检查代码
 git clone https://github.com/Ran-ying/linux-panel.git
 cd linux-panel
 
-# 2. 只读预检（无证书时先跳过 Nginx）
-sudo bash scripts/install.sh --preflight \
-  --domain panel-test.example.com --no-nginx
+# 先只读预检，不做任何安装
+sudo bash scripts/install.sh --preflight --host 127.0.0.1 --port 4188 \
+  --node-bin /opt/node24/bin/node
 
-# 3. BLOCK 时：预览修复计划，只有显式 --apply 才修改主机
-bash scripts/prepare-host.sh --check
-bash scripts/prepare-host.sh --install-node
-bash scripts/prepare-host.sh --create-swap 1024
-# 如管理员审查确认，才分别执行：
-# sudo bash scripts/prepare-host.sh --install-node --apply
-# sudo bash scripts/prepare-host.sh --create-swap 1024 --apply
-
-# 4. 用独立 Node24 重新预检
-sudo bash scripts/install.sh --preflight \
-  --domain panel-test.example.com --no-nginx \
+# 0 BLOCK 且审查全部 WARN 后，明确执行首次安装
+sudo bash scripts/install.sh --host 127.0.0.1 --port 4188 \
   --node-bin /opt/node24/bin/node
 ```
 
-**`0 blocker(s)` 只说明满足强制条件，不代表已经安装或达到推荐内存/磁盘要求。** 在用真实域名、有效 TLS 证书与同一套参数完成完整预检后，去掉 `--preflight` 执行正式安装。自动 Nginx 集成使用 `--cert` / `--key`，已有代理用 `--no-nginx` 并**自行完成 HTTPS 与限流接入**；不要用 `panel-test.example.com` 这类占位域名实际部署。
+自定义端口：`--port 4888`。监听所有 IPv4 接口：`--host 0.0.0.0`，但必须提供 `--public-origin https://your-real-domain` 并自行管理外部 HTTPS 与网络防火墙；**不要将原始 HTTP 端口直接暴露到公网**。已经有 Nginx、Caddy、Traefik 等服务无需为面板修改现有代理。
 
-**必读：[完整安装、预检输出说明、BLOCK 修复对应命令、正式安装、手动安装和验收指南](docs/INSTALL.md)**。已部署实例请看 [升级与回滚](docs/UPGRADING.md)；自动更新 Broker 仍须单独验收。
+**Web Action**：`panel.listener.status` 可查看当前监听配置；`panel.listener.request` 可申请更改监听地址和端口，Web 管理员输入密码（启用 TOTP 时需验证码）确认后保存，下一次**显式重启面板**才生效。不会自动重启或改动代理。
+
+遇到 Node.js 18 / 内存不足等 BLOCK 时，先预览 `bash scripts/prepare-host.sh --check`、`--install-node`、`--create-swap 1024`，只有明确加 `--apply` 才修改主机。**[完整预检、报错修复、自动安装、手动安装与验收指南](docs/INSTALL.md)**。CentOS 7 不受此安装与 root Broker 支持；自动更新 Broker 尚须单独验收。
 
 
 本地开发：
