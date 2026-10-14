@@ -11,7 +11,13 @@ export class ModuleManager {
   }
 
   async loadAll() {
-    const entries = await readdir(this.directory, { withFileTypes: true });
+    // Removing all optional business modules must not disable Auth or Panel Settings.
+    let entries;
+    try { entries = await readdir(this.directory, { withFileTypes: true }); }
+    catch (error) {
+      if (error.code === 'ENOENT') entries = [];
+      else throw error;
+    }
     const definitions = new Map();
     for (const item of entries.filter(e => e.isDirectory())) {
       const folder = join(this.directory, item.name);

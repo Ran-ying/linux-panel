@@ -9,3 +9,6 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Panel identity and local persistent state (never commit)
+data/
