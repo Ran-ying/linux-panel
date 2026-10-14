@@ -62,18 +62,18 @@ as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record 
 # The root broker only stops/starts the fixed systemd unit and backs up state.
 [[ -f "$STATE/panel-state.json" && ! -L "$STATE/panel-state.json" ]] || { record failed;exit 2; }
 [[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" && "$(stat -c %u "$ROOT_BACKUP")" -eq 0 ]] || { record failed;exit 2; }
-# Back up *before* service interruption. Every request gets a fresh unique
-# backup; retrying from the same old SHA must not collide with prior attempts.
+# Each request gets an independent backup to support retry from one SHA.
+# Stop first to guarantee a consistent private state snapshot; on any snapshot
+# failure restart the old service instead of leaving it down.
 BACKUP="$ROOT_BACKUP/panel-state.json.before-$OLD-$ID"
 [[ ! -e "$BACKUP" && ! -L "$BACKUP" ]] || { record failed; exit 2; }
-if ! cp -a -- "$STATE/panel-state.json" "$BACKUP";then
+if ! systemctl stop linux-panel.service;then
+  systemctl start linux-panel.service || true
   record failed
   exit 2
 fi
-chmod 0600 "$BACKUP"
-if ! systemctl stop linux-panel.service;then
-  # Do not leave a failed stop operation masquerading as deployment failure
-  # while the old application could still be restarted.
+if ! cp -a -- "$STATE/panel-state.json" "$BACKUP" ||
+   ! chmod 0600 "$BACKUP";then
   systemctl start linux-panel.service || true
   record failed
   exit 2

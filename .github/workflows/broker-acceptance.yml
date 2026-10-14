@@ -5,6 +5,7 @@ on:
     paths:
       - "scripts/update-worker.sh"
       - "scripts/install-update-broker.sh"
+      - "deployment/systemd/linux-panel-update.service"
       - "tests/staging/**"
       - ".github/workflows/broker-acceptance.yml"
   workflow_dispatch:

@@ -18,5 +18,8 @@ ReadWritePaths=/opt/linux-panel /var/lib/linux-panel /var/lib/linux-panel-update
 RuntimeDirectory=linux-panel-root-updater
 RuntimeDirectoryMode=0700
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID
+# Preserve only the two identity-drop caps across the root shell/exec chain;
+# ordinary updater Git/npm children drop all capabilities via setpriv.
+AmbientCapabilities=CAP_SETUID CAP_SETGID
 RestrictSUIDSGID=true
 TimeoutStartSec=900

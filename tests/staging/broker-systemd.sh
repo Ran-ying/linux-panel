@@ -102,6 +102,10 @@ bash "$ROOT/scripts/install-update-broker.sh" --verify
 install -o root -g root -m 0755 \
  "$GITHUB_WORKSPACE/scripts/update-worker.sh" \
  /usr/local/libexec/linux-panel-update-worker
+install -o root -g root -m 0644 \
+ "$GITHUB_WORKSPACE/deployment/systemd/linux-panel-update.service" \
+ /etc/systemd/system/linux-panel-update.service
+systemctl daemon-reload
 [[ "$(systemctl show linux-panel-update.service -p ProtectSystem --value)" == strict ]] ||
  fail 'ProtectSystem not strict'
 [[ "$(systemctl show linux-panel-update.service -p NoNewPrivileges --value)" == yes ]] ||
