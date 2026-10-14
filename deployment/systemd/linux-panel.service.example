@@ -1,7 +1,8 @@
 # Linux Panel dedicated non-root service (copy and adjust before using).
 # Requires an existing linuxpanel system user, /opt/linux-panel checkout
 # readable by it, and /var/lib/linux-panel writable only by it.
-# Requires a supported OS and Node.js 22.12+ or 24 installed at /usr/bin/node.
+# Requires Node.js 24 LTS or 22.12+; installer replaces ExecStart when isolated Node is used.
+# Bind address/port set by PANEL_LISTEN_HOST / PANEL_LISTEN_PORT in panel.env.
 [Unit]
 Description=Linux Panel (private public preview)
 After=network.target
@@ -12,7 +13,6 @@ User=linuxpanel
 Group=linuxpanel
 WorkingDirectory=/opt/linux-panel
 Environment=NODE_ENV=production
-Environment=PORT=4188
 EnvironmentFile=/etc/linux-panel/panel.env
 ExecStart=/usr/bin/node apps/api/src/server.js
 Restart=on-failure

@@ -100,12 +100,31 @@ if ! systemctl start linux-panel.service || ! systemctl is-active --quiet linux-
   rollback
   exit 1
 fi
-# Probe a protected-host-compatible public status endpoint after restart.
-ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' /etc/linux-panel/panel.env | tail -n 1)"
-HOST="${ORIGIN#https://}"
+# Probe the configured listener, not a hard-coded 4188.
+# The state is untrusted for executable purposes; only validated numeric port
+# and exact configured HTTP Host are ever used with curl.
+PANEL_ENV=/etc/linux-panel/panel.env
+DEFAULT_PORT="$(sed -n 's/^PANEL_LISTEN_PORT=//p' "$PANEL_ENV" | tail -n 1)"
+[[ "$DEFAULT_PORT" =~ ^[0-9]{4,5}$ ]] || DEFAULT_PORT=4188
+# StateStore serializes top-level listener with the host and port on adjacent
+# pretty-printed JSON lines. Refuse malformed overrides rather than using them.
+OVERRIDE_PORT="$(awk '
+  /^[[:space:]]*"listener":[[:space:]]*\{/ { in_listener=1; next }
+  in_listener && /^[[:space:]]*\}/ { exit }
+  in_listener && /^[[:space:]]*"port":[[:space:]]*[0-9]+[,[:space:]]*$/ {
+    gsub(/[^0-9]/,"",$2); print $2; exit
+  }
+' "$STATE/panel-state.json")"
+PROBE_PORT="${OVERRIDE_PORT:-$DEFAULT_PORT}"
+[[ "$PROBE_PORT" =~ ^[0-9]{4,5}$ ]] && ((PROBE_PORT>=1024 && PROBE_PORT<=65535)) ||
+  { rollback;exit 1; }
+ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' "$PANEL_ENV" | tail -n 1)"
+[[ -n "$ORIGIN" ]] || ORIGIN="http://127.0.0.1:$PROBE_PORT"
+HOST="${ORIGIN#http://}"
+HOST="${HOST#https://}"
 if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]] ||
    ! curl --silent --show-error --fail --max-time 8 -H "Host: $HOST" \
-    http://127.0.0.1:4188/api/auth/status >/dev/null;then
+    "http://127.0.0.1:$PROBE_PORT/api/auth/status" >/dev/null;then
   rollback
   exit 1
 fi

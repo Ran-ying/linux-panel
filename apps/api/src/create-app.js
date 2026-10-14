@@ -13,6 +13,7 @@ import { readSessionCookie, sessionCookie, clearSessionCookie } from '../../../p
 import { panelContentSecurityPolicy } from '../../../platform/http-security.js';
 import { createUpdateController } from '../../../platform/update-controller.js';
 import { registerUpdateActions } from '../../../platform/update-actions.js';
+import { createListenerController, registerListenerActions, listenerDefaults, validateListener } from '../../../platform/listener.js';
 
 const badRequest = message => Object.assign(new Error(message), { statusCode: 400 });
 const forbidden = message => Object.assign(new Error(message), { statusCode: 403 });
@@ -40,14 +41,18 @@ export async function createApp({
   statePath = join(root, 'data', 'panel-state.json'),
   publicOrigin = process.env.PANEL_PUBLIC_ORIGIN || '',
   production = process.env.NODE_ENV === 'production',
+  listener = listenerDefaults(),
   logger = false
 } = {}) {
   if (publicOrigin && (!/^https?:\/\//.test(publicOrigin) || new URL(publicOrigin).origin !== publicOrigin))
     throw new Error('PANEL_PUBLIC_ORIGIN must be an exact origin, with no trailing slash or path');
-  if (production && (!publicOrigin || !publicOrigin.startsWith('https://')))
-    throw new Error('Production requires PANEL_PUBLIC_ORIGIN=https://your-panel-domain');
-  // Only local Nginx may supply forwarding headers. NEVER use trustProxy:true:
-  // otherwise remote callers can forge their source IP and evade login limits.
+  const activeListener=validateListener(listener);
+  const loopbackHttp=activeListener.host==='127.0.0.1' &&
+    publicOrigin===`http://127.0.0.1:${activeListener.port}`;
+  if (production && (!publicOrigin || (!publicOrigin.startsWith('https://') && !loopbackHttp)))
+    throw new Error('Production requires HTTPS PANEL_PUBLIC_ORIGIN, or HTTP loopback bound to 127.0.0.1 only');
+  // Trust only loopback proxies (Nginx, Caddy, Traefik etc.), never the
+  // headers of a directly connected external user.
   const app = Fastify({
     logger, bodyLimit: 32 * 1024,
     trustProxy: production ? ['127.0.0.1', '::1', '::ffff:127.0.0.1'] : false
@@ -59,11 +64,13 @@ export async function createApp({
   await modules.loadAll();
   const updates = createUpdateController({store, root, auth});
   registerUpdateActions(registry, updates);
+  const listenerController=createListenerController({store,auth,active:activeListener,publicOrigin});
+  registerListenerActions(registry,listenerController);
   // Platform capabilities are first-class Actions, not transport extensions.
   modules.loaded.push({ id:'panel', name:'面板维护', version:'0.5.0' });
   const engine = new ActionEngine(registry);
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  const secure = production || publicOrigin.startsWith('https://');
+  const secure = publicOrigin.startsWith('https://');
   // Optional transport extensions are a separate lifecycle from business Actions.
   // Old v0.3 state remains valid and MCP starts disabled. Auth is platform-owned.
   const mcpPath = resolve(root, 'extensions/mcp/index.js');
@@ -84,8 +91,8 @@ export async function createApp({
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     if (production) {
       reply.header('Content-Security-Policy', panelContentSecurityPolicy());
-      reply.header('Strict-Transport-Security', 'max-age=31536000');
-      // Defense in depth. A public Nginx vhost must forward the canonical host.
+      if (secure) reply.header('Strict-Transport-Security', 'max-age=31536000');
+      // Defense in depth: every configured proxy or direct request must use the canonical Host.
       const requestedHost = request.headers.host;
       if (requestedHost !== new URL(publicOrigin).host)
         throw Object.assign(new Error('Unrecognized public host'), { statusCode: 421 });
@@ -171,6 +178,15 @@ export async function createApp({
     if (request.panelIdentity.session.id === request.params.id)
       reply.header('Set-Cookie', clearSessionCookie({ secure }));
     return { ok: true };
+  });
+  app.post('/api/panel/listener/approve', async request => {
+    auth.requirePermission(request.panelIdentity,'panel:write');
+    return listenerController.approve({identity:request.panelIdentity,id:request.body?.id,
+      password:request.body?.currentPassword,code:request.body?.code});
+  });
+  app.post('/api/panel/listener/cancel', async request => {
+    auth.requirePermission(request.panelIdentity,'panel:write');
+    return listenerController.cancel({identity:request.panelIdentity,id:request.body?.id});
   });
   // Platform-owned approval/cancellation never pass through the MCP transport.
   // Both endpoints use the existing Web session, Origin and CSRF defenses.
