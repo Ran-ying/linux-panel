@@ -11,6 +11,47 @@
 - 80/443 可被访问；不要公开 4188（只监听回环）。
 - 已有宝塔/Nginx 站点请采用手动配置，自动脚本拒绝覆盖同名站点。
 
+## 0. 只读预检（共享 VPS 必须先执行）
+
+`install.sh` 提供独立的 **--preflight** 模式：不克隆、不安装包、不写磁盘、不创建账户、不重启/重载任何服务。
+安装命令本身也会在第一项修改之前运行**相同的强制预检**。结果输出：
+`[PASS]`（通过）、`[WARN]`（建议改进）、`[BLOCK]`（无法安装，非零退出）。
+不为兼容性擅自升级 Nginx/Node、创建 Swap 或停止现有业务。
+
+准备独立的测试域名和已签发的 HTTPS 证书，然后执行：
+
+```bash
+git clone https://github.com/Ran-ying/linux-panel.git
+cd linux-panel
+sudo bash scripts/install.sh --preflight \
+  --domain panel-test.example.com \
+  --cert /etc/letsencrypt/live/panel-test.example.com/fullchain.pem \
+  --key /etc/letsencrypt/live/panel-test.example.com/privkey.pem
+```
+
+预检包括系统版本 Ubuntu 24.04+ / Debian 12+、systemd >=240、Node 24 LTS（22.12+ 可用）、
+npm/Git/基础命令、Nginx >=1.18（默认集成时）、已有 Nginx 配置语法与同名域名冲突、
+证书路径、4188 端口、现有 Panel 文件冲突、/opt 空间与可用内存/Swap。
+安装时需至少 **1 GiB** 可用磁盘及 **768 MiB** 可用 RAM + 空闲 Swap；
+推荐 **5 GiB** 磁盘与 **1.5 GiB** 构建内存余量。Swap 只能缓解峰值，不能替代实际 RAM 性能。
+
+**已有其他 Node/PM2 应用的服务器**：不要覆盖 `/usr/bin/node`。
+可先独立安装并核验 Node.js 24（包含 npm）于受信任目录，例如 `/opt/node24/bin/`，
+然后用同一个 `--node-bin` 参数执行预检与正式安装：
+
+```bash
+sudo bash scripts/install.sh --preflight --domain panel-test.example.com \
+  --no-nginx --node-bin /opt/node24/bin/node
+# 全部 PASS、已审查 WARN 后，移除 --preflight 执行完全相同的命令
+```
+
+此模式使用指定目录内的 npm 和 Node，并设置应用 systemd ExecStart 为指定的 Node 路径；
+原有的系统 Node 版本不受影响。`--no-nginx` **不配置公开 HTTPS 入口**：
+适用于已有代理服务，由管理员单独集成新域名、证书和限流规则。
+如果需要安装器自动安全地增加独立 Nginx 站点，请不要使用 `--no-nginx`，
+而是提供现有的正确证书，安装器会验证并避免覆盖同名网站。
+**预检通过不等于批准安装**；共享主机仍应在变更窗口及备份就绪后执行。
+
 ## A. 完整手动部署
 
 ### 1. 基础软件
@@ -114,7 +155,7 @@ sudo bash scripts/install.sh \
   --key /etc/letsencrypt/live/panel.example.com/privkey.pem
 ```
 
-脚本会重新 clone 一份干净的代码到 `/opt/linux-panel`，安装依赖、测试、构建、创建账号及状态目录、交互初始化管理员、配置 systemd 和 Nginx。**已有 `/opt/linux-panel` 或账号状态时将拒绝安装，不会覆盖现有实例。**
+脚本会先运行上述强制预检；存在 BLOCK 时立即停止。通过后，脚本会重新 clone 一份干净的代码到 `/opt/linux-panel`，安装依赖、测试、构建、创建账号及状态目录、交互初始化管理员、配置 systemd 和 Nginx。**已有 `/opt/linux-panel` 或账号状态时将拒绝安装，不会覆盖现有实例。**
 
 如果由宝塔/Caddy/其他入口提供 HTTPS，选择 `--no-nginx`，再自行设置 Nginx/代理规则：
 

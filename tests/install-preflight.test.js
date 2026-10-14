@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+
+const script = new URL('../scripts/install.sh', import.meta.url).pathname;
+const run = (...args) => spawnSync('bash', [script, ...args], {
+  encoding: 'utf8',
+  timeout: 20_000,
+  env: { ...process.env },
+});
+
+test('installer help documents read-only preflight and isolated Node', () => {
+  const r = run('--help');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /--preflight/);
+  assert.match(r.stdout, /--node-bin/);
+});
+
+test('preflight blocks missing Node without making changes', () => {
+  const r = run('--preflight', '--domain', 'panel-test.example.com', '--no-nginx',
+    '--node-bin', '/path/not-existing-linux-panel-node/node');
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /\[BLOCK\s*\].*Node\.js/);
+  assert.match(r.stdout, /Preflight summary: [1-9][0-9]* blocker/);
+  assert.match(r.stderr, /Preflight blocked installation/);
+  assert.doesNotMatch(r.stdout + r.stderr, /Cloning|Installing locked root dependencies|Create your administrator account/);
+});
+
+test('preflight rejects invalid domain before checking host', () => {
+  const r = run('--preflight', '--domain', 'bad domain', '--no-nginx');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Invalid --domain/);
+  assert.doesNotMatch(r.stdout, /Linux Panel install preflight/);
+});
