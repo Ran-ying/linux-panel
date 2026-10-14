@@ -1,10 +1,10 @@
-# Linux Panel 开发路线图
+# Linux Panel Roadmap
 
-1. **v0.1 已完成**：模块化 Action Registry、只读 Web 原型。
-2. **v0.2 已完成**：Output Schema 与验证、CPU/内存/磁盘可视化、模块页面和流式 Action 展示。
-3. **v0.3 本 PR**：平台内置 Auth、单管理员 CLI 初始化、登录会话、CSRF、基本服务端授权、持久审计、内置面板设置（无业务模块也可用）。**不表示公网已通过安全验收。**
-4. **v0.4 后续**：MCP 可选扩展模块，OAuth 授权服务、客户端授权、受限 Action Tool 暴露、ChatGPT 联调及安全评审。
-5. **v0.5 后续**：完整系统概览可视化、模块管理、Web UI 设计提升。
-6. **v0.6+**：Nginx/PHP/数据库/文件/systemd/备份等，逐步替代宝塔，必须逐项通过高权限安全评审及恢复演练。
+- **v0.3** — Auth、内置 Web 设置、原有只读业务 Action；HTTPS 私人公网预览部署完成。
+- **v0.4.1（已编码）** — 可选 MCP 传输扩展、禁用为默认、Web 设置内的 Action 级别白名单。OAuth 未完成之前 `/mcp` 必须返回 401，禁止匿名读取主机信息。
+- **v0.4.2（已编码，待公网复验）** — OAuth Authorization Code + PKCE、可信客户端登记、RFC 9728/RFC 8414 发现、绑定 /mcp 资源的 Token、现有 Auth 用户登录及授权确认。
+- **v0.4.3（已编码，待 Web 人工验收）** — Web 客户端授权列表、Scope 逐项配置、撤销授权即时生效、MCP 工具暴露策略服务端检查。
+- **v0.4.4（待联调）** — MCP Inspector / ChatGPT 的真实 OAuth、工具发现与只读调用测试，含 Nginx/CDN。
+- **v0.5+** — 安全审计后逐渐添加其他模块及高级 Web 页面。
 
-总原则：Core 提供业务执行，平台 Auth 负责身份权限，Web UI 内置管理，MCP 是可安装的可选扩展。Web 与 MCP 以后复用同一账号及服务端授权逻辑，但使用各自适当的会话或 OAuth 凭据。
+原则：MCP 必须是独立、可禁用的传输扩展，用户身份只由平台 Auth 提供；MCP OAuth 必须与 Web Cookie 分离；Token Scope ∩ 用户权限 ∩ 工具白名单方可执行。新增 Action 默认不暴露，禁止匿名高权限工具。

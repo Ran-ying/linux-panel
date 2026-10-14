@@ -110,6 +110,8 @@ export class AuthService {
       const current = state.users.find(u => u.id === identity.user.id);
       if (!current || current.passwordHash !== previous.passwordHash) throw unauthorized();
       current.passwordHash = hash;
+      // Any OAuth grants issued before this credential change are now invalid.
+      current.credentialEpoch = (current.credentialEpoch ?? 0) + 1;
       state.sessions = state.sessions.filter(s => s.userId !== current.id);
       addAudit(state, 'auth.password.changed', current.id);
     });

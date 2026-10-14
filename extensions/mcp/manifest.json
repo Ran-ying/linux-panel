@@ -1,0 +1,9 @@
+{
+  "id": "mcp",
+  "name": "MCP 远程工具",
+  "version": "0.4.0",
+  "kind": "transport-extension",
+  "entry": "./index.js",
+  "optional": true,
+  "defaultEnabled": false
+}
