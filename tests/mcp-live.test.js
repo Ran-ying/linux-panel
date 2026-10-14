@@ -68,6 +68,7 @@ test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permis
   await setMcpPolicy(store,registry,{enabled:true,tools:{'storage.usage':true}},user.id);
   const hidden=await rpc({method:'tools/list'});
   assert.equal(hidden.status,200,JSON.stringify(hidden.data));
+  assert.ok(hidden.data.result?.tools, JSON.stringify(hidden.data));
   assert.equal(hidden.data.result.tools.length,0,'storage requires a scope not granted to this token');
   await oauth.revokeGrant(grant.id,user.id);
   const revoked=await rpc({method:'tools/list'});
