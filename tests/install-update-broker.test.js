@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const path=new URL('../scripts/install-update-broker.sh',import.meta.url).pathname;
 const text=readFileSync(path,'utf8');
@@ -59,4 +61,44 @@ test('preflight/verify check pinned GitHub source and effective sandbox',()=>{
  assert.match(text,/runuser -u linuxpanel-updater -- git/);
  assert.match(text,/version>=240/);
  assert.doesNotMatch(text,/rm -rf|git reset --hard|systemctl reload nginx/);
+});
+
+
+test('real Git cleanliness preflight survives bash nounset and fails closed',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'linux-panel-broker-nounset-'));
+ try{
+  const init=spawnSync('git',['init','-q','-b','main',dir],{encoding:'utf8'});
+  assert.equal(init.status,0,init.stderr);
+  const remote=spawnSync('git',['-C',dir,'remote','add','origin',
+    'https://github.com/example/linux-panel.git'],{encoding:'utf8'});
+  assert.equal(remote.status,0,remote.stderr);
+  const start=text.indexOf(" local git_branch=''");
+  const end=text.indexOf('\n local f\n',start);
+  assert.ok(start>0 && end>start,'Git preflight section must remain testable');
+  const code=text.slice(start,end);
+  const perform=(brokenStatus=false)=>spawnSync('bash',['-c',[
+    'set -Eeuo pipefail',
+    'ROOT='+JSON.stringify(dir),
+    'pass(){ printf "PASS: %s\\n" "$1"; }',
+    'block(){ printf "BLOCK: %s\\n" "$1"; }',
+    'git_checked(){',
+    brokenStatus? 'if [[ "$1" == status ]]; then return 123; fi':'',
+    'git -C "$ROOT" "$@";',
+    '}',
+    'preflight(){',code,'}',
+    'preflight'
+  ].join('\n')],{encoding:'utf8',timeout:20000});
+  const clean=perform();
+  assert.equal(clean.status,0,clean.stderr);
+  assert.match(clean.stdout,/PASS: Git checkout clean/);
+  writeFileSync(join(dir,'untracked-file'),'dirty');
+  const dirty=perform();
+  assert.equal(dirty.status,0,dirty.stderr);
+  assert.match(dirty.stdout,/BLOCK: Git checkout dirty/);
+  assert.doesNotMatch(dirty.stdout,/PASS: Git checkout clean/);
+  const failed=perform(true);
+  assert.equal(failed.status,0,failed.stderr);
+  assert.match(failed.stdout,/BLOCK: Git status failed/);
+  assert.doesNotMatch(failed.stdout,/PASS: Git checkout clean/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });

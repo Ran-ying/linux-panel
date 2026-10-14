@@ -127,16 +127,30 @@ base_checks(){
   else pass 'Memory + swap headroom adequate';fi
  fi
  if ! command -v git >/dev/null;then block 'Git missing';return;fi
- local branch='' dirty='' remote=''
- branch="$(git_checked branch --show-current 2>/dev/null)" || true
- [[ "$branch" == main ]] && pass 'Git branch main' || block 'Git branch must be main'
- dirty="$(git_checked status --porcelain 2>/dev/null)" ||
-  {block 'Git status failed';return;}
- [[ -z "$dirty" ]] && pass 'Git checkout clean' || block 'Git checkout dirty; no reset permitted'
- remote="$(git_checked remote get-url origin 2>/dev/null)" ||
-  {block 'Git remote unreadable';return;}
- if [[ "$remote" =~ ^https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?$ ||
-       "$remote" =~ ^git@github[.]com:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?$ ]];then
+ # Keep Git command output separately initialized: with nounset enabled,
+ # a missing or failed Git result must be a BLOCK, never an unbound-variable
+ # crash or accidental "clean worktree" PASS.
+ local git_branch='' git_status_output='' git_remote=''
+ if git_branch="$(git_checked branch --show-current 2>/dev/null)";then
+  [[ "${git_branch-}" == main ]] && pass 'Git branch main' || block 'Git branch must be main'
+ else
+  block 'Git branch query failed';return
+ fi
+ if git_status_output="$(git_checked status --porcelain 2>/dev/null)";then
+  if [[ -z "${git_status_output-}" ]];then
+   pass 'Git checkout clean'
+  else
+   block 'Git checkout dirty; no reset permitted'
+  fi
+ else
+  block 'Git status failed; checkout cleanliness unverified';return
+ fi
+ if ! git_remote="$(git_checked remote get-url origin 2>/dev/null)";then
+  block 'Git remote unreadable'
+  return
+ fi
+ if [[ "${git_remote-}" =~ ^https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?$ ||
+       "${git_remote-}" =~ ^git@github[.]com:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+([.]git)?$ ]];then
   pass 'Pinned GitHub remote URL has no embedded secrets'
  else block 'Git remote must be credential-free GitHub HTTPS/SSH';fi
  local f
