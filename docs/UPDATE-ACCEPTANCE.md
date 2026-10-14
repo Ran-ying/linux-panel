@@ -2,6 +2,37 @@
 
 **Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. A SIGKILL recovery rehearsal has been added, but literal hard-power-loss integrity, concurrent approvals, live OAuth-to-Broker handoff and resource-starvation scenarios remain unverified.
 
+## Real Web, PKCE OAuth and MCP-to-Broker integration (staging only)
+
+The [disposable real Ubuntu workflow](../.github/workflows/broker-acceptance.yml)
+runs `tests/staging/web-mcp-broker.mjs` after the existing real Git/npm/systemd
+cases. This test uses an ephemeral localhost Web account with a fresh random
+password; no production domains, tokens or data are used.
+
+The root runner **temporarily** enables `PANEL_UPDATER_ENABLED=1` only inside
+the isolated test VM and keeps the real systemd Broker watcher active. It tests:
+
+- Web login, Origin and CSRF, real `panel.update.request` and password
+  `/api/panel/update/approve` (invalid password and missing CSRF are denied).
+- A deliberately non-main SHA is queued through Web, rejected by the **actual
+  root systemd Broker**, and reported as `failed` by authenticated Web status.
+- Dynamic OAuth client registration, displayed user consent, authorization
+  code + PKCE S256 token exchange, and absence of direct-update rights when
+  OAuth scope was omitted.
+- Separate explicitly consented `panel:update:execute` grant; a real HTTP
+  `tools/call` queues another deliberately invalid SHA, which is denied by
+  the fixed Broker. An independent `panel:read` grant reads the exact
+  result; no successful deployment is fabricated.
+- Turning off `allowDirectUpdates` hides the execution tool for an old
+  bearer; revoking its grant makes the same token unauthorized (401).
+- Web update gate is returned to **disabled** before staging migration ends.
+
+Invalid SHAs are intentionally used to avoid a second full deployment cycle
+while proving the real request/worker/status handoff. The existing systemd
+suite separately proves successful deployment, rollback and crash recovery.
+This is still **not** evidence of production network or hard-power-loss
+behavior, or an actual user's ChatGPT connector session.
+
 ## Resource gate — conservative minimums, not a 3 GiB block
 
 The root worker refuses in-place npm deployment **before stopping Web** only
