@@ -14,7 +14,7 @@ const modules = new ModuleManager(resolve(root, 'modules'), actions);
 await modules.loadAll();
 const engine = new ActionEngine(actions);
 
-app.get('/api/health', async () => ({ status: 'ok', version: '0.1.0', modules: modules.loaded }));
+app.get('/api/health', async () => ({ status: 'ok', version: '0.2.0', modules: modules.loaded }));
 app.get('/api/actions', async () => ({ actions: actions.list('web') }));
 
 app.post('/api/actions/:id/preview', async (request) => {
