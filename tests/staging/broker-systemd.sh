@@ -40,6 +40,7 @@ cat >/opt/node24/bin/npm <<'WRAPPER'
 #!/usr/bin/env bash
 set -e
 if [[ "$1" == ci && -f /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI ]];then
+ touch /var/lib/linux-panel-updater/STAGE_NPM_CI_REACHED
  echo '[broker-stage] Holding npm ci until worker is killed' >&2
  while [[ -f /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI ]];do sleep 0.3;done
 fi
@@ -169,14 +170,8 @@ queue 44444444444444444444444444444444 "$TARGET"
 transaction=/var/lib/linux-panel-update-root/active-transaction
 saw_interrupt_point=0
 for i in $(seq 1 150);do
- if [[ -f "$transaction" && "$(head_now)" == "$TARGET" &&
-       -f /var/lib/linux-panel/updater-log-never-used ]];then
-   saw_interrupt_point=1; break
- fi
- # Observing HEAD alone is insufficient; require a live worker and the npm
- # CI hang marker so this kill targets the in-flight build window.
- if [[ -f "$transaction" && "$(head_now)" == "$TARGET" ]] &&
-    systemctl is-active --quiet linux-panel-update.service;then
+ if [[ -f "$transaction" &&
+       -f /var/lib/linux-panel-updater/STAGE_NPM_CI_REACHED ]];then
    saw_interrupt_point=1; break
  fi
  sleep 0.2
