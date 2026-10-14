@@ -99,7 +99,8 @@ install -d -o root -g root -m 0755 /etc/linux-panel
 printf 'PANEL_PUBLIC_ORIGIN=https://%s\nPANEL_DATA_DIR=/var/lib/linux-panel\n' "$DOMAIN" > /etc/linux-panel/panel.env
 chmod 0600 /etc/linux-panel/panel.env
 # Code must stay root-owned and readable by the unprivileged service user.
-chown -R root:root /opt/linux-panel
+chown -R root:linuxpanel /opt/linux-panel
+chmod -R g+rX,g-w,o-w /opt/linux-panel
 log 'Create your administrator account interactively; no default password is used'
 runuser -u linuxpanel -- env PANEL_DATA_DIR=/var/lib/linux-panel "$NODE_BIN" /opt/linux-panel/scripts/admin-init.js admin
 sed "s|ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" deployment/systemd/linux-panel.service.example \

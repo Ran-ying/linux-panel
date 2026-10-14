@@ -27,7 +27,14 @@ chown root:root /etc/linux-panel/update-source
 chmod 0600 /etc/linux-panel/update-source
 install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update.path" /etc/systemd/system/
 install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update.service" /etc/systemd/system/
-chown -R linuxpanel-updater:linuxpanel-updater "$ROOT"
+# The Web user must keep read/execute access to code; never give it write access.
+# The checkout owner can update Git/build artifacts, but the Web service
+# only receives group read/execute. Avoid locking it out after chown.
+getent group linuxpanel >/dev/null || { echo 'Missing linuxpanel group' >&2;exit 1; }
+chown -R linuxpanel-updater:linuxpanel "$ROOT"
+chmod -R g+rX,g-w,o-w "$ROOT"
+runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js" ||
+  { echo 'Web service cannot read code after ownership change' >&2; exit 1; }
 install -d -o linuxpanel-updater -g linuxpanel-updater -m 0700 /var/lib/linux-panel-updater
 # chmod 0755 on checkout dirs was already necessary for linuxpanel service.
 if ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env;then

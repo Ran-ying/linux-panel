@@ -12,7 +12,7 @@ The tool is intentionally **not** an arbitrary command executor.
 - A root-owned systemd path watcher invokes a fixed script when the approval
   marker is created. It validates the SHA equals the trusted origin/main HEAD
   and that it is a fast-forward update.
-- The non-root `linuxpanel-updater` user executes Git/npm/test/build.
+- The non-root `linuxpanel-updater` user executes Git/npm/test/build. At least 1 GiB must remain free on the checkout filesystem before the worker stops the app.
   The root broker only backs up private data, controls the specific systemd
   panel service, and restores prior state on failed deployments.
 
@@ -43,8 +43,7 @@ The installer copies the audited worker into
 `/usr/local/libexec/linux-panel-update-worker` (root owned),
 installs a root-owned `/etc/linux-panel/update-source` pin and systemd
 `linux-panel-update.path/.service`, creates an independent
-`linuxpanel-updater` user and assigns checkout write access **only**
-to that account (the Web service still runs as `linuxpanel`).
+`linuxpanel-updater` user and assigns checkout write access **only** to that account (the Web service still runs as `linuxpanel`, with read-only group access to the checkout).
 It opts the Web application into showing the update feature via
 `PANEL_UPDATER_ENABLED=1`; MCP update permission and OAuth Scope
 remain **OFF** until you explicitly enable them.

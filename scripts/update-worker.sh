@@ -54,6 +54,9 @@ REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 [[ "$REMOTE" == "$TARGET" ]] || {record failed;exit 2;}
 if [[ "$OLD" == "$TARGET" ]];then record no_change;exit 0;fi
 as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || {record failed;exit 2;}
+# Refuse a high-risk in-place npm rebuild if the disk is nearly full.
+[[ "$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')" -ge 1048576 ]] ||
+  { log 'Less than 1 GiB free; no update attempted'; record failed; exit 2; }
 # Non-root updater executes all potentially untrusted Git and npm code.
 # The root broker only stops/starts the fixed systemd unit and backs up state.
 [[ -f "$STATE/panel-state.json" && ! -L "$STATE/panel-state.json" ]] || { record failed;exit 2; }
