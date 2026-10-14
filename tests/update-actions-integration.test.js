@@ -24,7 +24,7 @@ test('registered update Actions are available through Web discovery and validate
   const store=new StateStore(path),auth=new AuthService(store);
   const user=await auth.bootstrap('admin',password);
   await setMcpPolicy(store,new ActionRegistry(),
-    {enabled:true,registrationEnabled:false,allowUpdates:true,tools:{}},user.id);
+    {enabled:false,registrationEnabled:false,allowUpdates:false,tools:{}},user.id);
   const app=await createApp({root:process.cwd(),modulesPath:join(process.cwd(),'modules'),
     statePath:path,publicOrigin:'',production:false});
   t.after(()=>app.close());
@@ -35,7 +35,7 @@ test('registered update Actions are available through Web discovery and validate
   const cookie=login.headers['set-cookie'].split(';')[0],csrf=login.json().csrf;
   const actions=(await app.inject({url:'/api/actions',headers:{cookie}})).json().actions;
   assert.deepEqual(actions.filter(a=>a.id.startsWith('panel.update.')).map(a=>a.id).sort(),
-    ['panel.update.request','panel.update.status']);
+    ['panel.update.check','panel.update.request','panel.update.status']);
   const url='/api/actions/panel.update.request/execute';
   assert.equal((await app.inject({method:'POST',url,payload:{input:{}}})).statusCode,401);
   assert.equal((await app.inject({method:'POST',url,headers:{cookie,origin},payload:{input:{}}})).statusCode,403);
@@ -56,6 +56,22 @@ test('registered update Actions are available through Web discovery and validate
   assert.equal(status.statusCode,200,status.body);
   assert.equal(status.json().result.pending.id,response.json().result.id);
   assert.equal(status.json().result.lastResult,null);
+  const check=await app.inject({method:'POST',url:'/api/actions/panel.update.check/execute',
+    headers:{cookie,'x-panel-csrf':csrf,origin},payload:{input:{targetSha:'a'.repeat(40)}}});
+  assert.equal(check.statusCode,200,check.body);
+  assert.equal(check.json().result.verifiedRemote,false);
+  assert.match(check.json().result.currentSha,/^[a-f0-9]{40}$/);
+  assert.equal((await app.inject({method:'POST',url:'/api/panel/update/cancel',
+    payload:{id:response.json().result.id}})).statusCode,401);
+  assert.equal((await app.inject({method:'POST',url:'/api/panel/update/cancel',
+    headers:{cookie,origin},payload:{id:response.json().result.id}})).statusCode,403);
+  const cancelled=await app.inject({method:'POST',url:'/api/panel/update/cancel',
+    headers:{cookie,origin,'x-panel-csrf':csrf},payload:{id:response.json().result.id}});
+  assert.equal(cancelled.statusCode,200,cancelled.body);
+  assert.equal(cancelled.json().status,'cancelled');
+  const afterCancel=await app.inject({method:'POST',url:'/api/actions/panel.update.status/execute',
+    headers:{cookie,origin,'x-panel-csrf':csrf},payload:{input:{}}});
+  assert.equal(afterCancel.json().result.pending,null);
 });
 test('ActionEngine refuses generic write Actions and unauthenticated proposals',async()=>{
   const registry=new ActionRegistry(),calls=[];

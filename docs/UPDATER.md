@@ -1,4 +1,4 @@
-# Linux Panel v0.5 · AI-initiated Git updates via MCP
+# Linux Panel v0.5 · Platform updates for Web and MCP
 
 The tool is intentionally **not** an arbitrary command executor.
 
@@ -15,6 +15,15 @@ The tool is intentionally **not** an arbitrary command executor.
 - The non-root `linuxpanel-updater` user executes Git/npm/test/build. At least 1 GiB must remain free on the checkout filesystem before the worker stops the app.
   The root broker only backs up private data, controls the specific systemd
   panel service, and restores prior state on failed deployments.
+
+## Independent Web and MCP gates
+
+- The operator-controlled `PANEL_UPDATER_ENABLED=1` switch is the platform-level update gate. It is **off by default** until the privileged broker has been independently installed and reviewed.
+- A logged-in administrator may check, request, cancel an unapproved request, or approve updates in the **Web 面板维护** page even if MCP is completely disabled.
+- MCP can only propose updates when MCP is enabled, `allowUpdates` is true, and the live bearer grant includes `panel:update`. Neither the Web gate nor a Web-generated proposal exposes or approves the MCP tool.
+- `panel.update.check` is a read-only Web Action. For private repositories, a supplied SHA is **unverified** until the broker compares it with the trusted origin/main.
+- `POST /api/panel/update/approve` requires Web Session, CSRF, password re-verification and optional fresh TOTP. `POST /api/panel/update/cancel` cancels only a still-unapproved proposal; MCP has no route to approve or cancel.
+- Legacy `/api/extensions/mcp/update` and `.../approve` aliases remain temporarily for compatibility; new Web components use platform Actions and platform URLs.
 
 ## Initial operator-only installation
 
@@ -78,7 +87,7 @@ updater account's credentials. If the repo is public, omitting
 4. 在 Web 的「面板维护」模块调用 `panel.update.request`，或 Ask the AI: “Check GitHub main and request a Linux Panel update.”
    It reads the full SHA, proposes it via `panel.update.request`, then
    returns an approval-required response. **It has not updated anything.**
-5. Web → MCP settings → update request: verify old → proposed Git SHA,
+5. Web → 面板维护 → update request: verify old → proposed Git SHA,
    password, and a fresh TOTP code **only if you enabled TOTP**; click approve.
 6. The path watcher executes tests, syntax, frontend build and restart.
    The AI connection may temporarily disconnect. Reconnect and inspect

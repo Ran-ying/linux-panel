@@ -68,6 +68,32 @@ test('MCP may only propose the pinned origin/main SHA; approval requires Web pas
   assert.equal((await ctrl.status()).pending.approved,true);
   await assert.rejects(ctrl.approve({identity,id:response.id,password:'long-test-password-123!',code:good}),{statusCode:409});
   assert.equal(await cmd('-C',repo,'rev-parse','HEAD'),initial,'controller never changes the repository');
-  await store.mutate(s=>{s.mcp.policy.allowUpdates=false;});
-  await assert.rejects(ctrl.status(),{statusCode:404});
+  await store.mutate(s=>{s.mcp.policy.allowUpdates=false;s.mcp.policy.enabled=false;});
+  assert.equal((await ctrl.status()).pending.approved,true,
+    'Web update status remains available when MCP is disabled');
+});
+
+test('Web-only cancellation rejects approved/stale proposals and is independent of MCP',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'lp-cancel-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const store=new StateStore(join(dir,'state.json'));
+  const auth=new AuthService(store);
+  await auth.bootstrap('admin','safe test password for cancel');
+  const login=await auth.login('admin','safe test password for cancel','127.0.0.1');
+  const identity=await auth.authenticate(login.token);
+  const ctrl=createUpdateController({store,auth,root:dir,enabled:true,
+    triggerPath:join(dir,'trigger'),resultPath:join(dir,'result')});
+  const id='f'.repeat(32);
+  await store.mutate(s=>{s.updateRequest={id,from:'a'.repeat(40),target:'b'.repeat(40),
+    createdAt:new Date().toISOString(),expiresAt:Date.now()+60000,
+    userId:identity.user.id,clientId:'web',approved:false};});
+  await assert.rejects(ctrl.cancel({identity,id:'not-an-id'}),{statusCode:400});
+  await assert.rejects(ctrl.cancel({identity:{user:{id:'someone-else'}},id}),{statusCode:409});
+  assert.equal((await ctrl.cancel({identity,id})).status,'cancelled');
+  assert.equal((await ctrl.status()).pending,null);
+  await assert.rejects(ctrl.cancel({identity,id}),{statusCode:409});
+  await store.mutate(s=>{s.updateRequest={id,from:'a'.repeat(40),target:'b'.repeat(40),
+    createdAt:new Date().toISOString(),expiresAt:Date.now()+60000,
+    userId:identity.user.id,clientId:'web',approved:true};});
+  await assert.rejects(ctrl.cancel({identity,id}),{statusCode:409});
 });
