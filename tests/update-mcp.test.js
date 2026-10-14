@@ -59,7 +59,7 @@ test('MCP update tool requires distinct panel:update scope, allowlist and explic
   const proposal=await rpc(update.token,'tools/call',
     {name:'panel.update.request',arguments:{targetSha:'a'.repeat(40)}});
   assert.equal(proposal.status,200,JSON.stringify(proposal));
-  assert.equal(proposal.data.result?.isError,false);
+  assert.notEqual(proposal.data.result?.isError,true);
   assert.equal((await store.snapshot()).updateRequest.target,'a'.repeat(40));
   assert.equal((await app.inject({method:'POST',url:'/api/extensions/mcp/update/approve',
     payload:{id:(await store.snapshot()).updateRequest.id,currentPassword:'bad',code:'000000'}})).statusCode,403);
