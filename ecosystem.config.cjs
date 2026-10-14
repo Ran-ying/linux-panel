@@ -9,6 +9,8 @@ module.exports = {
     watch: false,
     autorestart: true,
     max_memory_restart: '180M',
+    // PANEL_PUBLIC_ORIGIN and PANEL_DATA_DIR are supplied by the process environment.
+    // PM2 must run as the dedicated non-root account, with only one instance.
     env: {
       NODE_ENV: 'production',
       PORT: '4188'

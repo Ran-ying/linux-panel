@@ -10,5 +10,5 @@ const app = await createApp({
 });
 
 // Nginx may forward HTTPS, but direct API access always remains loopback-only.
-// PUBLIC deployment remains blocked pending a separate security review.
+// Public preview requires the documented TLS reverse-proxy and security checklist.
 await app.listen({ host: '127.0.0.1', port: Number(process.env.PORT || 4188) });

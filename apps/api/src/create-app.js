@@ -42,7 +42,12 @@ export async function createApp({
     throw new Error('PANEL_PUBLIC_ORIGIN must be an exact origin, with no trailing slash or path');
   if (production && (!publicOrigin || !publicOrigin.startsWith('https://')))
     throw new Error('Production requires PANEL_PUBLIC_ORIGIN=https://your-panel-domain');
-  const app = Fastify({ logger, bodyLimit: 32 * 1024, trustProxy: false });
+  // Only local Nginx may supply forwarding headers. NEVER use trustProxy:true:
+  // otherwise remote callers can forge their source IP and evade login limits.
+  const app = Fastify({
+    logger, bodyLimit: 32 * 1024,
+    trustProxy: production ? ['127.0.0.1', '::1', '::ffff:127.0.0.1'] : false
+  });
   const store = new StateStore(statePath);
   const auth = new AuthService(store);
   const registry = new ActionRegistry();
@@ -57,6 +62,18 @@ export async function createApp({
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('X-Frame-Options', 'DENY');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (production) {
+      reply.header('Content-Security-Policy',
+        "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
+        "form-action 'self'; script-src 'self'; style-src 'self'; " +
+        "img-src 'self' data:; font-src 'self'; connect-src 'self'");
+      reply.header('Strict-Transport-Security', 'max-age=31536000');
+      // Defense in depth. A public Nginx vhost must forward the canonical host.
+      const requestedHost = request.headers.host;
+      if (requestedHost !== new URL(publicOrigin).host)
+        throw Object.assign(new Error('Unrecognized public host'), { statusCode: 421 });
+    }
     if (!path.startsWith('/api/')) return;
     reply.header('Cache-Control', 'no-store');
     const openRoute = (path === '/api/auth/status' && request.method === 'GET') ||
@@ -71,7 +88,10 @@ export async function createApp({
         allowed.add('http://localhost:5173');
         allowed.add('http://localhost:4188');
       }
-      if (origin && !allowed.has(origin)) throw forbidden('Origin not allowed');
+      // In production all state-changing requests must be same-origin, including
+      // login. A missing Origin is rejected, not silently treated as trusted.
+      if ((production && origin !== publicOrigin) || (origin && !allowed.has(origin)))
+        throw forbidden('Origin not allowed');
     }
     if (path === '/api/auth/login') {
       // Custom request header prevents cross-origin HTML forms from signing in.

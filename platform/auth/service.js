@@ -5,6 +5,7 @@ import { hashPassword, validPassword, verifyPassword } from './password.js';
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const LOGIN_WINDOW = 10 * 60 * 1000;
 const MAX_FAILURES = 5;
+const MAX_FAILURE_KEYS = 4096;
 const digest = token => createHash('sha256').update(token).digest('hex');
 const unauthorized = () => Object.assign(new Error('Authentication required'), { statusCode: 401 });
 const invalidCredentials = () => Object.assign(new Error('Invalid username or password'), { statusCode: 401 });
@@ -34,6 +35,17 @@ export class AuthService {
   async login(username, password, ip = 'unknown') {
     const now = Date.now();
     const key = String(ip).slice(0, 120);
+    // Bounded in-memory bookkeeping: random/spoofed addresses cannot grow the
+    // map without limit. The proxy must overwrite X-Forwarded-For with one IP.
+    if (this.#failures.size >= MAX_FAILURE_KEYS) {
+      for (const [address, timestamps] of this.#failures) {
+        const fresh = timestamps.filter(at => now - at < LOGIN_WINDOW);
+        if (!fresh.length) this.#failures.delete(address);
+        else this.#failures.set(address, fresh);
+      }
+      if (this.#failures.size >= MAX_FAILURE_KEYS && !this.#failures.has(key))
+        throw Object.assign(new Error('Login capacity temporarily exceeded'), { statusCode: 429 });
+    }
     const attempts = (this.#failures.get(key) ?? []).filter(at => now - at < LOGIN_WINDOW);
     if (attempts.length >= MAX_FAILURES) {
       this.#failures.set(key, attempts);
