@@ -111,8 +111,9 @@ onMounted(refresh);
       </div>
       <p v-if="inspection">
         检查结果：{{ inspection.status === 'up_to_date' ? '已经是目标版本' : '存在候选更新' }}
-        <span v-if="!inspection.verifiedRemote">（输入 SHA 未经远程认证，Broker 会进一步校验）</span>
+        <span v-if="inspection.source === 'supplied_sha'">（输入 SHA 未经远程认证，Broker 会进一步校验）</span>
       </p>
+      <p v-if="inspection?.source === 'origin_main'" class="muted small">已查询当前配置的 origin/main；只有独立 Broker 验证其与预设可信仓库一致后才可部署。</p>
       <div v-if="inspection" class="update-sha-list">
         <div><strong>当前安装 SHA：</strong><code>{{ inspection.currentSha }}</code></div>
         <div><strong>候选目标 SHA：</strong><code>{{ inspection.targetSha }}</code></div>

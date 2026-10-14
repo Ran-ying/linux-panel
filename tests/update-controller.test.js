@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as cb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AuthService } from '../platform/auth/service.js';
@@ -71,6 +71,15 @@ test('MCP may only propose the pinned origin/main SHA; approval requires Web pas
   await store.mutate(s=>{s.mcp.policy.allowUpdates=false;s.mcp.policy.enabled=false;});
   assert.equal((await ctrl.status()).pending.approved,true,
     'Web update status remains available when MCP is disabled');
+  // A broker result supersedes the prior approval and releases the lock.
+  await writeFile(result,JSON.stringify({id:response.id,sha:target,status:'success',
+    at:new Date().toISOString()}));
+  const completed=await ctrl.status();
+  assert.equal(completed.pending,null);
+  assert.equal(completed.lastResult.id,response.id);
+  const repeat=await ctrl.request({userId:identity.user.id,clientId:'web',targetSha:target});
+  assert.equal(repeat.status,'approval_required');
+
 });
 
 test('Web-only cancellation rejects approved/stale proposals and is independent of MCP',async t=>{

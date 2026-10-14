@@ -59,7 +59,7 @@ test('MCP update proposal still requires Web password when TOTP is off',async t=
   const login=await auth.login('admin',password,'127.0.0.1');
   const identity=await auth.authenticate(login.token);
   await setMcpPolicy(store,new ActionRegistry(),
-    {enabled:true,registrationEnabled:false,allowUpdates:true,tools:{}},identity.user.id);
+    {enabled:false,registrationEnabled:false,allowUpdates:false,tools:{}},identity.user.id);
   const marker=join(dir,'trigger');
   const update=createUpdateController({store,auth,root:checkout,enabled:true,
     triggerPath:marker,resultPath:join(dir,'result')});

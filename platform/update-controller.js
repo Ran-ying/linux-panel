@@ -33,7 +33,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     ensure();
     const {from,target}=await revisions(targetSha);
     return {status:from===target?'up_to_date':'update_available',
-      currentSha:from,targetSha:target,verifiedRemote:targetSha===undefined};
+      currentSha:from,targetSha:target,source:targetSha===undefined?'origin_main':'supplied_sha'};
   };
   const readResult=async()=>{
     try {
@@ -47,17 +47,23 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     ensure();
     const state=await store.snapshot();
     const record=state.updateRequest;
-    return {pending:record && record.expiresAt>Date.now()?
+    const lastResult=await readResult();
+    // A completed broker result supersedes a previously approved proposal.
+    // It must not appear to be queued forever or block subsequent updates.
+    const finished=record?.approved===true && lastResult?.id===record.id;
+    return {pending:record && record.expiresAt>Date.now() && !finished?
       {id:record.id,from:record.from,target:record.target,createdAt:record.createdAt,
         expiresAt:new Date(record.expiresAt).toISOString(),approved:record.approved===true}:null,
-      lastResult:await readResult()};
+      lastResult};
   };
   const request=async({userId,clientId,targetSha})=>{
     ensure();
     const state=await store.snapshot();
-    if(state.updateRequest?.approved && state.updateRequest.expiresAt>Date.now())
-      throw error('Approved update still pending execution',409);
-    if(state.updateRequest?.expiresAt>Date.now()) throw error('Update already requested',409);
+    const lastResult=await readResult();
+    const pending=state.updateRequest;
+    if(pending?.expiresAt>Date.now() &&
+        !(pending.approved===true && lastResult?.id===pending.id))
+      throw error(pending.approved?'Approved update still pending execution':'Update already requested',409);
     // No shell, branch, URL or revision arguments accepted from an AI client.
     // Git remote must be provisioned and trusted separately by the operator.
     // For private repositories, a client can provide a SHA; only the
@@ -67,7 +73,9 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     const record={id:randomBytes(16).toString('hex'),from,target,createdAt:new Date().toISOString(),
       expiresAt:Date.now()+TTL,approved:false,userId,clientId};
     await store.mutate(state=>{
-      if(state.updateRequest && state.updateRequest.expiresAt>Date.now()) throw error('Already pending',409);
+      if(state.updateRequest?.expiresAt>Date.now() &&
+          !(state.updateRequest.approved===true && lastResult?.id===state.updateRequest.id))
+        throw error('Already pending',409);
       state.updateRequest=record;
       addAudit(state,'panel.update.requested',userId,record.id);
     });

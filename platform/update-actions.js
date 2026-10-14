@@ -39,8 +39,8 @@ export function registerUpdateActions(registry, controller) {
       status:{type:'string',enum:['up_to_date','update_available']},
       currentSha:{type:'string',pattern:'^[a-f0-9]{40}$'},
       targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'},
-      verifiedRemote:{type:'boolean'}
-    },required:['status','currentSha','targetSha','verifiedRemote'],additionalProperties:false},
+      source:{type:'string',enum:['origin_main','supplied_sha']}
+    },required:['status','currentSha','targetSha','source'],additionalProperties:false},
     createPlan:async()=>[{type:'git-read',description:'读取本地 HEAD 和主分支 SHA，不修改仓库'}],
     execute:async input=>controller.check(input)
   });
@@ -61,7 +61,7 @@ export function registerUpdateActions(registry, controller) {
       sha:{type:'string'},id:{type:'string'},from:{type:'string'},
       target:{type:'string'},expiresAt:{type:'string'},instructions:{type:'string'}
     },required:['status'],additionalProperties:false},
-    createPlan:async()=>[{type:'approval-proposal',description:'只检查可信 main 的提交并生成待人工批准的申请，实际部署必须单独批准'}],
+    createPlan:async()=>[{type:'approval-proposal',description:'创建有时效的候选 SHA 申请；实际部署必须由可信 Broker 验证 origin/main 并经过管理员批准'}],
     execute:async(input,context)=>{
       if(typeof context.userId!=='string'||!context.userId) {
         throw Object.assign(new Error('Unauthorized update proposal'),{statusCode:403});

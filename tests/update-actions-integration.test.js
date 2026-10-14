@@ -59,7 +59,7 @@ test('registered update Actions are available through Web discovery and validate
   const check=await app.inject({method:'POST',url:'/api/actions/panel.update.check/execute',
     headers:{cookie,'x-panel-csrf':csrf,origin},payload:{input:{targetSha:'a'.repeat(40)}}});
   assert.equal(check.statusCode,200,check.body);
-  assert.equal(check.json().result.verifiedRemote,false);
+  assert.equal(check.json().result.source,'supplied_sha');
   assert.match(check.json().result.currentSha,/^[a-f0-9]{40}$/);
   assert.equal((await app.inject({method:'POST',url:'/api/panel/update/cancel',
     payload:{id:response.json().result.id}})).statusCode,401);
@@ -69,6 +69,14 @@ test('registered update Actions are available through Web discovery and validate
     headers:{cookie,origin,'x-panel-csrf':csrf},payload:{id:response.json().result.id}});
   assert.equal(cancelled.statusCode,200,cancelled.body);
   assert.equal(cancelled.json().status,'cancelled');
+  assert.equal((await app.inject({method:'POST',url:'/api/panel/update/approve',
+    payload:{id:response.json().result.id,currentPassword:password}})).statusCode,401);
+  assert.equal((await app.inject({method:'POST',url:'/api/panel/update/approve',
+    headers:{cookie,origin},payload:{id:response.json().result.id,currentPassword:password}})).statusCode,403);
+  assert.equal((await app.inject({method:'POST',url:'/api/panel/update/approve',
+    headers:{cookie,origin,'x-panel-csrf':csrf},
+    payload:{id:response.json().result.id,currentPassword:password}})).statusCode,409,
+    'A cancelled proposal cannot be approved afterward');
   const afterCancel=await app.inject({method:'POST',url:'/api/actions/panel.update.status/execute',
     headers:{cookie,origin,'x-panel-csrf':csrf},payload:{input:{}}});
   assert.equal(afterCancel.json().result.pending,null);

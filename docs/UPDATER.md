@@ -21,8 +21,9 @@ The tool is intentionally **not** an arbitrary command executor.
 - The operator-controlled `PANEL_UPDATER_ENABLED=1` switch is the platform-level update gate. It is **off by default** until the privileged broker has been independently installed and reviewed.
 - A logged-in administrator may check, request, cancel an unapproved request, or approve updates in the **Web 面板维护** page even if MCP is completely disabled.
 - MCP can only propose updates when MCP is enabled, `allowUpdates` is true, and the live bearer grant includes `panel:update`. Neither the Web gate nor a Web-generated proposal exposes or approves the MCP tool.
-- `panel.update.check` is a read-only Web Action. For private repositories, a supplied SHA is **unverified** until the broker compares it with the trusted origin/main.
+- `panel.update.check` is a read-only Web Action. It identifies SHA origin as `origin_main` (queried from configured Git remote) or `supplied_sha` (not remotely verified). Neither is a substitute for the broker's pinned-remote verification.
 - `POST /api/panel/update/approve` requires Web Session, CSRF, password re-verification and optional fresh TOTP. `POST /api/panel/update/cancel` cancels only a still-unapproved proposal; MCP has no route to approve or cancel.
+- The platform correlates the broker result ID with an approved proposal: a completed result stops showing as queued and releases the proposal slot. A still-running approval remains locked until its 15-minute expiry; overdue or failed jobs require independent operational inspection.
 - Legacy `/api/extensions/mcp/update` and `.../approve` aliases remain temporarily for compatibility; new Web components use platform Actions and platform URLs.
 
 ## Initial operator-only installation
