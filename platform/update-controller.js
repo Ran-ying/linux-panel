@@ -106,6 +106,48 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     }
     return {ok:true,id,target:pending.target,status:'queued'};
   };
+  // Explicitly delegated MCP execution: already authorized by the transport
+  // with a live *separate* panel:update:execute OAuth grant and Web policy.
+  // This is not a generic shell or an alternate remote selector. The fixed
+  // root Broker re-verifies that target equals pinned origin/main and is FF.
+  const executeDirect=async({userId,clientId,targetSha})=>{
+    ensure();
+    if(typeof userId!=='string'||!userId||typeof clientId!=='string'||!clientId)
+      throw error('Authenticated update client required',403);
+    const state=await store.snapshot();
+    const lastResult=await readResult();
+    const previous=state.updateRequest;
+    if(previous?.expiresAt>Date.now() &&
+       !(previous.approved===true && lastResult?.id===previous.id))
+      throw error('Update already queued or awaiting approval',409);
+    const {from,target}=await revisions(targetSha);
+    if(from===target) return {status:'up_to_date',sha:from};
+    const item={id:randomBytes(16).toString('hex'),from,target,
+      createdAt:new Date().toISOString(),expiresAt:Date.now()+TTL,
+      approved:true,userId,clientId};
+    await store.mutate(s=>{
+      const q=s.updateRequest;
+      if(q?.expiresAt>Date.now() &&
+         !(q.approved===true && lastResult?.id===q.id))
+        throw error('Concurrent update request',409);
+      s.updateRequest=item;
+      addAudit(s,'panel.update.direct_queued',userId,item.id);
+    });
+    // Create-only marker, identical fixed protocol to Web approval.
+    // The worker ignores every other field supplied by an MCP client.
+    try {
+      await writeFile(triggerPath,`id=${item.id}\nsha=${target}\n`,{flag:'wx',mode:0o600});
+    } catch(cause) {
+      await store.mutate(s=>{
+        if(s.updateRequest?.id===item.id)delete s.updateRequest;
+        addAudit(s,'panel.update.direct_enqueue_failed',userId,item.id);
+      });
+      if(cause.code==='EEXIST')throw error('Update worker is already busy',409);
+      throw error('Update broker trigger unavailable',503);
+    }
+    return {status:'queued',id:item.id,from,target,
+      expiresAt:new Date(item.expiresAt).toISOString()};
+  };
   const cancel=async({identity,id})=>{
     // Revocation must remain possible even if the operator disables the Broker.
     if(!ID.test(id??''))throw error('Invalid update request ID');
@@ -119,5 +161,5 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     });
     return {ok:true,id,status:'cancelled'};
   };
-  return {request,status,check,approve,cancel};
+  return {request,status,check,approve,cancel,executeDirect};
 }

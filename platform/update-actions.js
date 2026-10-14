@@ -70,4 +70,30 @@ export function registerUpdateActions(registry, controller) {
       return controller.request({userId:context.userId,clientId:context.clientId??'web',targetSha:input.targetSha});
     }
   });
+  registry.register('panel', {
+    id:'panel.update.execute',
+    title:'直接排队执行 Linux Panel 受限更新',
+    description:'独立 OAuth panel:update:execute 授权后，将受信任的 origin/main 精确提交交给受限 Broker；不需要每次重新 Web 审批。',
+    explain:'仅调度固定 Broker；不能执行 shell、选择任意仓库或跳过根执行器的 Git/构建/回滚检查。执行队列不代表部署成功。',
+    kind:'write',executionPolicy:'broker-enqueue',
+    permission:'panel:update:execute',
+    exposure:{web:false,mcp:true},
+    inputSchema:{type:'object',additionalProperties:false,properties:{
+      targetSha:{type:'string',pattern:'^[a-f0-9]{40}$'}
+    }},
+    outputSchema:{type:'object',properties:{
+      status:{type:'string',enum:['up_to_date','queued']},
+      sha:{type:'string'},id:{type:'string'},from:{type:'string'},
+      target:{type:'string'},expiresAt:{type:'string'}
+    },required:['status'],additionalProperties:false},
+    createPlan:async()=>[{type:'broker-queue',description:'经实时独立 OAuth 高权限授权后只提交固定 Git SHA 给 Broker；根执行器继续独立校验并允许回滚'}],
+    execute:async(input,context)=>{
+      if(context.channel!=='mcp'||context.directUpdateAuthorized!==true ||
+         typeof context.userId!=='string'||!context.userId ||
+         typeof context.clientId!=='string'||!context.clientId) {
+        throw Object.assign(new Error('Trusted direct update MCP authorization required'),{statusCode:403});
+      }
+      return controller.executeDirect({userId:context.userId,clientId:context.clientId,targetSha:input.targetSha});
+    }
+  });
 }

@@ -140,3 +140,24 @@ test('Web check/status are read-only available without Broker or MCP, proposals 
   assert.equal((await new StateStore(statePath).snapshot()).updateRequest,undefined);
   assert.equal((await app.inject({url:'/mcp'})).statusCode,404);
 });
+
+
+test('ActionEngine admits only exactly scoped panel.update.execute via MCP trusted adapter',async()=>{
+  const registry=new ActionRegistry(),calls=[];
+  const fake=(id,permission)=>({
+    id,kind:'write',executionPolicy:'broker-enqueue',permission,exposure:{mcp:true,web:true},
+    inputSchema:{type:'object',additionalProperties:false,properties:{}},
+    execute:async()=>{calls.push(id);return {status:'queued'};}
+  });
+  registry.register('panel',fake('panel.update.execute','panel:update:execute'));
+  registry.register('other',fake('other.execute','panel:update:execute'));
+  const engine=new ActionEngine(registry);
+  const trusted={authenticated:true,channel:'mcp',userId:'admin',clientId:'client',directUpdateAuthorized:true};
+  await assert.rejects(engine.run('panel.update.execute',{},'mcp',{...trusted,directUpdateAuthorized:false}),{statusCode:403});
+  await assert.rejects(engine.run('panel.update.execute',{},'web',{...trusted,channel:'web'}),{statusCode:403});
+  await assert.rejects(engine.run('other.execute',{},'mcp',trusted),{statusCode:403});
+  assert.deepEqual(calls,[]);
+  const yes=await engine.run('panel.update.execute',{},'mcp',trusted);
+  assert.equal(yes.result.status,'queued');
+  assert.deepEqual(calls,['panel.update.execute']);
+});

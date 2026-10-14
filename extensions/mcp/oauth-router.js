@@ -63,7 +63,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     grant_types_supported:supported,
     token_endpoint_auth_methods_supported:['none'],
     code_challenge_methods_supported:['S256'],
-    scopes_supported:['system:read','storage:read','services:read','panel:update', OFFLINE_SCOPE],
+    scopes_supported:['system:read','storage:read','services:read','panel:update','panel:update:execute', OFFLINE_SCOPE],
     authorization_response_iss_parameter_supported:true
   });
   const sendMetadata=(request,reply,data)=>{
@@ -166,7 +166,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
       .map(key=>`<input type="hidden" name="${key}" value="${escapeHtml(params[key])}">`).join('');
     // Client-supplied display names are UNVERIFIED. Show its exact callback origin.
     const redirectHost=new URL(request.query.redirect_uri).origin;
-    const scopeLabels=scopes.map(s=>`<li><code>${escapeHtml(s)}</code>${s===OFFLINE_SCOPE?'（允许连接在 Access Token 到期后继续刷新）':''}</li>`).join('');
+    const scopeLabels=scopes.map(s=>`<li><code>${escapeHtml(s)}</code>${s===OFFLINE_SCOPE?'（允许连接在 Access Token 到期后继续刷新）':s==='panel:update:execute'?'（高权限：可直接排队更新面板，无需每次回到 Web 审批；请仅授权可信客户端）':''}</li>`).join('');
     // The app globally uses Referrer-Policy: no-referrer, which causes browsers
     // to send Origin: null on ordinary navigation-mode HTML form POSTs.
     // For this OAuth consent document alone, origin sends a canonical Origin

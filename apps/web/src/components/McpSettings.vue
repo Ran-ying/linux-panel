@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 const props = defineProps({ csrf: { type: String, required: true } });
-const policy = ref({ enabled: false, registrationEnabled: false, allowUpdates:false, tools: {} });
+const policy = ref({ enabled: false, registrationEnabled: false, allowUpdates:false, allowDirectUpdates:false, tools: {} });
 const tools = ref([]);
 const grants = ref([]);
 const installed = ref(null);
@@ -91,6 +91,11 @@ onMounted(load);
         <input type="checkbox" v-model="policy.allowUpdates"/>
         允许 MCP 提交更新申请（Web 更新不依赖此开关；审批在「面板维护」中进行）
       </label>
+      <label class="refresh-choice">
+        <input type="checkbox" v-model="policy.allowDirectUpdates" :disabled="!policy.enabled"/>
+        允许 MCP 直接执行受限面板更新（独立高权限；无需每次 Web 审批）
+      </label>
+      <p class="muted small">仅在生产 Broker 验收并启用后有效。必须由 OAuth 客户端明确请求 panel:update:execute，用户再次在授权页确认；原有 panel:update 授权无法升级为直接执行权限。可关闭此开关或撤销客户端授权。</p>
       <h4>允许暴露的只读 Action</h4>
       <div v-for="tool in tools" :key="tool.id" class="session-row">
         <div>
