@@ -17,7 +17,7 @@ log(){ printf '[lp-update] %s\n' "$*"; }
 as_updater(){ /usr/sbin/runuser -u "$USER" -- /usr/bin/env PATH=/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
   local status="$1" tmp
-  tmp="$(mktemp "$STATE/.update-result.XXXXXXXX")"
+  tmp="$(mktemp "$ROOT_BACKUP/.update-result.XXXXXXXX")"
   printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$tmp"
   chmod 0600 "$tmp"
   chown linuxpanel:linuxpanel "$tmp"
@@ -74,8 +74,13 @@ rollback(){
   (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
     as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
     as_updater npm run build:web) || restored=0
-  if [[ -f "$BACKUP" && ! -L "$BACKUP" && ! -L "$STATE/panel-state.json" ]];then
-    cp -a -- "$BACKUP" "$STATE/panel-state.json" || restored=0
+  if [[ -f "$BACKUP" && ! -L "$BACKUP" ]];then
+    local restore_tmp
+    restore_tmp="$(mktemp "$ROOT_BACKUP/.restore-state.XXXXXXXX")"
+    cp -a -- "$BACKUP" "$restore_tmp" || restored=0
+    chmod 0600 "$restore_tmp" || restored=0
+    chown linuxpanel:linuxpanel "$restore_tmp" || restored=0
+    mv -fT -- "$restore_tmp" "$STATE/panel-state.json" || restored=0
   else
     restored=0
   fi
