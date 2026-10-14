@@ -76,12 +76,14 @@ chmod 0600 /etc/linux-panel/panel.env
  npm run build:web)
 chown -R root:linuxpanel "$ROOT"
 chmod -R g+rX,g-w,o-w "$ROOT"
-runuser -u linuxpanel -- /opt/node24/bin/node --input-type=module -e '
+STAGE_PASSWORD="$(/opt/node24/bin/node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+runuser -u linuxpanel -- /usr/bin/env STAGE_PASSWORD="$STAGE_PASSWORD" \
+ /opt/node24/bin/node --input-type=module -e '
 import { AuthService } from "/opt/linux-panel/platform/auth/service.js";
 import { StateStore } from "/opt/linux-panel/platform/state-store.js";
 import { randomBytes } from "node:crypto";
 await new AuthService(new StateStore("/var/lib/linux-panel/panel-state.json"))
- .bootstrap("staging",randomBytes(32).toString("hex"));
+ .bootstrap("staging",process.env.STAGE_PASSWORD);
 '
 sed 's|ExecStart=/usr/bin/node |ExecStart=/opt/node24/bin/node |' \
  "$ROOT/deployment/systemd/linux-panel.service.example" \
@@ -206,6 +208,19 @@ wait_result 33333333333333333333333333333333 success
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
+note 'Real HTTP Web approval + OAuth PKCE + MCP → systemd Broker'
+# Enabled only in throwaway GitHub-hosted runner.
+! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
+ fail 'Staging Web gate prematurely enabled'
+printf '\nPANEL_UPDATER_ENABLED=1\n' >>/etc/linux-panel/panel.env
+systemctl restart linux-panel.service
+wait_healthy || fail 'Web unhealthy after staging-only gate enable'
+STAGE_PASSWORD="$STAGE_PASSWORD" /opt/node24/bin/node \
+ "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
+sed -i '/^PANEL_UPDATER_ENABLED=1$/d' /etc/linux-panel/panel.env
+systemctl restart linux-panel.service
+wait_healthy || fail 'Web unhealthy after staging gate reset'
+unset STAGE_PASSWORD
 systemctl stop linux-panel-update.path
 note 'Stage migration from LEGACY already-installed immutable worker/service'
 # Historical real installer snapshot from a known public main revision.

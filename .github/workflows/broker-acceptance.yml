@@ -29,6 +29,7 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test "$RUNNER_OS" = Linux
           bash -n tests/staging/broker-systemd.sh
+          node --check tests/staging/web-mcp-broker.mjs
           node --version
           npm --version
       - name: Run isolated privileged acceptance
