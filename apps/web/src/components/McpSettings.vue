@@ -131,7 +131,7 @@ onMounted(load);
       <h4>面板更新申请</h4>
       <button type="button" :disabled="busy" @click="loadUpdate">刷新更新状态</button>
       <template v-if="update?.pending">
-        <p>待处理更新：{{ update.pending.from.slice(0,12) }} → {{ update.pending.target.slice(0,12) }}</p>
+        <p>待处理更新：<code>{{ update.pending.from }}</code> → <code>{{ update.pending.target }}</code></p>
         <p class="muted small">申请 ID：{{ update.pending.id }}；过期时间：{{ update.pending.expiresAt }}</p>
         <template v-if="!update.pending.approved">
           <label>管理员当前密码<input type="password" v-model="approvePassword" autocomplete="current-password"/></label>

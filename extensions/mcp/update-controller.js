@@ -76,6 +76,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     await auth.verifyStepUp(identity,password,code);
     await store.mutate(state=>{
       const q=state.updateRequest;
+      if(!mcpPolicy(state).enabled || !mcpPolicy(state).allowUpdates)throw error('Updates disabled',403);
       if(!q || q.id!==id || q.approved || q.expiresAt<=Date.now())throw error('Update request changed',409);
       q.approved=true;
       addAudit(state,'panel.update.approved',identity.user.id,q.id);
