@@ -22,6 +22,7 @@ jobs:
           bash scripts/prepare-host.sh --check
           bash scripts/prepare-host.sh --install-node
           bash scripts/install.sh --help
+          bash scripts/install-update-broker.sh --help
           bash scripts/install.sh --preflight --host 127.0.0.1 --port 49117
       - name: Install dependencies
         run: npm ci

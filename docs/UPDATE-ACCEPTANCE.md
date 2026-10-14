@@ -42,6 +42,24 @@ Redact cookies, passwords, tokens, recovery codes, private keys and private host
 
 Do not mark release-ready until the supported staging VM has passed the positive and failure-injection scenarios, followed by a separate security review of root-sandbox effective properties and update-source trust. Production migration or installer execution requires explicit operator approval.
 
+## Installation gate and operational sign-off
+
+The one-time Broker installer now has four explicit modes. Operators must
+capture evidence from each distinct stage, not infer success from a green CI.
+
+| Stage | Command | What is proven | What is **not** proven |
+| --- | --- | --- | --- |
+| Preflight | `sudo bash scripts/install-update-broker.sh --check` | Required OS, paths, disk, identities and checkout constraints | No code has been changed; no root worker is tested |
+| Install | `sudo bash scripts/install-update-broker.sh --apply` | Worker/unit/pin copied and source ownership changed | Watcher and Web update permission remain OFF |
+| Verify | `sudo bash scripts/install-update-broker.sh --verify` | Read-only checks of ownership, source pin and effective hardening | Real Git/npm/update/rollback paths remain unverified |
+| Activate | `sudo bash scripts/install-update-broker.sh --activate --ack-acceptance` | Operator attests **separate staging sign-off** and opts in | An automatically successful rollout is **not** implied |
+
+Never run failure injection (especially shutdowns, faulty Git commits,
+service-failure or deliberate rollback errors) against a shared live VPS.
+Keep screenshots and private hostnames/credentials out of the public project.
+The self-attestation flag does not perform staging tests and is not a
+security certification.
+
 ## Current production VPS
 
 CentOS 7 has insufficient systemd sandbox capability for this broker. Its other services must remain untouched. Keep the current read-only MCP service and app available; do not interpret v0.5 GitHub code merges as deployment.

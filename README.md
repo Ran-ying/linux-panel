@@ -38,6 +38,8 @@ sudo bash scripts/install.sh --host 127.0.0.1 --port 4188 \
 
 **首次安装若在 npm 测试/构建阶段中断**，不要删除 `/opt/linux-panel`，也不要直接重新运行正常安装。先核查没有管理员状态和服务，将两个 checkout 都安全 fast-forward 更新到修复版本后，使用 `sudo bash scripts/install.sh --resume --preflight ...` 检查，再明确执行 `sudo bash scripts/install.sh --resume ...`；详见安装指南 4.4。
 
+**可选受限更新 Broker** 与面板首次安装解耦。已安装后使用 `sudo bash scripts/install-update-broker.sh --check` 只读预检；`--apply` 安装后仍保持禁用；`--verify` 只读检查有效沙箱与权限。通过隔离测试机的更新/回滚验收后才能显式 `--activate --ack-acceptance`。参见 [Broker 安装指南](docs/UPDATER.md)，不要在未验收的生产机上激活。
+
 遇到 Node.js 18 / 内存不足等 BLOCK 时，先预览 `bash scripts/prepare-host.sh --check`、`--install-node`、`--create-swap 1024`，只有明确加 `--apply` 才修改主机。**[完整预检、报错修复、自动安装、手动安装与验收指南](docs/INSTALL.md)**。CentOS 7 不受此安装与 root Broker 支持；自动更新 Broker 尚须单独验收。
 
 

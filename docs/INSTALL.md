@@ -316,6 +316,41 @@ curl -i http://127.0.0.1:4888/api/auth/status
 
 **服务重启后改用新端口访问**。如无法启动，不要删 `/var/lib/linux-panel`；用 `journalctl -u linux-panel.service -n 80` 分析，并核对保存的监听设置/端口冲突。未来若增加在线“应用配置”动作，必须先设计可回滚的独立服务重启机制，避免锁死管理入口。
 
+## 9. 安装后可选：受限更新 Broker
+
+受限更新 Broker **不是 Linux Panel 的基础安装依赖**；它用于在授权后按
+固定规则更新面板本身，与 Nginx、证书、域名完全无关。Broker 有独立的
+管理员脚本，不能在未验收时由普通 Web 或 MCP 自动安装 root 服务。
+
+首次安装成功并初始化管理员后，在支持的 Ubuntu 24.04+/Debian 12+
+上按顺序执行：
+
+```bash
+cd /opt/linux-panel
+sudo bash scripts/install-update-broker.sh --check
+# 无 BLOCK、审阅 WARN，并备份 VPS/面板状态后，再明确安装：
+sudo bash scripts/install-update-broker.sh --apply
+sudo bash scripts/install-update-broker.sh --verify
+```
+
+`--check` 和 `--verify` 只读；`--apply` 创建独立更新用户、固定执行器、
+Git 来源校验文件及 systemd 单元，但**暂不启用 Web 更新开关或 path watcher**，
+也不执行更新。它会修改 `/opt/linux-panel` 的权限与所有者，因此只能由管理员
+在维护窗口执行。
+
+更新 Broker 必须先在隔离测试机完成
+[更新/回滚验收](UPDATE-ACCEPTANCE.md)，并核对 systemd 的实际沙箱属性。
+完成后才能显式启用：
+
+```bash
+sudo bash /opt/linux-panel/scripts/install-update-broker.sh \
+  --activate --ack-acceptance
+```
+
+启用会重启 **Linux Panel 自身**，不触及反向代理。MCP 申请更新还需独立的
+OAuth 授权和更新策略；默认只读。详细流程、BLOCK 含义及私有仓库密钥隔离见
+[Broker 安装与更新指南](UPDATER.md)。旧版 CentOS 7 不受支持。
+
 ## 8. 验收及以后更新
 
 ```bash
