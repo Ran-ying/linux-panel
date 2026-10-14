@@ -64,12 +64,14 @@ function prepare(){
  assert.ok(securityLine,'production must validate pinned remote');
  worker=swap(worker,securityLine,'[[ "$EXPECTED" == '+JSON.stringify(remote)+' ]] || { record failed; exit 2; }');
  const script=join(base,'worker.sh'),log=join(base,'events.log');
+ let sequence=0;
  writeFileSync(script,worker,{mode:0o700});
  exec('bash',['-n',script]);
  return {base,root,state,status,script,log,old,target,
   cleanup(){rmSync(base,{recursive:true,force:true})},
   run({sha=target,build=false,health=false,rollback=false}={}){
-   writeFileSync(join(state,'update-trigger'),'id=abcdef0123456789abcdef0123456789\nsha='+sha+'\n');
+   const id=(++sequence).toString(16).padStart(32,'0');
+   writeFileSync(join(state,'update-trigger'),'id='+id+'\nsha='+sha+'\n');
    const process=spawnSync('bash',[script],{encoding:'utf8',timeout:20000,env:{
     ...globalThis.process.env,TEST_LOG:log,FAIL_BUILD:build?'1':'0',
     FAIL_HEALTH:health?'1':'0',FAIL_ROLLBACK:rollback?'1':'0'
@@ -97,3 +99,15 @@ for(const scenario of [
   }finally{f.cleanup();}
  });
 }
+
+test('isolated updater worker: retry after rollback retains independent backup',()=>{
+ const f=prepare();
+ try{
+   const first=f.run({build:true});
+   assert.equal(first.result.status,'rolled_back');
+   assert.equal(first.head,f.old);
+   const second=f.run();
+   assert.equal(second.result.status,'success');
+   assert.equal(second.head,f.target);
+ }finally{f.cleanup();}
+});

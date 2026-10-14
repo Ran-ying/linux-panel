@@ -1,0 +1,41 @@
+name: Disposable Ubuntu Broker systemd acceptance
+
+on:
+  pull_request:
+    paths:
+      - "scripts/update-worker.sh"
+      - "scripts/install-update-broker.sh"
+      - "tests/staging/**"
+      - ".github/workflows/broker-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-real-systemd:
+    name: Real systemd / npm / rollback (ephemeral Ubuntu)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Confirm runner boundary, script syntax and Node
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = Linux
+          bash -n tests/staging/broker-systemd.sh
+          node --version
+          npm --version
+      - name: Run isolated privileged acceptance
+        run: |
+          sudo env \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" \
+            RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            RUNNER_OS="$RUNNER_OS" \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            STAGE_NODE_BIN="$(command -v node)" \
+            STAGE_NPM_BIN="$(command -v npm)" \
+            bash tests/staging/broker-systemd.sh
