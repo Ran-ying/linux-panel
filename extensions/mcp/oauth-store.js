@@ -17,9 +17,11 @@ const MAX_CLIENTS = 60, MAX_GRANTS = 100, MAX_CODES = 150, MAX_TOKENS = 500;
 
 export function allowedScopes(registry, state) {
   if (!mcpPolicy(state).enabled) return [];
-  return [...new Set(exposedReadActions(registry)
+  const scopes = [...new Set(exposedReadActions(registry)
     .filter(a => mcpPolicy(state).tools[a.id] === true)
     .map(a => a.permission))];
+  if (mcpPolicy(state).allowUpdates === true) scopes.push('panel:update');
+  return scopes;
 }
 export function safeRedirectUri(value) {
   try {

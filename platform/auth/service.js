@@ -153,6 +153,20 @@ export class AuthService {
   }
 
 
+  async verifyStepUp(identity,password,code) {
+    const user=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
+    if(!user?.totp?.enabled || !await verifyPassword(password,user.passwordHash))
+      throw forbidden();
+    const counter=verifyTotp(user.totp.secret,code,Date.now(),user.totp.lastCounter??-1);
+    if(counter<0)throw forbidden();
+    await this.store.mutate(state=>{
+      const current=state.users.find(u=>u.id===identity.user.id);
+      if(!current?.totp?.enabled || counter<=(current.totp.lastCounter??-1))throw forbidden();
+      current.totp.lastCounter=counter;
+      addAudit(state,'auth.stepup.verified',identity.user.id);
+    });
+  }
+
   async totpStatus(identity) {
     const user=(await this.store.snapshot()).users.find(u=>u.id===identity.user.id);
     return { enabled:user?.totp?.enabled===true, recoveryCodesRemaining:user?.totp?.recoveryHashes?.length??0 };

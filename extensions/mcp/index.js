@@ -1,13 +1,24 @@
 import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy } from '../../platform/mcp-policy.js';
 import * as auditHelpers from '../../platform/state-store.js';
 import { installOAuthRoutes } from './oauth-router.js';
+import { createUpdateController } from './update-controller.js';
 
 /**
  * Optional transport extension. Never trust Web cookies on /mcp.
  * Authentication is injected by the OAuth module; no bearer = no MCP tools.
  */
-export async function registerMcpExtension(app, { store, auth, registry, engine, resourceUrl, origin }) {
+export async function registerMcpExtension(app, { store, auth, registry, engine, resourceUrl, origin, root=process.cwd() }) {
   const { data: tokens } = installOAuthRoutes(app, { store, auth, registry, resourceUrl, origin });
+  const updates=createUpdateController({store,root,auth});
+  app.get('/api/extensions/mcp/update',async request=>{
+    auth.requirePermission(request.panelIdentity,'panel:read');
+    return updates.status();
+  });
+  app.post('/api/extensions/mcp/update/approve',async request=>{
+    auth.requirePermission(request.panelIdentity,'panel:write');
+    return updates.approve({identity:request.panelIdentity,id:request.body?.id,
+      password:request.body?.currentPassword,code:request.body?.code});
+  });
   app.get('/api/extensions/mcp/settings', async request => {
     auth.requirePermission(request.panelIdentity, 'mcp:manage');
     const state = await store.snapshot();
@@ -38,6 +49,25 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
       snapshot.mcp?.policy?.tools?.[a.id] === true && permitted.has(a.permission));
 
     const server = new McpServer({ name: 'linux-panel', version: '0.4.0' }, { capabilities: { tools: {} } });
+    // Separate non-read-only operation: exact-commit proposal only; never executes the update.
+    if (process.env.PANEL_UPDATER_ENABLED === '1' &&
+        mcpPolicy(snapshot).allowUpdates === true && permitted.has('panel:update')) {
+      server.registerTool('panel.update.request', {
+        description:'Propose updating Linux Panel to the latest fixed origin/main commit. Requires separate Web approval; never executes changes by itself.',
+        inputSchema:z.object({}).strict(),
+        annotations:{readOnlyHint:false,destructiveHint:false}
+      },async(_input,ctx)=>{
+        const verified=ctx.http?.authInfo??authInfo;
+        const live=verified?.token?await tokens.verifyAccessToken(verified.token):null;
+        if(!live || !live.scopes.includes('panel:update') || live.userId==null ||
+           !mcpPolicy(await store.snapshot()).allowUpdates)
+          return {isError:true,content:[{type:'text',text:'Not authorized for update proposals'}]};
+        try {
+          const result=await updates.request({userId:live.userId,clientId:live.clientId});
+          return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result};
+        }catch(e){return {isError:true,content:[{type:'text',text:e.message}]};}
+      });
+    }
     // Always register only the actions advertised for MCP. Runtime handler
     // rechecks the policy so revoking a grant or a tool applies immediately.
     for (const action of visible) {
