@@ -1,10 +1,12 @@
-import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy, forbidden } from '../../platform/mcp-policy.js';
+import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy } from '../../platform/mcp-policy.js';
+import { installOAuthRoutes } from './oauth-router.js';
 
 /**
  * Optional transport extension. Never trust Web cookies on /mcp.
  * Authentication is injected by the OAuth module; no bearer = no MCP tools.
  */
-export async function registerMcpExtension(app, { store, auth, registry, engine, authorizeBearer, resourceUrl }) {
+export async function registerMcpExtension(app, { store, auth, registry, engine, resourceUrl, origin }) {
+  const { data: tokens } = installOAuthRoutes(app, { store, auth, registry, resourceUrl, origin });
   app.get('/api/extensions/mcp/settings', async request => {
     auth.requirePermission(request.panelIdentity, 'mcp:manage');
     const state = await store.snapshot();
@@ -59,9 +61,10 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
   app.all('/mcp', async (request, reply) => {
     const state = await store.snapshot();
     if (!mcpPolicy(state).enabled) return reply.code(404).send({ error: 'MCP module disabled' });
-    const verified = await authorizeBearer?.(request);
+    const bearer = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.authorization ?? '');
+    const verified = bearer ? await tokens.verifyAccessToken(bearer[1]) : null;
     if (!verified) {
-      reply.header('WWW-Authenticate', 'Bearer realm="Linux Panel"');
+      reply.header('WWW-Authenticate', `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`);
       return reply.code(401).send({ error: 'MCP bearer authorization required' });
     }
     // MCP SDK sees AuthInfo attached directly to raw incoming Node request.

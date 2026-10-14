@@ -49,8 +49,20 @@ function signOutLocally() {
   activePage.value = 'settings';
 }
 
+function authRedirect() {
+  const next = new URLSearchParams(window.location.search).get('next');
+  // Only local authorization paths are permitted. No open redirects.
+  if (next && next.startsWith('/oauth/authorize?') &&
+      next.length < 4096 && !next.startsWith('//')) {
+    window.location.assign(next);
+    return true;
+  }
+  return false;
+}
+
 async function signIn(payload) {
   session.value = payload;
+  if (authRedirect()) return;
   error.value = '';
   await loadDashboard();
 }
@@ -80,7 +92,7 @@ onMounted(async () => {
     if (initialized.value) {
       try { session.value = await getJSON('/api/auth/session'); }
       catch (cause) { if (cause.status !== 401) throw cause; }
-      if (session.value) await loadDashboard();
+      if (session.value && !authRedirect()) await loadDashboard();
     }
   } catch (cause) { error.value = cause.message; }
   finally { checking.value = false; }

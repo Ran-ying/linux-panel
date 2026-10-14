@@ -3,11 +3,17 @@ import { onMounted, ref } from 'vue';
 const props = defineProps({ csrf: { type: String, required: true } });
 const policy = ref({ enabled: false, tools: {} });
 const tools = ref([]);
+const grants = ref([]);
 const installed = ref(null);
 const error = ref('');
 const message = ref('');
 const busy = ref(false);
 
+async function loadGrants() {
+  const response = await fetch('/api/extensions/mcp/grants');
+  if (!response.ok) return;
+  grants.value = (await response.json()).grants;
+}
 async function load() {
   error.value = '';
   try {
@@ -18,6 +24,7 @@ async function load() {
     installed.value = true;
     policy.value = result.policy;
     tools.value = result.tools;
+    await loadGrants();
   } catch (cause) { error.value = cause.message; }
 }
 async function save() {
@@ -34,6 +41,35 @@ async function save() {
     message.value = 'MCP 权限策略已保存';
   } catch (cause) { error.value = cause.message; }
   finally { busy.value = false; }
+}
+async function revoke(id) {
+  if (busy.value) return;
+  busy.value=true;error.value='';message.value='';
+  try {
+    const response=await fetch('/api/extensions/mcp/grants/'+encodeURIComponent(id),{
+      method:'DELETE', headers:{'X-Panel-CSRF':props.csrf}
+    });
+    if (!response.ok) throw new Error((await response.json()).error || 'Failed to revoke');
+    await loadGrants();
+    message.value='授权已撤销，相关令牌立即失效';
+  } catch(cause) { error.value=cause.message; }
+  finally {busy.value=false;}
+}
+async function restrict(grant,scope) {
+  if (busy.value) return;
+  const reduced=grant.scopes.filter(s=>s!==scope);
+  if (!reduced.length) {await revoke(grant.id);return;}
+  busy.value=true;error.value='';message.value='';
+  try {
+    const response=await fetch('/api/extensions/mcp/grants/'+encodeURIComponent(grant.id),{
+      method:'PUT',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
+      body:JSON.stringify({scopes:reduced})
+    });
+    if (!response.ok) throw new Error((await response.json()).error || 'Failed to limit scope');
+    await loadGrants();
+    message.value='客户端权限已收窄';
+  } catch(cause) {error.value=cause.message;}
+  finally {busy.value=false;}
 }
 onMounted(load);
 </script>
@@ -59,7 +95,25 @@ onMounted(load);
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="message" class="notice success-notice" role="status">{{ message }}</p>
       <button class="form-button primary" :disabled="busy" type="button" @click="save">保存 MCP 策略</button>
-      <p class="muted small">客户端授权、撤销及 OAuth 将在 v0.4 的后续阶段接入。</p>
+      <h4>已授权客户端</h4>
+      <p class="muted small">这些权限是客户端自己的授权范围；上面的 Action 开关是全局暴露白名单，两者取交集。</p>
+      <div v-for="grant in grants" :key="grant.id" class="session-row">
+        <div>
+          <strong>{{ grant.clientName }}</strong>
+          <div class="muted small">{{ grant.clientId }}</div>
+          <div class="muted small">创建于 {{ grant.createdAt }} · {{ grant.revoked ? '已撤销' : '生效中' }}</div>
+          <div v-if="!grant.revoked" class="toolbar">
+            <button v-for="scope in grant.scopes" :key="scope" :disabled="busy" type="button"
+              @click="restrict(grant,scope)" :title="'撤销 '+scope+' 权限'">
+              {{ scope }} ×
+            </button>
+          </div>
+          <div v-else class="muted small">无法使用旧 Token 或刷新令牌</div>
+        </div>
+        <button v-if="!grant.revoked" :disabled="busy" type="button" class="form-button"
+          @click="revoke(grant.id)">撤销授权</button>
+      </div>
+      <p v-if="!grants.length" class="muted">还没有已授权的 MCP 客户端。</p>
     </template>
     <p v-else class="muted">正在读取 MCP 模块状态…</p>
   </section>

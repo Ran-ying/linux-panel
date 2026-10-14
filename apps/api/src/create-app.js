@@ -64,9 +64,8 @@ export async function createApp({
     const { registerMcpExtension } = await import(pathToFileURL(mcpPath).href);
     await registerMcpExtension(app, {
       store, auth, registry, engine,
-      // No OAuth code exists at v0.4.1: all /mcp requests fail closed.
-      authorizeBearer: null,
-      resourceUrl: publicOrigin ? publicOrigin + '/mcp' : null
+      origin: publicOrigin || 'http://127.0.0.1:4188',
+      resourceUrl: (publicOrigin || 'http://127.0.0.1:4188') + '/mcp'
     });
   }
 
