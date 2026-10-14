@@ -85,14 +85,22 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
   const wrongVerifier=await getToken({client_id:id,grant_type:'authorization_code',
     code,redirect_uri:'https://client.example/callback',code_verifier:'x'.repeat(43),resource});
   assert.equal(wrongVerifier.statusCode,400,'PKCE proof must be enforced');
+  assert.equal((await getToken({client_id:id,grant_type:'authorization_code',
+    code,redirect_uri:'https://client.example/callback',code_verifier:verifier,resource})).statusCode,
+    400,'failed PKCE attempt must burn the compromised code');
+  const newApproval=await app.inject({method:'POST',url:'/oauth/authorize',
+    headers:{cookie,origin,'content-type':'application/x-www-form-urlencoded'},
+    payload:new URLSearchParams({...Object.fromEntries(query),csrf,decision:'approve'}).toString()});
+  assert.equal(newApproval.statusCode,302,newApproval.body);
+  const validCode=new URL(newApproval.headers.location).searchParams.get('code');
   const issued=await getToken({client_id:id,grant_type:'authorization_code',
-    code,redirect_uri:'https://client.example/callback',code_verifier:verifier,resource});
+    code:validCode,redirect_uri:'https://client.example/callback',code_verifier:verifier,resource});
   assert.equal(issued.statusCode,200,issued.body);
   const tokens=issued.json();
   assert.equal(tokens.token_type,'Bearer');
   assert.ok(tokens.refresh_token);
   const replay=await getToken({client_id:id,grant_type:'authorization_code',
-    code,redirect_uri:'https://client.example/callback',code_verifier:verifier,resource});
+    code:validCode,redirect_uri:'https://client.example/callback',code_verifier:verifier,resource});
   assert.equal(replay.statusCode,400,'authorization code must be single use');
   const registry=new ActionRegistry();
   await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
