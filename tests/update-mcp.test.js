@@ -93,7 +93,7 @@ test('MCP direct update requires a separate OAuth execution scope, explicit poli
   await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
   await setMcpPolicy(store,registry,{
     enabled:true,registrationEnabled:true,allowUpdates:false,allowDirectUpdates:true,
-    tools:{'system.info':true}
+    tools:{'system.info':true,'panel.update.status':true}
   },user.id);
   const data=new OAuthStore(store,registry,resource);
   const client=await data.register({client_name:'Direct test',redirect_uris:['https://client.example/cb']});
@@ -106,6 +106,7 @@ test('MCP direct update requires a separate OAuth execution scope, explicit poli
     return {token,grant};
   };
   const reader=await mint(['system:read']);
+  const statusReader=await mint(['panel:read']);
   const direct=await mint(['panel:update:execute']);
   const app=await createApp({root:process.cwd(),statePath,
     modulesPath:join(process.cwd(),'modules'),production:false});
@@ -121,6 +122,8 @@ test('MCP direct update requires a separate OAuth execution scope, explicit poli
   };
   const readList=await rpc(reader.token,'tools/list');
   assert.deepEqual(readList.data.result.tools.map(x=>x.name),['system.info']);
+  const statusList=await rpc(statusReader.token,'tools/list');
+  assert.deepEqual(statusList.data.result.tools.map(x=>x.name),['panel.update.status']);
   const directList=await rpc(direct.token,'tools/list');
   assert.deepEqual(directList.data.result.tools.map(x=>x.name),['panel.update.execute']);
   assert.ok((await rpc(reader.token,'tools/call',
@@ -132,9 +135,15 @@ test('MCP direct update requires a separate OAuth execution scope, explicit poli
   assert.notEqual(queued.data.result?.isError,true);
   assert.equal((await store.snapshot()).updateRequest?.approved,true);
   assert.equal((await store.snapshot()).updateRequest?.target,'a'.repeat(40));
+  const detail=await rpc(statusReader.token,'tools/call',
+    {name:'panel.update.status',arguments:{}});
+  assert.equal(detail.status,200,JSON.stringify(detail));
+  assert.equal(detail.data.result?.structuredContent?.pending?.approved,true,
+    JSON.stringify(detail.data));
+
   await setMcpPolicy(store,registry,{
     enabled:true,registrationEnabled:false,allowUpdates:false,allowDirectUpdates:false,
-    tools:{'system.info':true}
+    tools:{'system.info':true,'panel.update.status':true}
   },user.id);
   assert.deepEqual((await rpc(direct.token,'tools/list')).data.result.tools,[],
     'revoking direct Web policy immediately removes the tool');
