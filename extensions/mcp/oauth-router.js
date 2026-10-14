@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { readSessionCookie } from '../../platform/auth/cookies.js';
 import { addAudit } from '../../platform/state-store.js';
 import { allowedScopes, OAuthStore } from './oauth-store.js';
@@ -92,34 +93,72 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     };
   });
 
-  const validateAuthorize=async params=>{
+  // ChatGPT may send OAuth extensions such as login_hint, prompt and target_flow.
+  // RFC 6749 §3.1: ignore unknown parameters, but NEVER relax PKCE,
+  // registered redirect URI matching, or the resource audience binding.
+  // Clients sometimes identify this one MCP server by its origin instead
+  // of its /mcp path; map only this exact origin to the /mcp audience.
+  const normalizeResource = value => {
+    if (value === resourceUrl) return resourceUrl;
+    if (typeof value !== 'string') return null;
+    try {
+      const requested = new URL(value);
+      const canonical = new URL(resourceUrl);
+      if (requested.origin === canonical.origin && requested.pathname === '/' &&
+          !requested.search && !requested.hash && !requested.username && !requested.password)
+        return resourceUrl;
+    } catch { /* Invalid resource identifier */ }
+    return null;
+  };
+  const validateAuthorize=async input=>{
     await ensureEnabled();
-    if(!params || Object.keys(params).some(k=>!fields.includes(k)) ||
-        params.response_type!=='code' ||
-        typeof params.state!=='string' || params.state.length<8 || params.state.length>512 ||
-        params.code_challenge_method!=='S256' ||
-        typeof params.code_challenge!=='string' ||
-        !/^[a-zA-Z0-9_-]{43,128}$/.test(params.code_challenge) ||
-        params.resource!==resourceUrl)
-      throw error('Invalid OAuth authorization request');
-    const client=await data.clientInfo(params.client_id);
-    if(!client || !client.redirectUris.includes(params.redirect_uri))
+    if(!input || typeof input !== 'object' || Array.isArray(input))
+      throw error('Invalid OAuth authorization request: missing parameters');
+    // Reject duplicate critical query keys (Fastify represents duplicates as arrays).
+    for (const key of fields) {
+      if (input[key] !== undefined && typeof input[key] !== 'string')
+        throw error('Invalid OAuth authorization request: duplicate or invalid '+key);
+    }
+    if(input.response_type!=='code')
+      throw error('Invalid OAuth authorization request: response_type');
+    if(input.state !== undefined && input.state.length > 1024)
+      throw error('Invalid OAuth authorization request: state');
+    if(input.code_challenge_method!=='S256' ||
+       typeof input.code_challenge!=='string' ||
+       !/^[a-zA-Z0-9_-]{43,128}$/.test(input.code_challenge))
+      throw error('Invalid OAuth authorization request: PKCE S256 required');
+    if(normalizeResource(input.resource)!==resourceUrl)
+      throw error('Invalid OAuth authorization request: resource audience mismatch');
+    // prompt=none forbids interaction and must not silently produce a consent screen.
+    if(typeof input.prompt==='string' && input.prompt.split(/\s+/).includes('none'))
+      throw error('OAuth prompt=none is not supported');
+    const client=await data.clientInfo(input.client_id);
+    if(!client || !client.redirectUris.includes(input.redirect_uri))
       throw error('Invalid OAuth client or redirect_uri');
-    const scopes=typeof params.scope==='string' ? [...new Set(params.scope.split(/\s+/).filter(Boolean))] : [];
     const allowed=new Set(allowedScopes(registry,await store.snapshot()));
-    if(!scopes.some(s=>s!==OFFLINE_SCOPE) || scopes.some(s=>s!==OFFLINE_SCOPE && !allowed.has(s)))
+    // OAuth scope and state are optional. Without scope, explicitly present
+    // the currently permitted read-only scopes on the consent page.
+    const scopes=typeof input.scope==='string' && input.scope.trim()
+      ? [...new Set(input.scope.split(/\s+/).filter(Boolean))]
+      : [...allowed];
+    if((input.scope?.length??0)>1024 || scopes.length>12 ||
+       !scopes.some(s=>s!==OFFLINE_SCOPE) ||
+       scopes.some(s=>s!==OFFLINE_SCOPE && !allowed.has(s)))
       throw error('Unavailable OAuth scope');
-    return {client,scopes};
+    const params={...Object.fromEntries(fields.filter(key=>typeof input[key]==='string')
+      .map(key=>[key,input[key]])),resource:resourceUrl,scope:scopes.join(' ')};
+    return {client,scopes,params};
   };
 
   app.get('/oauth/authorize',async(request,reply)=>{
-    const {client,scopes}=await validateAuthorize(request.query);
+    const {client,scopes,params}=await validateAuthorize(request.query);
     let identity;
     try { identity=await auth.authenticate(readSessionCookie(request.headers.cookie)); }
     catch { return reply.redirect('/?next='+encodeURIComponent(request.url)); }
     auth.requirePermission(identity,'mcp:authorize');
     const csrf=identity.session.csrf;
-    const hidden=fields.map(key=>`<input type="hidden" name="${key}" value="${escapeHtml(request.query[key])}">`).join('');
+    const hidden=fields.filter(key=>typeof params[key]==='string')
+      .map(key=>`<input type="hidden" name="${key}" value="${escapeHtml(params[key])}">`).join('');
     // Client-supplied display names are UNVERIFIED. Show its exact callback origin.
     const redirectHost=new URL(request.query.redirect_uri).origin;
     const scopeLabels=scopes.map(s=>`<li><code>${escapeHtml(s)}</code>${s===OFFLINE_SCOPE?'（允许连接在 Access Token 到期后继续刷新）':''}</li>`).join('');
@@ -144,19 +183,25 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     auth.requirePermission(identity,'mcp:authorize');
     if(request.body?.csrf!==identity.session.csrf)throw error('CSRF failed',403);
     const params=Object.fromEntries(fields.map(k=>[k,request.body?.[k]]));
-    const {scopes}=await validateAuthorize(params);
-    const callback=new URL(params.redirect_uri);
+    const validated=await validateAuthorize(params);
+    const scopes=validated.scopes;
+    const normalized=validated.params;
+    const callback=new URL(normalized.redirect_uri);
     if(request.body.decision!=='approve') {
       callback.searchParams.set('error','access_denied');
-      callback.searchParams.set('state',params.state);
+      if (typeof normalized.state==='string') callback.searchParams.set('state',normalized.state);
       callback.searchParams.set('iss',issuer);
       return reply.redirect(callback.toString());
     }
-    const grant=await data.createGrant(params.client_id,identity.user.id,scopes,resourceUrl);
+    const grant=await data.createGrant(normalized.client_id,identity.user.id,scopes,resourceUrl);
     try {
       const {oauth,Request,Response}=await provider();
       const incoming=new Request({
-        headers:request.headers,method:'GET',query:params,body:{}
+        // The OAuth library internally requires state even though OAuth clients
+        // may omit it. Generate an internal nonce solely for the library;
+        // do not return a fabricated state to the client.
+        headers:request.headers,method:'GET',
+        query:{...normalized,state:normalized.state ?? randomBytes(24).toString('base64url')},body:{}
       });
       const outgoing=new Response({headers:{}});
       const code=await oauth.authorize(incoming,outgoing,{
@@ -165,7 +210,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
         })}
       });
       callback.searchParams.set('code',code.authorizationCode);
-      callback.searchParams.set('state',params.state);
+      if (typeof normalized.state==='string') callback.searchParams.set('state',normalized.state);
       callback.searchParams.set('iss',issuer);
       return reply.redirect(callback.toString());
     } catch (cause) {
@@ -176,7 +221,9 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
 
   app.post('/oauth/token',async(request,reply)=>{
     await ensureEnabled();
-    const input=request.body;
+    const input=request.body && typeof request.body==='object'
+      ? {...request.body, resource:normalizeResource(request.body.resource)}
+      : null;
     if(!input || input.resource!==resourceUrl ||
         !supported.includes(input.grant_type) ||
         typeof input.client_id!=='string')

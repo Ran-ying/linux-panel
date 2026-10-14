@@ -48,3 +48,16 @@ npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund
 ## 状态和恢复
 
 新 OAuth 客户端、授权和 Token 哈希会和已有用户账号一同保存在私有 `panel-state.json`。上线前和回滚前使用非 root 权限进行安全备份。代码升级保持兼容 v0.3 的原状态结构，MCP 无配置时默认关闭。密码更改会令旧 MCP Token 无效。v0.4 的安全审计不会取代 CentOS 7 的系统风险评估。
+
+## ChatGPT OAuth `Invalid OAuth authorization request` 兼容性修正（v0.4.1）
+
+首次公网联调发现 ChatGPT 浏览器授权阶段可能收到 `{"error":"Invalid OAuth authorization request"}`。原实现把 OAuth 请求未知参数直接拒绝、要求 `state` 长度不低于 8、强制提供 `scope`，并只接受以 `/mcp` 结尾的 `resource`。这些超出规范所必需的限制会拒绝合法客户端。
+
+修订后的行为：
+- 忽略未知 OAuth 扩展参数，例如 `login_hint`、`target_flow`，但不信任这些参数，也不跳过 Auth 登录或用户确认。
+- 允许符合 OAuth 规范的缺省 `scope`、`state`。没有指定 Scope 时只从 Web 显式开启的 Action 中计算候选，并在授权页面逐项显示；未授权不能使用 MCP。
+- 允许两个**精确**的资源标识：当前部署域名根 `https://uspanel.rany.ing`、受保护端点 `https://uspanel.rany.ing/mcp`，二者统一绑定到 `/mcp` 受众。其他域名、路径、查询参数均拒绝。
+- 保留注册回调地址全字符串匹配、PKCE S256、OAuth Code 单次使用、Token 生命周期、账号/Scope/Action 运行时校验。拒绝 `prompt=none` 的无交互请求，不会静默授权。
+- 如果仍然失败，新版本将针对响应类型、PKCE、资源受众返回更明确的错误分类。不要记录或公开完整授权 URL，其中可能包含状态值和挑战字符串；可以仅报告参数名、HTTP 状态和脱敏后的错误类别。
+
+将本修复部署到 VPS 后再重试 ChatGPT OAuth。**CI 通过不等于已经通过真实 ChatGPT 登录回调。**
