@@ -55,3 +55,18 @@ td{overflow-wrap:anywhere}
 
 .refresh-choice{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:15px;font-size:.85rem;font-weight:500;color:#d4e5f1;cursor:pointer}
 .refresh-choice input{accent-color:#249aaf;width:16px;height:16px}
+
+/* Two-level Module → Action navigation; Web-only grouping. */
+.module-nav{margin-top:12px;display:flex;flex-direction:column;gap:9px}
+.module-group{border:1px solid #30445b;border-radius:11px;overflow:hidden;background:#182638}
+.module-toggle{width:100%;padding:14px;text-align:left;cursor:pointer;color:inherit;background:transparent;border:0}
+.module-toggle.active{background:#1f3549}
+.module-toggle:hover{background:#26394c}
+.module-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.module-subtitle{display:flex;justify-content:space-between;color:#93a9bd;font-size:.78rem;margin-top:6px}
+.action-count{font-size:.77rem;font-variant-numeric:tabular-nums;color:#b8cbe0;background:#30455b;border-radius:8px;padding:2px 8px}
+.module-action-list{border-top:1px solid #30445b;padding:8px}
+.module-action-list .action{margin:2px 0;padding:11px 12px;font-size:.87rem}
+.module-action-list .action.active{border-color:#4c95ae;background:#193f50}
+.empty-actions{padding:4px 8px;color:#93a9bd;font-size:.82rem}
+.module-toggle:focus-visible,.action:focus-visible{outline:2px solid #79c7dc;outline-offset:-2px}
