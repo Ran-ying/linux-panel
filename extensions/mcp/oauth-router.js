@@ -139,9 +139,13 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     const allowed=new Set(allowedScopes(registry,await store.snapshot()));
     // OAuth scope and state are optional. Without scope, explicitly present
     // the currently permitted read-only scopes on the consent page.
+    // Never grant write permissions by omission: a client requesting no
+    // explicit scope gets read-only grants, regardless of policy toggles.
+    // panel:update and future panel:update:execute require an exact OAuth
+    // scope request followed by visible, interactive user consent.
     const scopes=typeof input.scope==='string' && input.scope.trim()
       ? [...new Set(input.scope.split(/\s+/).filter(Boolean))]
-      : [...allowed];
+      : [...allowed].filter(scope=>!scope.startsWith('panel:update'));
     if((input.scope?.length??0)>1024 || scopes.length>12 ||
        !scopes.some(s=>s!==OFFLINE_SCOPE) ||
        scopes.some(s=>s!==OFFLINE_SCOPE && !allowed.has(s)))
