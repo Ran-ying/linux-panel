@@ -42,6 +42,10 @@ test('ChatGPT OAuth extension params and origin-only resource do not bypass PKCE
   const query=new URLSearchParams(basic);
   const consent=await app.inject({url:'/oauth/authorize?'+query,headers:{cookie}});
   assert.equal(consent.statusCode,200,consent.body);
+  // A normal browser form navigation otherwise sends Origin: null under
+  // the application's global Referrer-Policy: no-referrer.
+  assert.equal(consent.headers['referrer-policy'],'origin');
+  assert.match(consent.body,/<meta name="referrer" content="origin">/);
   assert.match(consent.body,/system:read/);
   assert.match(consent.body,/storage:read/);
   assert.doesNotMatch(consent.body,/value="undefined"/);
@@ -50,6 +54,17 @@ test('ChatGPT OAuth extension params and origin-only resource do not bypass PKCE
     payload:new URLSearchParams({...basic,resource:'https://evil.example/mcp',
       scope:'system:read',csrf,decision:'approve'}).toString()});
   assert.equal(rejected.statusCode,400);
+  // The mitigation fixes the browser document policy, not authentication:
+  // null, absent, and foreign origins remain rejected on authorization POST.
+  for (const badHeaders of [{origin:'null'}, {origin:'https://evil.example'}, {}]) {
+    const blocked=await app.inject({method:'POST',url:'/oauth/authorize',
+      headers:{cookie,'content-type':'application/x-www-form-urlencoded',...badHeaders},
+      payload:new URLSearchParams({...basic,csrf,decision:'approve'}).toString()});
+    assert.equal(blocked.statusCode,403,JSON.stringify(badHeaders));
+    assert.equal(blocked.json().error,'Origin not allowed');
+  }
+  assert.equal((await app.inject({url:'/api/auth/status'})).headers['referrer-policy'],
+    'no-referrer','non-consent routes retain strict referrer policy');
   const invalidChallenge=await app.inject({url:'/oauth/authorize?'+new URLSearchParams({
     ...basic,code_challenge_method:'plain'}),headers:{cookie}});
   assert.equal(invalidChallenge.statusCode,400);
