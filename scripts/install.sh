@@ -48,6 +48,7 @@ done
 [[ -n "$DOMAIN" && "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die 'Invalid --domain'
 [[ "$DOMAIN" == *.* && ! "$DOMAIN" == *..* && "${#DOMAIN}" -le 253 ]] || die 'Use a valid DNS hostname'
 [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ && "$REF" != *..* ]] || die 'Invalid --ref'
+[[ "$CERT" =~ ^[A-Za-z0-9_./-]*$ && "$KEY" =~ ^[A-Za-z0-9_./-]*$ ]] || die 'Unsafe TLS certificate or key filename'
 [[ "$REPO" =~ ^(https://|git@github.com:|ssh://) ]] || die 'Use a trusted HTTPS/SSH Git clone URL'
 [[ -r /etc/os-release ]] || die 'Cannot determine OS'
 . /etc/os-release
@@ -66,6 +67,7 @@ fi
 [[ ! -e /var/lib/linux-panel/panel-state.json ]] || die 'Existing user state detected; refusing to overwrite'
 if ((NO_NGINX == 0)); then
   need nginx
+  [[ "$CERT" == /* && "$KEY" == /* ]] || die 'TLS paths must be absolute'
   [[ -f "$CERT" && -r "$CERT" && -f "$KEY" && -r "$KEY" ]] || die 'Existing TLS --cert and --key must be readable'
   [[ -d /etc/nginx/conf.d && -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]] || die 'Use Debian/Ubuntu standard Nginx layout or --no-nginx'
   [[ ! -e /etc/nginx/sites-available/linux-panel.conf ]] || die 'Nginx linux-panel.conf already exists'
