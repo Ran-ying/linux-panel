@@ -36,6 +36,8 @@ sudo bash scripts/install.sh --host 127.0.0.1 --port 4188 \
 
 **Web Action**：`panel.listener.status` 可查看当前监听配置；`panel.listener.request` 可申请更改监听地址和端口，Web 管理员输入密码（启用 TOTP 时需验证码）确认后保存，下一次**显式重启面板**才生效。不会自动重启或改动代理。
 
+**首次安装若在 npm 测试/构建阶段中断**，不要删除 `/opt/linux-panel`，也不要直接重新运行正常安装。先核查没有管理员状态和服务，将两个 checkout 都安全 fast-forward 更新到修复版本后，使用 `sudo bash scripts/install.sh --resume --preflight ...` 检查，再明确执行 `sudo bash scripts/install.sh --resume ...`；详见安装指南 4.4。
+
 遇到 Node.js 18 / 内存不足等 BLOCK 时，先预览 `bash scripts/prepare-host.sh --check`、`--install-node`、`--create-swap 1024`，只有明确加 `--apply` 才修改主机。**[完整预检、报错修复、自动安装、手动安装与验收指南](docs/INSTALL.md)**。CentOS 7 不受此安装与 root Broker 支持；自动更新 Broker 尚须单独验收。
 
 

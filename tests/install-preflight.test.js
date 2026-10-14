@@ -12,6 +12,7 @@ test('installer help documents no proxy dependency and own listener',()=>{
   assert.equal(r.status,0,r.stderr);
   assert.match(r.stdout,/--preflight/);
   assert.match(r.stdout,/--node-bin/);
+  assert.match(r.stdout,/--resume/);
   assert.match(r.stdout,/--host ADDRESS/);
   assert.match(r.stdout,/--port PORT/);
   assert.match(r.stdout,/never touches third-party reverse proxies/);
@@ -40,4 +41,13 @@ test('existing proxy flags no longer impact installer',()=>{
   assert.match(r.stderr,/Unknown option: --no-nginx/);
   const text=readFileSync(script,'utf8');
   assert.doesNotMatch(text,/nginx\s+-t|systemctl reload nginx|\/etc\/nginx/);
+});
+
+test('resume guard requires a root-owned clean checkout and does not reset',()=>{
+  const text=readFileSync(script,'utf8');
+  assert.match(text,/--resume requires a root-owned/);
+  assert.match(text,/status --porcelain/);
+  assert.match(text,/remote get-url origin/);
+  assert.match(text,/Existing private state detected/);
+  assert.doesNotMatch(text,/git reset --hard|rm -rf \/opt\/linux-panel/);
 });

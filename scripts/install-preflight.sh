@@ -85,7 +85,13 @@ lp_preflight() {
     fi
   fi
   for target in /opt/linux-panel /etc/systemd/system/linux-panel.service /etc/linux-panel/panel.env /var/lib/linux-panel/panel-state.json; do
-    if [[ -e "$target" || -L "$target" ]]; then
+    if [[ "$target" == /opt/linux-panel && "${LP_RESUME:-0}" == 1 ]]; then
+      if [[ -d "$target/.git" && ! -L "$target" && ! -L "$target/.git" ]]; then
+        lp_report PASS 'Existing /opt/linux-panel checkout (resume candidate; strict checks follow)'
+      else
+        lp_report BLOCK '--resume requires an existing non-symlink Git checkout at /opt/linux-panel'
+      fi
+    elif [[ -e "$target" || -L "$target" ]]; then
       lp_report BLOCK "Existing panel component $target: use upgrade/migration procedure; never overwrite."
     fi
   done

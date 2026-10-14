@@ -17,6 +17,9 @@ Options:
                       Default for loopback: http://127.0.0.1:PORT
   --node-bin FILE     Dedicated Node binary (npm in the same directory)
   --preflight         Read-only compatibility and port-conflict report
+  --resume            Resume an interrupted FIRST install (before admin init).
+                      Requires a clean, root-owned /opt/linux-panel Git checkout,
+                      and no service, private state or panel.env.
   --repo URL          Trusted Git repository URL (default GitHub main repo)
   --ref BRANCH        Git branch to clone (default main)
   --help              Print usage
@@ -24,7 +27,8 @@ Options:
 Installer never touches third-party reverse proxies, websites, firewall or
 TLS certificates. 0.0.0.0 requires an HTTPS --public-origin and an operator-
 managed TLS reverse proxy/firewall. Raw HTTP on a public network is unsafe.
-Fresh install only; refuses existing code, service and private state.
+--resume NEVER overwrites service, private state or administrator credentials.
+Do not use --resume to update a previously installed panel.
 USAGE
 }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -38,6 +42,7 @@ LP_REQUESTED_NODE_BIN=''
 REPO='https://github.com/Ran-ying/linux-panel.git'
 REF='main'
 PREFLIGHT_ONLY=0
+LP_RESUME=0
 while (($#)); do
   case "$1" in
     --host|--port|--public-origin|--repo|--ref|--node-bin)
@@ -49,6 +54,7 @@ while (($#)); do
         --node-bin) LP_REQUESTED_NODE_BIN="$2";;
       esac; shift 2;;
     --preflight) PREFLIGHT_ONLY=1; shift;;
+    --resume) LP_RESUME=1; shift;;
     --help|-h) usage; exit 0;;
     *) die "Unknown option: $1; see --help. Proxy/TLS configuration is outside this installer.";;
   esac
@@ -73,6 +79,24 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install-preflight.sh"
 if ! lp_preflight; then
   die 'Preflight blocked installation. Resolve BLOCK items and retry. No installation changes were made.'
 fi
+if ((LP_RESUME)); then
+  [[ -d /opt/linux-panel && ! -L /opt/linux-panel &&
+     -d /opt/linux-panel/.git && ! -L /opt/linux-panel/.git ]] ||
+    die '--resume requires a real /opt/linux-panel Git checkout from the interrupted install'
+  [[ "$(stat -c '%u' /opt/linux-panel)" == 0 ]] ||
+    die '--resume requires a root-owned /opt/linux-panel directory'
+  [[ "$(git -C /opt/linux-panel rev-parse --show-toplevel 2>/dev/null)" == /opt/linux-panel ]] ||
+    die '--resume refused a checkout outside /opt/linux-panel'
+  [[ "$(git -C /opt/linux-panel remote get-url origin)" == "$REPO" ]] ||
+    die '--resume Git remote differs from --repo; refusing to overwrite unknown checkout'
+  [[ "$(git -C /opt/linux-panel branch --show-current)" == "$REF" ]] ||
+    die '--resume Git branch differs from --ref'
+  [[ -z "$(git -C /opt/linux-panel status --porcelain)" ]] ||
+    die '--resume requires clean tracked/untracked Git status; inspect changes first'
+else
+  [[ ! -e /opt/linux-panel && ! -L /opt/linux-panel ]] ||
+    die '/opt/linux-panel exists; use --resume ONLY for a partial first install, or docs/UPGRADING.md'
+fi
 if ((PREFLIGHT_ONLY)); then
   log 'All mandatory checks passed. No installation changes were made.'
   exit 0
@@ -82,15 +106,19 @@ if [[ -n "$LP_REQUESTED_NODE_BIN" ]]; then
   export PATH="$(dirname "$NODE_BIN"):$PATH"
 fi
 need systemctl; need git; need runuser; need install; need sed; need df
-[[ ! -e /opt/linux-panel && ! -L /opt/linux-panel ]] || die '/opt/linux-panel exists; follow upgrade docs'
 [[ ! -e /etc/systemd/system/linux-panel.service && ! -L /etc/systemd/system/linux-panel.service ]] ||
   die 'Service unit already exists'
 [[ ! -e /var/lib/linux-panel/panel-state.json && ! -L /var/lib/linux-panel/panel-state.json ]] ||
   die 'Existing private state detected; stop'
 [[ ! -e /etc/linux-panel/panel.env && ! -L /etc/linux-panel/panel.env ]] ||
   die 'Existing panel.env detected; stop'
-log "Cloning trusted source $REPO ($REF)"
-git clone --depth 1 --single-branch --branch "$REF" "$REPO" /opt/linux-panel
+if ((LP_RESUME)); then
+  log "Resuming incomplete first installation using existing checkout $(git -C /opt/linux-panel rev-parse --short HEAD)"
+  log 'No service, private state or configuration existed when preflight ran.'
+else
+  log "Cloning trusted source $REPO ($REF)"
+  git clone --depth 1 --single-branch --branch "$REF" "$REPO" /opt/linux-panel
+fi
 cd /opt/linux-panel
 log 'Installing dependencies and running tests/builds (resource-intensive)'
 "$NPM_BIN" ci --no-audit --no-fund

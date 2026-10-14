@@ -55,7 +55,14 @@ if [[ "$MODE" == node ]]; then
   case "$(uname -m)" in x86_64) arch=x64;; aarch64) arch=arm64;;
     *) die 'Unsupported CPU architecture (requires x86_64 or aarch64)';; esac
   [[ -d /opt && ! -L /opt ]] || die '/opt is not a normal directory'
-  [[ ! -e "$NODE_DEST" && ! -L "$NODE_DEST" ]] || die "$NODE_DEST already exists; refusing to overwrite"
+  if [[ -e "$NODE_DEST" || -L "$NODE_DEST" ]]; then
+    if ((APPLY)); then
+      die "$NODE_DEST already exists; refusing to overwrite"
+    fi
+    info "$NODE_DEST already exists; dry-run only. --apply would refuse to overwrite it."
+    info 'Will NOT alter /usr/bin/node, /usr/bin/npm, system PATH, Nginx, PM2 or existing services'
+    exit 0
+  fi
   disk="$(df -Pk /opt | awk 'NR==2 {print $4}')"
   [[ "$disk" =~ ^[0-9]+$ ]] && ((disk>=524288)) || die 'At least 512 MiB free space on /opt required'
   info "Plan: fetch official Node v$NODE_VERSION linux-$arch over HTTPS; SHA256 verify, install into $NODE_DEST"
