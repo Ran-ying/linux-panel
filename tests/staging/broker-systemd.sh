@@ -39,7 +39,7 @@ chmod 0644 /opt/node24/bin/npm.realpath
 cat >/opt/node24/bin/npm <<'WRAPPER'
 #!/usr/bin/env bash
 set -e
-if [[ "$1" == run && "${2:-}" == test &&
+if [[ ( "$1" == test || ( "$1" == run && "${2:-}" == test ) ) &&
       -f /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE ]];then
   rm /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE
   echo 'Injected one-shot staging npm test failure' >&2
@@ -129,6 +129,13 @@ wait_result(){
  fail "Broker timeout for $id"
 }
 head_now(){ runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD; }
+wait_healthy(){
+ for i in $(seq 1 30);do
+  if healthy;then return 0;fi
+  sleep 1
+ done
+ return 1
+}
 
 note 'Case 1: reject a wrong Git SHA while Web stays healthy'
 queue 11111111111111111111111111111111 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -143,7 +150,7 @@ chown linuxpanel-updater:linuxpanel-updater \
 queue 22222222222222222222222222222222 "$TARGET"
 wait_result 22222222222222222222222222222222 rolled_back
 [[ "$(head_now)" == "$OLD" ]] || fail 'Rollback did not restore HEAD'
-healthy || fail 'Rollback did not restore Web'
+wait_healthy || fail 'Rollback did not restore Web'
 [[ -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-22222222222222222222222222222222" ]] ||
  fail 'Per-request backup missing'
 
@@ -151,7 +158,7 @@ note 'Case 3: same old revision retries successfully with real npm and systemd'
 queue 33333333333333333333333333333333 "$TARGET"
 wait_result 33333333333333333333333333333333 success
 [[ "$(head_now)" == "$TARGET" ]] || fail 'Update did not reach main target'
-healthy || fail 'Updated Web unhealthy'
+wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
 note 'Real staging systemd/git/npm update and retry PASSED'

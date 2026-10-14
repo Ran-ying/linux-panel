@@ -137,9 +137,23 @@ ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' "$PANEL_ENV" | tail -n 1)"
 [[ -n "$ORIGIN" ]] || ORIGIN="http://127.0.0.1:$PROBE_PORT"
 HOST="${ORIGIN#http://}"
 HOST="${HOST#https://}"
-if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]] ||
-   ! curl --silent --show-error --fail --max-time 8 -H "Host: $HOST" \
-    "http://127.0.0.1:$PROBE_PORT/api/auth/status" >/dev/null;then
+if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]];then
+  rollback
+  exit 1
+fi
+# systemctl start only means the process was spawned, not that Fastify
+# finished binding its listener. Give the application a bounded readiness
+# window before declaring an otherwise successful deployment broken.
+ready=0
+for attempt in $(seq 1 20);do
+  if curl --silent --show-error --fail --max-time 4 -H "Host: $HOST" \
+      "http://127.0.0.1:$PROBE_PORT/api/auth/status" >/dev/null;then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if ((ready==0));then
   rollback
   exit 1
 fi
