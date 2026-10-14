@@ -26,11 +26,6 @@ export default {
     },
     additionalProperties: false
   },
-  presentation: {
-    type: 'progress', title: '内存占用', valueKey: 'usagePercent', totalKey: 'totalBytes',
-    usedKey: 'usedBytes', availableKey: 'availableBytes',
-    details: [{ key: 'source', label: '数据来源' }]
-  },
   explain: 'Linux 读取 /proc/meminfo：MemAvailable 估计不发生交换时可使用的内存。macOS os.freemem() 不等于系统活动监视器的内存压力。',
   createPlan: async () => [process.platform === 'linux'
     ? { type: 'file-read', path: '/proc/meminfo', description: '读取 MemTotal、MemFree、MemAvailable' }

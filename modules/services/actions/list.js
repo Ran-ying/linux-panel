@@ -44,13 +44,6 @@ export default {
     },
     additionalProperties: false
   },
-  presentation: {
-    type: 'table', rowsKey: 'services',
-    columns: [
-      { key: 'name', label: '服务' }, { key: 'active', label: '运行状态' },
-      { key: 'sub', label: '子状态' }, { key: 'description', label: '说明' }
-    ]
-  },
   explain: 'systemctl list-units --type=service --all 读取已加载的 systemd Units；它不是全部已安装服务文件。macOS 不使用 systemd，示例数据不能代表 VPS。',
   createPlan: async () => process.platform === 'linux'
     ? [{ type: 'execFile', command: 'systemctl', args: ['list-units', '--type=service', '--all', '--no-pager', '--no-legend', '--plain'] }]

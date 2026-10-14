@@ -40,11 +40,6 @@ export default {
     },
     additionalProperties: false
   },
-  presentation: {
-    type: 'progress', title: '根文件系统', valueKey: 'usagePercent',
-    totalKey: 'totalBytes', usedKey: 'usedBytes', availableKey: 'availableBytes',
-    details: [{ key: 'mountpoint', label: '挂载点' }, { key: 'source', label: '采集方式' }]
-  },
   explain: 'fs.statfs("/") 获取文件系统的块数量与可用块。已用量根据总块和空闲块计算，available 可能少于 free（保留块）。APFS 等文件系统统计口径可能与 Finder 略有差异。',
   createPlan: async () => [{ type: 'node-api', description: '调用 fs.promises.statfs("/", { bigint: true })；不执行 Shell 命令' }],
   execute: async () => summarizeStatfs(await statfs('/', { bigint: true }))

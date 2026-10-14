@@ -19,18 +19,6 @@ export default {
     },
     additionalProperties: false
   },
-  presentation: {
-    type: 'metrics',
-    fields: [
-      { key: 'hostname', label: '主机名' },
-      { key: 'platform', label: '操作系统' },
-      { key: 'arch', label: '架构' },
-      { key: 'cpuCount', label: '可用并行度', format: 'integer' },
-      { key: 'totalMemoryBytes', label: '物理内存', format: 'bytes' },
-      { key: 'uptimeSeconds', label: '系统运行时间', format: 'duration' },
-      { key: 'nodeVersion', label: 'Node.js 版本' }
-    ]
-  },
   explain: 'os 模块读取当前 Node.js 进程所在主机。availableParallelism 是进程可使用的并行度，不等同于物理 CPU 核心数。',
   createPlan: async () => [{ type: 'node-api', description: '调用 os.platform(), os.totalmem(), os.uptime() 等 Node.js 只读 API' }],
   execute: async () => ({

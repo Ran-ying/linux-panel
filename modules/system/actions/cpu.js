@@ -33,14 +33,6 @@ export default {
     },
     additionalProperties: false
   },
-  presentation: {
-    type: 'progress', title: 'CPU 使用率', valueKey: 'usagePercent',
-    details: [
-      { key: 'logicalCpus', label: '逻辑处理器', format: 'integer' },
-      { key: 'sampleWindowMs', label: '采样间隔', format: 'milliseconds' },
-      { key: 'model', label: '处理器' }
-    ]
-  },
   explain: '对 os.cpus() 两次快照取差值。它是主机整体 CPU 忙碌比例的短时间近似值，不是当前 Node.js 进程 CPU 占用，也不是 load average。',
   createPlan: async () => [{ type: 'node-api', description: '两次调用 os.cpus()，间隔约 250 ms，计算忙碌时间占比' }],
   execute: async () => {
