@@ -17,8 +17,9 @@ jobs:
           cache: npm
       - name: Validate deploy script syntax
         run: |
-          bash -n scripts/install.sh scripts/update.sh scripts/install-update-broker.sh scripts/update-worker.sh
+          bash -n scripts/install.sh scripts/install-preflight.sh scripts/update.sh scripts/install-update-broker.sh scripts/update-worker.sh
           bash scripts/install.sh --help
+          bash scripts/install.sh --preflight --domain ci.example.invalid --no-nginx
       - name: Install dependencies
         run: npm ci
       - name: Install MCP optional extension dependencies

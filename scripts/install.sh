@@ -17,6 +17,9 @@ Options:
   --cert FILE         Existing TLS certificate (required unless --no-nginx)
   --key FILE          Existing TLS private key (required unless --no-nginx)
   --no-nginx          Set up only Node/systemd; configure your own HTTPS reverse proxy
+  --node-bin FILE     Use isolated Node binary (and npm in same directory);
+                      do not replace the system's Node used by other services
+  --preflight         Check host prerequisites and conflicts; make NO changes
   --repo URL          Clone URL (default: https://github.com/Ran-ying/linux-panel.git)
   --ref BRANCH        Git branch to clone (default: main)
   --help              Show this usage
@@ -29,38 +32,49 @@ USAGE
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 log() { printf '[linux-panel] %s\n' "$*"; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Missing program: $1"; }
-DOMAIN='' CERT='' KEY='' REPO='https://github.com/Ran-ying/linux-panel.git' REF='main' NO_NGINX=0
+DOMAIN='' CERT='' KEY='' REPO='https://github.com/Ran-ying/linux-panel.git' REF='main' NO_NGINX=0 LP_REQUESTED_NODE_BIN='' PREFLIGHT_ONLY=0
 while (($#)); do
   case "$1" in
-    --domain|--cert|--key|--repo|--ref)
+    --domain|--cert|--key|--repo|--ref|--node-bin)
       (($# >= 2)) || die "Missing value after $1"
       case "$1" in
         --domain) DOMAIN="$2";; --cert) CERT="$2";; --key) KEY="$2";;
         --repo) REPO="$2";; --ref) REF="$2";;
+        --node-bin) LP_REQUESTED_NODE_BIN="$2";;
       esac; shift 2;;
     --no-nginx) NO_NGINX=1; shift;;
+    --preflight) PREFLIGHT_ONLY=1; shift;;
     -h|--help) usage; exit 0;;
     *) die "Unknown argument: $1";;
   esac
 done
 
-((EUID == 0)) || die "Run with sudo/root"
 [[ -n "$DOMAIN" && "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die 'Invalid --domain'
 [[ "$DOMAIN" == *.* && ! "$DOMAIN" == *..* && "${#DOMAIN}" -le 253 ]] || die 'Use a valid DNS hostname'
 [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ && "$REF" != *..* ]] || die 'Invalid --ref'
 [[ "$CERT" =~ ^[A-Za-z0-9_./-]*$ && "$KEY" =~ ^[A-Za-z0-9_./-]*$ ]] || die 'Unsafe TLS certificate or key filename'
 [[ "$REPO" =~ ^(https://|git@github.com:|ssh://) ]] || die 'Use a trusted HTTPS/SSH Git clone URL'
+# The compatibility gate must execute before clone, dependency installation,
+# account creation, service changes, or Nginx writes.
+# shellcheck source=scripts/install-preflight.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install-preflight.sh"
+if ! lp_preflight; then
+  die 'Preflight blocked installation. Resolve BLOCK items and rerun --preflight; no changes were made.'
+fi
+if (( PREFLIGHT_ONLY == 1 )); then
+  log 'All mandatory checks passed. Nothing was installed or modified.'
+  exit 0
+fi
+((EUID == 0)) || die "Run installation with sudo/root; --preflight can run read-only."
+if [[ -n "$LP_REQUESTED_NODE_BIN" ]]; then
+  # npm and package lifecycle scripts must use the same isolated Node as the service.
+  export PATH="$(dirname "$NODE_BIN"):$PATH"
+fi
 [[ -r /etc/os-release ]] || die 'Cannot determine OS'
 . /etc/os-release
 [[ "$ID" == ubuntu || "$ID" == debian ]] || die 'Use supported Debian/Ubuntu with systemd; other distros use the manual guide'
-need systemctl; need git; need node; need npm; need runuser; need install; need sed; need df
-NODE_BIN="$(command -v node)"
-NPM_BIN="$(command -v npm)"
-NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
-NODE_MINOR="$(node -p "process.versions.node.split('.')[1]")"
-if ! { (( NODE_MAJOR == 24 )) || (( NODE_MAJOR == 22 && NODE_MINOR >= 12 )); }; then
-  die "Node.js 24 LTS recommended (22.12+ minimum), found $(node -v)"
-fi
+need systemctl; need git; need runuser; need install; need sed; need df
+# NODE_BIN and NPM_BIN were validated by install-preflight.sh.
 (( $(df -Pk /opt | awk 'NR==2 {print $4}') >= 1048576 )) || die 'Need >=1 GiB free disk space on /opt filesystem'
 [[ ! -e /opt/linux-panel ]] || die '/opt/linux-panel exists; use docs/UPGRADING.md'
 [[ ! -e /etc/systemd/system/linux-panel.service ]] || die 'Service unit already exists'
@@ -74,9 +88,21 @@ if ((NO_NGINX == 0)); then
   [[ ! -e /etc/nginx/sites-enabled/linux-panel.conf ]] || die 'Nginx site link already exists'
   [[ ! -e /etc/nginx/conf.d/linux-panel-limits.conf ]] || die 'Nginx limit config already exists'
   [[ -d /etc/nginx/snippets && ! -e /etc/nginx/snippets/linux-panel-proxy.inc ]] || die 'Nginx snippets directory or target file unsuitable'
-  if nginx -T 2>&1 | grep -Eq "server_name[[:space:]]+$DOMAIN([[:space:];]|$)"; then
+  # Re-evaluate before writing, without allowing nginx SIGPIPE under pipefail
+  # to mask duplicate hostnames in a shared Nginx configuration.
+  NGINX_DUMP="$(nginx -T 2>/dev/null)" || die 'Cannot inspect existing Nginx configuration'
+  if awk -v domain="$DOMAIN" '
+    /^[[:space:]]*server_name[[:space:]]/ {
+      for (i=2; i<=NF; i++) {
+        name=$i; sub(/;$/, "", name)
+        if (name == domain) found=1
+      }
+    }
+    END { exit(!found) }
+  ' <<< "$NGINX_DUMP"; then
     die "An Nginx server_name for $DOMAIN already exists; stop to avoid overriding it"
   fi
+  unset NGINX_DUMP
 fi
 log "Cloning $REPO ($REF). This requires access if the repository is private."
 git clone --depth 1 --single-branch --branch "$REF" "$REPO" /opt/linux-panel
