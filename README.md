@@ -1,26 +1,31 @@
 # Linux Panel
 
-一个以**可理解、可检查、可扩展**为目标的 Linux 管理面板。基于 JavaScript ES Modules、Fastify、Vue 3，采用模块拥有 Action、Web/MCP 共享操作定义的架构。
+以**可理解、可检查、可扩展**为目标的 Linux 管理面板。JavaScript ES Modules + Fastify + Vue 3；模块拥有 Action、Web/MCP 共用能力和数据。
 
-> **当前阶段：v0.2 开发分支，本地只读原型。没有认证和真实 MCP 服务，严禁直接暴露公网。**
+> **v0.2 本地只读原型。没有身份认证和 MCP 服务，禁止公网公开。**
 
-## v0.2 功能
+## 核心边界
 
-- ModuleManager 读取可信内置模块的 Manifest、检查依赖并调用 setup()。
-- ActionRegistry 统一注册 Action，向 Web 公开 Input/Output Schema 与 Presentation 元数据。
-- ActionEngine 用 AJV 验证输入和执行结果；仍然拒绝所有声明为 write 的操作。
-- Web UI 根据 `presentation.type` 自动呈现 **metrics / progress / table**；可以切换原始 JSON 并查看操作计划。
-- `system.info`：系统概况。
-- `system.memory`：Linux 读 /proc/meminfo 的 MemAvailable；Mac 则显示估算值提示。
-- `system.cpu`：两次 CPU 时间计数器采样，估算整体 CPU 使用率。
-- `storage.usage`：使用 fs.statfs() 获取根文件系统容量（无需 Shell）。
-- `services.list`：Linux 使用 systemctl 并解析结构化服务记录；macOS 返回明确标记的模拟数据。
+- **Action**（`modules/<id>/actions/`）：定义操作、输入输出 JSON Schema、数据来源和执行逻辑，不声明图标、按钮、图表或刷新频率。
+- **Core**（`core/`）：操作注册、输入和输出校验、执行；目前仅允许可信只读 Action。
+- **Web UI**（`modules/<id>/ui/presentations.js` + `apps/web/`）：决定使用指标卡、进度条还是表格，原始 JSON 随时可见；可手动开启自动刷新。
+- **MCP**：未来以适配器方式注册工具，使用同一个 Action 返回的 JSON，**不读取 Web UI 配置**。
 
-本项目运行在 MacBook 上时，**读取的是 MacBook，不是远端 VPS**。所有图表均来自实际 Action 结构化结果，没有写死示例数值。
+## 包含的只读 Action
 
-## 本地开发
+- `system.info`：主机、平台、内存总量、运行时间等。
+- `system.memory`：Linux 的 MemAvailable，macOS 时展示估算提示。
+- `system.cpu`：短时间 CPU 忙碌率采样。
+- `storage.usage`：根文件系统的容量、可用量、使用率。
+- `services.list`：Linux systemd 列表，macOS 返回明确标注的模拟服务。
 
-需要 Node.js 22.12+ 或 24，npm。
+Action 输出被验证为结构化 JSON。UI 配置通过单独的 `GET /api/web/presentations` 返回；`GET /api/actions` 则只公开能力元数据。这两份内容**不会混在一起**。
+
+自动刷新是 Web 的可选策略，默认关闭。页面隐藏、操作切换、页面卸载时暂停或停止。刷新调用的是同一只读 Action；不产生服务器后台定时任务。
+
+## MacBook 本地开发
+
+需要 Node.js 22.12+ 或 24：
 
 ```bash
 cd ~/Projects/linux-panel
@@ -30,40 +35,18 @@ npm run check
 npm run build:web
 ```
 
-打开两个终端，分别运行：
+两个终端分别运行：
 
 ```bash
 npm run dev:api
-# 第二个终端
+# 另一个终端
 npm run dev:web
 ```
 
-浏览器访问 <http://127.0.0.1:5173>。
+浏览器访问 <http://127.0.0.1:5173>。此时得到的是**MacBook 本机数据，不是 VPS 数据**。开发时 Vite 和 Fastify 各一个进程；正式构建后由 Fastify 托管静态资源，可以一个 PM2 进程运行后端。
 
-生产模式的 Web 静态资源可由 Fastify 一起提供；部署时只需一个 Node.js 后端进程，但当前版本不适合公网使用。详见 [docs/deployment.md](docs/deployment.md)。
+## 安全要求
 
-## 架构
+当前 API 无登录、会话、服务器侧权限验证和独立审计，不可经 Nginx/Cloudflare 或公网 TCP 端口暴露。MCP 尚未实现；`exposure.mcp` 只表示未来支持。不要提交 Token、密码、.env、私有文件或数据库备份。
 
-```text
-modules/{system,storage,services}/actions/*
-       │ action + outputSchema + presentation
-       ▼
-ModuleManager → ActionRegistry → ActionEngine
-                       │              │
-                 API 元数据         运行结构化结果
-                       └───── Web Renderer
-                                ├─ metrics
-                                ├─ progress
-                                ├─ table
-                                └─ raw JSON
-```
-
-Web 和未来的 MCP 都使用同一 Action Registry/Engine。现在尚未实现 MCP transport、用户认证或独立权限验证；`exposure.mcp` 只是元数据。
-
-操作预览用于理解数据采集方法，**不是与实际执行绑定的审批计划**。下一阶段实现 Auth/Permissions、审计与高权限隔离。
-
-## 约束
-
-不要把 .env、Token、密码、数据库备份或私人文件推送到 GitHub。所有 Action 只操作当前进程所在主机；不要用 root 运行面板。开发 API 绑定 127.0.0.1，禁止配置公网反向代理。
-
-[架构](docs/architecture.md) · [部署](docs/deployment.md) · [安全](docs/security.md) · [路线图](docs/roadmap.md)
+更多：[架构](docs/architecture.md) · [安全](docs/security.md) · [部署](docs/deployment.md) · [路线图](docs/roadmap.md)

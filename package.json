@@ -15,7 +15,7 @@
     "build:web": "npm run build --workspace @linux-panel/web",
     "start": "node apps/api/src/server.js",
     "test": "node --test tests/*.test.js",
-    "check": "node --check apps/api/src/server.js && node --check core/action-registry.js && node --check core/action-engine.js && node --check core/module-manager.js"
+    "check": "node --check apps/api/src/server.js && node --check apps/api/src/web-presentations.js && node --check core/action-registry.js && node --check core/action-engine.js && node --check core/module-manager.js"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",
