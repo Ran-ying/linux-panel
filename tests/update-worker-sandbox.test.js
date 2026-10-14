@@ -72,6 +72,7 @@ function prepare(){
  worker=swap(worker,securityLine,'[[ "$EXPECTED" == '+JSON.stringify(remote)+' ]] || { record failed; exit 2; }');
  const script=join(base,'worker.sh'),log=join(base,'events.log');
  let sequence=0;
+ writeFileSync(log,'');
  writeFileSync(script,worker,{mode:0o700});
  exec('bash',['-n',script]);
  return {base,root,state,status,script,log,old,target,meminfo,

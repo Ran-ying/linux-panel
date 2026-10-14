@@ -64,8 +64,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     const state=await store.snapshot();
     const lastResult=await readResult();
     const pending=state.updateRequest;
-    if(pending?.expiresAt>Date.now() &&
-        !(pending.approved===true && lastResult?.id===pending.id))
+    if(isBlocking(pending,lastResult))
       throw error(pending.approved?'Approved update still pending execution':'Update already requested',409);
     // No shell, branch, URL or revision arguments accepted from an AI client.
     // Git remote must be provisioned and trusted separately by the operator.
@@ -76,8 +75,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     const record={id:randomBytes(16).toString('hex'),from,target,createdAt:new Date().toISOString(),
       expiresAt:Date.now()+TTL,approved:false,userId,clientId};
     await store.mutate(state=>{
-      if(state.updateRequest?.expiresAt>Date.now() &&
-          !(state.updateRequest.approved===true && lastResult?.id===state.updateRequest.id))
+      if(isBlocking(state.updateRequest,lastResult))
         throw error('Already pending',409);
       state.updateRequest=record;
       addAudit(state,'panel.update.requested',userId,record.id);
