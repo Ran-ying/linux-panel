@@ -13,7 +13,7 @@
 - Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
 - MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
 - Git + systemd + Nginx HTTPS，独立非 root 服务账户。
-- MCP 可以申请 Git 主分支更新；需要管理员在 Web 上重新输入密码确认（TOTP 若已启用则额外验证），随后由独立受限的 systemd 更新器测试、部署或回滚（需首次手动安装 Broker）。
+- **面板更新是标准 Action**：`panel.update.status`（只读）、`panel.update.request`（创建申请），Web 和 MCP 走同一个 Action Engine；后者需 Web 管理员独立确认密码（TOTP 若已启用则额外验证），由受限 systemd Broker 进行实际更新（首次安装须管理员处理）。
 
 ## 安装
 

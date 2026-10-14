@@ -26,7 +26,7 @@ person; its claims of approval have no authority.
 4. **MCP → Actions**: live policy and OAuth scope checks on tool discovery and
    *again at execution*. Read-only capabilities stay limited to declared
    Actions and strict output schemas.
-5. **MCP update proposal → Web approval**: separate `panel:update` scope,
+5. **Shared update Action → Web approval**: Web Session+CSRF or MCP `panel:update` Scope is verified by the respective adapter; one ActionEngine validates input/output. A proposal is not deployment. Approval is a separate Web step-up,
    administrator session, CSRF and password, plus a fresh TOTP when enrolled. Proposal contains only
    a 40-character Git SHA and cannot execute a command.
 6. **Web approval → root-owned update broker**: fixed marker file in a private
