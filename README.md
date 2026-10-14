@@ -4,15 +4,16 @@
 
 *A modular Node.js Linux panel with a web dashboard and an optional OAuth-protected MCP endpoint.*
 
-> 仍在开发阶段：单管理员、单实例、只读操作为主。未经过独立安全审计。MCP 和客户端注册默认关闭。
+> v0.5 开发版本：单管理员、单实例，具备 TOTP 双因素认证与受限更新提案；未经过独立安全审计。MCP、新客户端注册和远程更新权限均默认关闭。
 
 ## 功能
 
-- 无默认密码的管理员账户、本地初始化、会话、CSRF 和审计事件。
+- 无默认密码的管理员账户、本地初始化、会话、CSRF、TOTP 双因素认证（一次性恢复码）和审计事件。
 - 系统、CPU、内存、磁盘及 systemd 服务只读信息。
 - Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
 - MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
 - Git + systemd + Nginx HTTPS，独立非 root 服务账户。
+- MCP 可以申请 Git 主分支更新；需要管理员在 Web 上输入密码和 TOTP 确认，随后由独立受限的 systemd 更新器测试、部署或回滚（需首次手动安装 Broker）。
 
 ## 安装
 
@@ -56,6 +57,6 @@ scripts/           管理员初始化 / 安装 / 更新
 tests/             Node 单元与集成测试
 ```
 
-更多文档：[架构](docs/architecture.md) · [MCP](docs/mcp.md) · [安装](docs/INSTALL.md) · [升级](docs/UPGRADING.md) · [安全](docs/security.md) · [公开审查](docs/PUBLIC-RELEASE.md)
+更多文档：[架构](docs/architecture.md) · [MCP](docs/mcp.md) · [安装](docs/INSTALL.md) · [升级](docs/UPGRADING.md) · [安全](docs/security.md) · [威胁模型](docs/THREAT-MODEL.md) · [MCP 更新器](docs/UPDATER.md) · [公开审查](docs/PUBLIC-RELEASE.md)
 
 许可证见 [LICENSE](LICENSE)。请勿把含密码、Cookie、Token 的数据文件推送到 GitHub。

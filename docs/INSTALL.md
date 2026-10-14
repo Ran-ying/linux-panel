@@ -148,3 +148,7 @@ curl -i https://panel.example.com/mcp
 - 失败后不要删除 `/var/lib/linux-panel` 或重新初始化管理员。
 
 后续升级和回滚请阅读 [UPGRADING.md](UPGRADING.md)。
+
+## v0.5 安全与 MCP 更新功能
+
+安装后建议在 **面板设置 → 账户安全** 启用 TOTP 并离线备份一次性恢复码。默认 MCP 及更新功能都关闭。要使用 AI 申请更新功能，请另外阅读 [UPDATER.md](UPDATER.md)，在管理员审查 root 固定脚本后 **只手动安装一次** systemd 更新 Broker；初次安装脚本不会自动授予 MCP 更新权限。

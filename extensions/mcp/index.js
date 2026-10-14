@@ -48,7 +48,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     const visible = exposedReadActions(registry).filter(a =>
       snapshot.mcp?.policy?.tools?.[a.id] === true && permitted.has(a.permission));
 
-    const server = new McpServer({ name: 'linux-panel', version: '0.4.0' }, { capabilities: { tools: {} } });
+    const server = new McpServer({ name: 'linux-panel', version: '0.5.0' }, { capabilities: { tools: {} } });
     // Separate non-read-only operation: exact-commit proposal only; never executes the update.
     if (process.env.PANEL_UPDATER_ENABLED === '1' &&
         mcpPolicy(snapshot).allowUpdates === true && permitted.has('panel:update')) {
