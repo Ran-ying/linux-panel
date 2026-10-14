@@ -34,6 +34,12 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       const action = visible.get(item.actionId);
       if (!action) throw new Error(`UI references an unavailable Web Action: ${item.actionId}`);
       if (!TYPES.has(item.renderer)) throw new Error(`Unsupported UI renderer: ${item.renderer}`);
+      // A page may opt into a one-shot initial read, but never auto-run a write
+      // Action or an Action requiring parameters. The Engine remains authoritative.
+      if (item.loadOnEnter !== undefined && typeof item.loadOnEnter !== 'boolean')
+        throw new Error(`Invalid loadOnEnter flag: ${item.actionId}`);
+      if (item.loadOnEnter && (action.kind !== 'read' || (action.inputSchema?.required?.length ?? 0) > 0))
+        throw new Error(`Unsafe automatic initial read: ${item.actionId}`);
       const interval = item.refreshIntervalMs ?? 0;
       if (!Number.isInteger(interval) || (interval !== 0 && (interval < 3000 || interval > 60000)))
         throw new Error(`Unsafe refresh interval: ${item.actionId}`);

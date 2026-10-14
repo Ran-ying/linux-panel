@@ -6,6 +6,7 @@
 export default [
   {
     actionId: 'system.info',
+    loadOnEnter: true,
     renderer: 'metrics',
     fields: [
       { key: 'hostname', label: '主机名' },
@@ -20,6 +21,7 @@ export default [
   },
   {
     actionId: 'system.memory',
+    loadOnEnter: true,
     renderer: 'progress', title: '内存占用', valueKey: 'usagePercent',
     totalKey: 'totalBytes', usedKey: 'usedBytes', availableKey: 'availableBytes',
     details: [{ key: 'source', label: '数据来源' }],
@@ -27,6 +29,7 @@ export default [
   },
   {
     actionId: 'system.cpu',
+    loadOnEnter: true,
     renderer: 'progress', title: 'CPU 使用率', valueKey: 'usagePercent',
     details: [
       { key: 'logicalCpus', label: '逻辑处理器', format: 'integer' },

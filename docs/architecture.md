@@ -36,7 +36,7 @@ modules/system/ui/presentations.js
 - ActionRegistry 的 `list('web')` 和 `list('mcp')` 只包含能力元数据，不含 UI 展示策略。
 - Web-only 接口 `GET /api/web/presentations` 返回 `{ presentations: [{actionId, renderer, ..., refreshIntervalMs}] }`；它不修改 Registry，也不创建任何系统操作。
 - 支持 `metrics`、`progress`、`table`；无配置时可退化为 JSON。所有渲染都是可信 Web 代码，UI 文件不允许提交任意 HTML/JS 字符串让客户端执行。
-- Web 默认手动读取；若页面提供自动刷新选项，用户勾选后按模块 UI 配置轮询，仅在可见页面执行，避免并发请求；切换 Action 或卸载页面时停止。后端永远不自行定时执行 Action。
+- Web 可为可信且无需必填输入的只读 Action 声明 `loadOnEnter: true`，进入模块时只执行一次初始读取（不会为其他 Action 隐式授予权限）；若页面提供自动刷新选项，用户勾选后按模块 UI 配置轮询，仅在可见页面执行，避免并发请求；切换 Action 或卸载页面时停止。后端永远不自行定时执行 Action。
 - 操作计划仅解释只读采集方式；不是具备服务器审批绑定的操作计划。
 - `kind:read` 和 `permission` 目前仅是可信模块约定，**不代表实际隔离或授权**。Web UI 不能提高权限。
 
@@ -51,11 +51,17 @@ modules/system/ui/presentations.js
 
 v0.2 无登录、独立服务端权限系统、审计、特权 Broker、MCP transport。后端只监听 `127.0.0.1`，禁止公网发布；今后暴露远程访问前必须完成鉴权。MCP 只通过适配器复用 Action 的业务契约，不应该依赖 Vue UI 配置。
 
-## Web 两级导航
+## Web 模块导航与 Action 流式布局
 
 Web 通过 `GET /api/modules` 获取 ModuleManager 的已加载模块（名称、ID、版本），通过 `GET /api/actions` 获取 Web 可见的 Action 元数据；前端只按 `moduleId` 分组，不硬编码模块 ID 或 Action 列表。
 
-- 左侧仅显示模块层级，进入模块后展开其 Action。
-- 点击 Action 才显示右侧操作说明、执行计划和结构化结果。
+- 左侧只显示已加载模块名称，不再显示 Action 子菜单。
+- 选择模块后，右侧按注册顺序从上到下流式展示该模块所有 Web 可见 Action；每个卡片独立维护结果、预览和刷新状态。
 - 模块导航不改变 Action 执行、Web/MCP 权限边界、输出 Schema 或 Web 专属刷新设置。
 - 模块即使没有 Web Action 也能显示，明确标记为空；后续添加新模块不需要修改导航组件。
+
+### 流式页面行为
+
+- 每个 Action 卡片可分别查看数据、JSON 或操作计划；切换模块时销毁旧卡片并中止未完成的前端请求。
+- 后端 Action 不知道页面卡片的位置，也不知道展示或自动刷新策略；MCP 不使用这些配置。
+- 前端自动刷新仍需用户启用，页面隐藏时暂停；同一 Action 不叠加并发请求。

@@ -21,6 +21,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('services.list').renderer, 'table');
   assert.equal(configured.get('system.cpu').refreshIntervalMs, 5000);
   assert.equal(configured.get('services.list').refreshIntervalMs, 0);
+  assert.ok(presentations.every(p => p.loadOnEnter === true));
   const actions = registry.list('web');
   for (const action of actions) {
     assert.equal(Object.hasOwn(action, 'presentation'), false);
@@ -67,6 +68,27 @@ test('Web adapter never turns a hidden Action into a visible UI control', async 
       execute: async () => ({ value: 1 })
     });
     await assert.rejects(loadWebPresentations(folder, [{ id: 'demo' }], registry), /unavailable Web Action/);
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test('Web adapter rejects non-boolean auto-load flags and write Action auto-load', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'linux-panel-autoload-'));
+  try {
+    await mkdir(join(folder, 'demo', 'ui'), { recursive: true });
+    await writeFile(join(folder, 'package.json'), '{"type":"module"}\n');
+    const configPath = join(folder, 'demo', 'ui', 'presentations.js');
+    const registry = new ActionRegistry();
+    registry.register('demo', {
+      id: 'demo.write', kind: 'write', exposure: { web: true, mcp: false },
+      inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+      execute: async () => ({ value: 1 })
+    });
+    await writeFile(configPath,
+      "export default [{actionId:'demo.write',renderer:'metrics',fields:[{key:'value',label:'Value'}],loadOnEnter:true}];\n");
+    await assert.rejects(loadWebPresentations(folder, [{ id: 'demo' }], registry), /Unsafe automatic initial read/);
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
