@@ -13,6 +13,26 @@ const fields = ['client_id','redirect_uri','response_type','code_challenge','cod
 export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin}) {
   const data=new OAuthStore(store,registry,resourceUrl);
   const issuer=origin;
+  // Registration is temporarily open only by an explicit administrator toggle.
+  // Throttle by the IP resolved from the trusted local Nginx proxy.
+  const registrationAttempts=new Map();
+  const REGISTRATION_WINDOW_MS=10*60*1000;
+  const MAX_REGISTRATION_ATTEMPTS=5;
+  function checkRegistrationThrottle(ip) {
+    const now=Date.now();
+    const key=String(ip).slice(0,120);
+    for(const [address,times] of registrationAttempts) {
+      const live=times.filter(time=>now-time<REGISTRATION_WINDOW_MS);
+      if(live.length) registrationAttempts.set(address,live);
+      else registrationAttempts.delete(address);
+    }
+    if(registrationAttempts.size>=2048 && !registrationAttempts.has(key))
+      throw error('Client registration temporarily unavailable',429);
+    const times=registrationAttempts.get(key)??[];
+    if(times.length>=MAX_REGISTRATION_ATTEMPTS)
+      throw error('Too many client registration attempts',429);
+    registrationAttempts.set(key,[...times,now]);
+  }
   let providerPromise;
   const provider=()=>providerPromise??=import('./oauth-provider.js')
     .then(({createOAuthProvider})=>createOAuthProvider(store,registry,resourceUrl))
@@ -62,6 +82,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
   });
   app.post('/oauth/register',async(request,reply)=>{
     await ensureEnabled();
+    checkRegistrationThrottle(request.ip);
     const client=await data.register(request.body);
     reply.code(201).header('Cache-Control','no-store');
     return {

@@ -65,6 +65,7 @@ test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permis
   assert.equal(result.status,200,JSON.stringify(result.data));
   const output=JSON.parse(result.data.result.content[0].text);
   assert.equal(typeof output.hostname,'string');
+  assert.equal((await store.snapshot()).audit.at(-1).event,'mcp.action.execute');
   await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'storage.usage':true}},user.id);
   const hidden=await rpc({method:'tools/list'});
   assert.equal(hidden.status,200,JSON.stringify(hidden.data));

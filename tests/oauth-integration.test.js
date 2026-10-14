@@ -149,3 +149,51 @@ test('changing Web password invalidates previous MCP access and refresh credenti
   assert.equal(await data.verifyAccessToken(access),null);
   assert.equal(await data.getRefreshToken(refresh),null);
 });
+
+test('offline_access is available only for refresh, not for MCP tools',async t=>{
+  const {app,store,cookie,csrf}=await fixture(t);
+  const meta=(await app.inject('/.well-known/oauth-authorization-server')).json();
+  assert.ok(meta.scopes_supported.includes('offline_access'));
+  const created=await app.inject({method:'POST',url:'/oauth/register',
+    payload:{client_name:'Refresh test',redirect_uris:['https://client.example/finish']}});
+  assert.equal(created.statusCode,201,created.body);
+  const clientId=created.json().client_id;
+  const verifier=randomBytes(32).toString('base64url');
+  const challenge=createHash('sha256').update(verifier).digest('base64url');
+  const params={
+    client_id:clientId,response_type:'code',redirect_uri:'https://client.example/finish',
+    scope:'system:read offline_access',state:'offline-state-123456',resource,
+    code_challenge:challenge,code_challenge_method:'S256'
+  };
+  const consent=await app.inject({method:'POST',url:'/oauth/authorize',
+    headers:{cookie,origin,'content-type':'application/x-www-form-urlencoded'},
+    payload:new URLSearchParams({...params,csrf,decision:'approve'}).toString()});
+  assert.equal(consent.statusCode,302,consent.body);
+  const code=new URL(consent.headers.location).searchParams.get('code');
+  const token=await app.inject({method:'POST',url:'/oauth/token',
+    headers:{'content-type':'application/x-www-form-urlencoded'},
+    payload:new URLSearchParams({client_id:clientId,grant_type:'authorization_code',
+      redirect_uri:params.redirect_uri,code,code_verifier:verifier,resource}).toString()});
+  assert.equal(token.statusCode,200,token.body);
+  assert.ok(token.json().scope.split(' ').includes('offline_access'));
+  const registry=new ActionRegistry();
+  await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
+  const storeOAuth=new OAuthStore(store,registry,resource);
+  assert.deepEqual((await storeOAuth.verifyAccessToken(token.json().access_token)).scopes,['system:read']);
+  const refresh=await app.inject({method:'POST',url:'/oauth/token',
+    headers:{'content-type':'application/x-www-form-urlencoded'},
+    payload:new URLSearchParams({client_id:clientId,grant_type:'refresh_token',
+      refresh_token:token.json().refresh_token,resource}).toString()});
+  assert.equal(refresh.statusCode,200,refresh.body);
+  assert.deepEqual((await storeOAuth.verifyAccessToken(refresh.json().access_token)).scopes,['system:read']);
+  const grants=(await app.inject({url:'/api/extensions/mcp/grants',headers:{cookie}})).json().grants;
+  const narrowed=await app.inject({method:'PUT',url:'/api/extensions/mcp/grants/'+grants[0].id,
+    headers:{cookie,'x-panel-csrf':csrf},payload:{scopes:['system:read']}});
+  assert.equal(narrowed.statusCode,200,narrowed.body);
+  const after=await app.inject({method:'POST',url:'/oauth/token',
+    headers:{'content-type':'application/x-www-form-urlencoded'},
+    payload:new URLSearchParams({client_id:clientId,grant_type:'refresh_token',
+      refresh_token:refresh.json().refresh_token,resource}).toString()});
+  assert.equal(after.statusCode,200,after.body);
+  assert.equal(after.json().scope.includes('offline_access'),false);
+});
