@@ -15,26 +15,37 @@
 - Git + systemd + Nginx HTTPS，独立非 root 服务账户。
 - **面板更新是标准 Action**：`panel.update.status`（只读）、`panel.update.check`（只读检查）、`panel.update.request`（创建申请），Web 和 MCP 走同一个 Action Engine；后者需 Web 管理员独立确认密码（TOTP 若已启用则额外验证），由受限 systemd Broker 进行实际更新（首次安装须管理员处理）。
 
-## 安装
+## 安装（先预检、修复 BLOCK、再安装）
 
-目标系统：Ubuntu 24.04 LTS / Debian 12+；推荐 Node.js 24 LTS。**CentOS 7 不受自动安装脚本支持。**
-
-共享服务器先执行 **只读预检**：`sudo bash scripts/install.sh --preflight --domain panel.example.com --no-nginx`。
-遇到不兼容的 Nginx/Node、系统资源或文件/端口冲突会明确提示并停止，不升级、替换或关闭其他业务。支持 `--node-bin /opt/node24/bin/node` 使用独立 Node 24。环境准备可用 `bash scripts/prepare-host.sh --check`、`--install-node` 与 `--create-swap 1024` 预览计划；只有另加 `--apply` 才执行磁盘与软件变更，详见安装文档。
-
-完整的 **手动分步安装** 和 **自动脚本部署** 请看 [docs/INSTALL.md](docs/INSTALL.md)。准备好公网 DNS、Node.js、Git、Nginx 和合法 HTTPS 证书后：
+目标系统：Ubuntu 24.04+ / Debian 12+、systemd >=240、Node.js 24 LTS（另接受 Node 22.12+ 的 22.x 系列）；共享服务器可使用独立 Node24，不替换 PM2/其他程序的系统 Node。**CentOS 7 不支持自动安装或更新 Broker**。
 
 ```bash
+# 1. 拉取并检查代码
 git clone https://github.com/Ran-ying/linux-panel.git
 cd linux-panel
-less scripts/install.sh
-sudo bash scripts/install.sh \
-  --domain panel.example.com \
-  --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
-  --key /etc/letsencrypt/live/panel.example.com/privkey.pem
+
+# 2. 只读预检（无证书时先跳过 Nginx）
+sudo bash scripts/install.sh --preflight \
+  --domain panel-test.example.com --no-nginx
+
+# 3. BLOCK 时：预览修复计划，只有显式 --apply 才修改主机
+bash scripts/prepare-host.sh --check
+bash scripts/prepare-host.sh --install-node
+bash scripts/prepare-host.sh --create-swap 1024
+# 如管理员审查确认，才分别执行：
+# sudo bash scripts/prepare-host.sh --install-node --apply
+# sudo bash scripts/prepare-host.sh --create-swap 1024 --apply
+
+# 4. 用独立 Node24 重新预检
+sudo bash scripts/install.sh --preflight \
+  --domain panel-test.example.com --no-nginx \
+  --node-bin /opt/node24/bin/node
 ```
 
-已有独立 TLS 反向代理，可用 `--no-nginx` 安装后手动配置 Nginx/Caddy/宝塔；需要自行完成 OAuth 与登录限流。
+**`0 blocker(s)` 只说明满足强制条件，不代表已经安装或达到推荐内存/磁盘要求。** 在用真实域名、有效 TLS 证书与同一套参数完成完整预检后，去掉 `--preflight` 执行正式安装。自动 Nginx 集成使用 `--cert` / `--key`，已有代理用 `--no-nginx` 并**自行完成 HTTPS 与限流接入**；不要用 `panel-test.example.com` 这类占位域名实际部署。
+
+**必读：[完整安装、预检输出说明、BLOCK 修复对应命令、正式安装、手动安装和验收指南](docs/INSTALL.md)**。已部署实例请看 [升级与回滚](docs/UPGRADING.md)；自动更新 Broker 仍须单独验收。
+
 
 本地开发：
 
