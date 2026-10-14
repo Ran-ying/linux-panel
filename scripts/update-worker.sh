@@ -84,7 +84,9 @@ build(){
   as_updater git -C "$ROOT" merge --ff-only "$TARGET" || return 1
   (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
     as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
-    as_updater npm run check && as_updater npm test && as_updater npm run build:web)
+    as_updater npm run check &&
+    as_updater /usr/bin/env PANEL_UPDATE_RESULT=/var/lib/linux-panel-updater/.isolated-test-broker-result npm test &&
+    as_updater npm run build:web)
 }
 rollback(){
   log "Update failed; stopping the new version, restoring state and rebuilding old code"
@@ -96,7 +98,7 @@ rollback(){
     as_updater npm run build:web) || restored=0
   if [[ -f "$BACKUP" && ! -L "$BACKUP" ]];then
     local restore_tmp
-    restore_tmp="$(mktemp "$ROOT_BACKUP/.restore-state.XXXXXXXX")"
+    restore_tmp="$(mktemp "$STATE/.restore-state.XXXXXXXX")"
     cp -a -- "$BACKUP" "$restore_tmp" || restored=0
     chmod 0600 "$restore_tmp" || restored=0
     chown linuxpanel:linuxpanel "$restore_tmp" || restored=0
