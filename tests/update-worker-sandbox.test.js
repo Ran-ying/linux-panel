@@ -57,7 +57,7 @@ function prepare(){
   ['exec 9> /run/linux-panel-root-updater/update.lock','exec 9> '+JSON.stringify(join(base,'update.lock'))],
   ['[[ "$#" -eq 0 && "$EUID" -eq 0 ]] || exit 2','[[ "$#" -eq 0 ]] || exit 2'],
   ['export PATH=/usr/sbin:/usr/bin:/sbin:/bin','export PATH='+JSON.stringify(bin)+':/usr/sbin:/usr/bin:/sbin:/bin'],
-  ['as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --bounding-set=-all --no-new-privs -- /usr/bin/env PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }','as_updater(){ "$@"; }'],
+  ['as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }','as_updater(){ "$@"; }'],
   ['[[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" && "$(stat -c %u "$ROOT_BACKUP")" -eq 0 ]] || { record failed;exit 2; }','[[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" ]] || { record failed; exit 2; }']
  ])worker=swap(worker,a,b);
  const securityLine=worker.split('\n').find(x=>x.includes('[[ "$EXPECTED" =~ ^('));

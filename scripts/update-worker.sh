@@ -15,7 +15,7 @@ EXPECTED_REMOTE=/etc/linux-panel/update-source
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
-as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --bounding-set=-all --no-new-privs -- /usr/bin/env PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
+as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
   local status="$1" tmp
   tmp="$(mktemp "$ROOT_BACKUP/.update-result.XXXXXXXX")"
