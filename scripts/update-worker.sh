@@ -52,9 +52,9 @@ OLD="$(as_updater git -C "$ROOT" rev-parse HEAD)"
 log "Fetch pinned origin/main commit $TARGET"
 as_updater git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
 REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
-[[ "$REMOTE" == "$TARGET" ]] || {record failed;exit 2;}
+[[ "$REMOTE" == "$TARGET" ]] || { record failed; exit 2; }
 if [[ "$OLD" == "$TARGET" ]];then record no_change;exit 0;fi
-as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || {record failed;exit 2;}
+as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record failed; exit 2; }
 # Refuse a high-risk in-place npm rebuild if the disk is nearly full.
 [[ "$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')" -ge 1048576 ]] ||
   { log 'Less than 1 GiB free; no update attempted'; record failed; exit 2; }
@@ -64,7 +64,7 @@ as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || {record f
 [[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" && "$(stat -c %u "$ROOT_BACKUP")" -eq 0 ]] || { record failed;exit 2; }
 systemctl stop linux-panel.service
 BACKUP="$ROOT_BACKUP/panel-state.json.before-$OLD"
-[[ ! -e "$BACKUP" && ! -L "$BACKUP" ]] || { systemctl start linux-panel.service;record failed;exit 2; }
+[[ ! -e "$BACKUP" && ! -L "$BACKUP" ]] || { systemctl start linux-panel.service; record failed; exit 2; }
 cp -a -- "$STATE/panel-state.json" "$BACKUP"
 chmod 0600 "$BACKUP"
 build(){
@@ -117,7 +117,7 @@ OVERRIDE_PORT="$(awk '
 ' "$STATE/panel-state.json")"
 PROBE_PORT="${OVERRIDE_PORT:-$DEFAULT_PORT}"
 [[ "$PROBE_PORT" =~ ^[0-9]{4,5}$ ]] && ((PROBE_PORT>=1024 && PROBE_PORT<=65535)) ||
-  { rollback;exit 1; }
+  { rollback; exit 1; }
 ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' "$PANEL_ENV" | tail -n 1)"
 [[ -n "$ORIGIN" ]] || ORIGIN="http://127.0.0.1:$PROBE_PORT"
 HOST="${ORIGIN#http://}"
