@@ -46,6 +46,7 @@ function prepare(){
  fake('curl','[ "$FAIL_HEALTH" != 1 ]');
  fake('sleep','exit 0');
  fake('chown','exit 0');
+ fake('install','src=; dst=; for x do src="$dst"; dst="$x"; done; exec /bin/cp -- "$src" "$dst"');
  fake('npm','if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi\nif [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi\nexit 0');
  let worker=original;
  for(const [a,b] of [
