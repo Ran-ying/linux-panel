@@ -1,4 +1,4 @@
-name: Check v0.2
+name: Linux Panel CI
 
 on:
   push:
@@ -19,9 +19,9 @@ jobs:
         run: npm ci
       - name: Audit production dependencies
         run: npm audit --omit=dev
-      - name: Run unit tests
+      - name: Run unit and API integration tests
         run: npm test
       - name: Check JavaScript syntax
         run: npm run check
-      - name: Build Vue frontend
+      - name: Build production Vue frontend
         run: npm run build:web
