@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
-  "workspaces": ["apps/web"],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "apps/web"
+  ],
   "scripts": {
     "dev:api": "node --watch apps/api/src/server.js",
     "dev:web": "npm run dev --workspace @linux-panel/web",
@@ -14,7 +18,7 @@
     "check": "node --check apps/api/src/server.js && node --check core/action-registry.js && node --check core/action-engine.js && node --check core/module-manager.js"
   },
   "dependencies": {
-    "@fastify/static": "^8.0.0",
+    "@fastify/static": "^10.1.6",
     "ajv": "^8.17.1",
     "fastify": "^5.6.0"
   }
