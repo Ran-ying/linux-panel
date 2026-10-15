@@ -42,11 +42,28 @@ sha256sum /var/lib/linux-panel/panel-state.json | cut -d' ' -f1 \
  >/home/stage/lp-private-digest
 cat >/opt/node24/bin/npm <<'NPM'
 #!/usr/bin/env bash
-# TEST SUBSTITUTE only. Avoid installing untrusted npm packages in this guest.
-set -e
-if [[ "${1:-}" == ci && -f /run/lp-hold-npm ]];then
- touch /var/lib/linux-panel-updater/lp-reached-npm
- while [[ -f /run/lp-hold-npm ]];do /usr/bin/sleep 0.3;done
+# TEST SUBSTITUTE only. No untrusted npm packages are installed in this guest.
+# Simulate generated runtime artifacts. New Broker revisions assert that the
+# linuxpanel Web identity can read the Fastify package manifest after npm ci.
+# Previous no-op fixture omitted node_modules and falsely failed recovery.
+set -Eeuo pipefail
+if [[ "${1:-}" == ci ]];then
+ if [[ -f /run/lp-hold-npm ]];then
+  touch /var/lib/linux-panel-updater/lp-reached-npm
+  while [[ -f /run/lp-hold-npm ]];do /usr/bin/sleep 0.3;done
+ fi
+ mkdir -p /opt/linux-panel/node_modules/fastify
+ printf '{"name":"fastify","version":"0.0.0-qemu-fixture"}\\n' \
+  > /opt/linux-panel/node_modules/fastify/package.json
+ chmod 0700 /opt/linux-panel/node_modules /opt/linux-panel/node_modules/fastify
+ chmod 0600 /opt/linux-panel/node_modules/fastify/package.json
+fi
+if [[ "${1:-}" == run && "${2:-}" == build:web ]];then
+ mkdir -p /opt/linux-panel/apps/web/dist
+ printf '<!doctype html><title>QEMU fixture</title>\\n' \
+  > /opt/linux-panel/apps/web/dist/index.html
+ chmod 0700 /opt/linux-panel/apps/web/dist
+ chmod 0600 /opt/linux-panel/apps/web/dist/index.html
 fi
 exit 0
 NPM

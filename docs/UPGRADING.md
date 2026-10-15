@@ -7,7 +7,15 @@
 > 必须明确使用正确运行时，而不是碰运气依赖 root 的默认 PATH。
 > 自动 Broker 的实现与安装另见 [UPDATER.md](UPDATER.md)。
 >
-> **不建议对已经启用 Broker 的实例混用手动更新脚本**，应采用经过验收的 Broker 更新流程。
+> **已安装 Broker 的实例禁止混用普通手动更新器**：即使暂时关闭了 Web 更新开关，
+> 也不要以 root 执行 `scripts/update.sh` 或手工 `npm ci`。
+> 该实例源码目录由独立 `linuxpanel-updater` 账户管理，更新必须走单独的 Broker
+> 流程及其可信提交、回滚和健康检查；普通更新脚本会主动拒绝已安装 Broker 的主机。
+>
+> **跨账户运行前检查**：`npm ci` 会重新生成 `node_modules`。即使编译和测试成功，
+> Web 的 `linuxpanel` 账户仍可能无法读取 Fastify 的 `package.json` 并在启动时
+> 报 `ERR_INVALID_PACKAGE_CONFIG`。新版首次安装器、普通升级脚本和 Broker 都要
+> 检查真正的 Web 账户读取/导入权限。
 
 ### 独立 Node24 的更新命令
 
@@ -41,6 +49,14 @@ git pull --ff-only origin main
 npm ci --no-audit --no-fund
 npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock
 npm run check && npm test && npm run build:web
+# 仅适用于未安装 Broker 的 root-owned 手动安装。
+sudo chown -R root:linuxpanel /opt/linux-panel
+sudo chmod -R g+rX,g-w,o-w /opt/linux-panel
+sudo runuser -u linuxpanel -- test -r /opt/linux-panel/node_modules/fastify/package.json
+sudo runuser -u linuxpanel -- test -r /opt/linux-panel/apps/web/dist/index.html
+# 重要：确保以下 node 是真实安装给服务使用的 Node 22.12+/24。
+sudo runuser -u linuxpanel -- /opt/node24/bin/node --input-type=module \
+  -e "await import('fastify'); await import('@fastify/static')"
 sudo systemctl start linux-panel.service
 sudo systemctl status linux-panel.service --no-pager
 ```
@@ -68,6 +84,10 @@ git switch --detach <PREVIOUS_FULL_SHA>
 npm ci --no-audit --no-fund
 npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock
 npm run build:web
+# 手动回滚同样必须恢复运行账户的依赖读权限。
+sudo chown -R root:linuxpanel /opt/linux-panel
+sudo chmod -R g+rX,g-w,o-w /opt/linux-panel
+sudo runuser -u linuxpanel -- test -r /opt/linux-panel/node_modules/fastify/package.json
 sudo systemctl start linux-panel.service
 ```
 

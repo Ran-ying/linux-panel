@@ -83,6 +83,15 @@ chmod 0600 /etc/linux-panel/panel.env
  npm run build:web)
 chown -R root:linuxpanel "$ROOT"
 chmod -R g+rX,g-w,o-w "$ROOT"
+assert_web_runtime(){
+  runuser -u linuxpanel -- test -r "$ROOT/node_modules/fastify/package.json" ||
+    fail 'Web user cannot read installed Fastify manifest'
+  runuser -u linuxpanel -- test -r "$ROOT/apps/web/dist/index.html" ||
+    fail 'Web user cannot read built frontend assets'
+  (cd "$ROOT" && runuser -u linuxpanel -- /opt/node24/bin/node --input-type=module     -e "await import('fastify'); await import('@fastify/static')") ||
+    fail 'Web user cannot resolve runtime dependencies'
+}
+assert_web_runtime
 STAGE_PASSWORD="$(/opt/node24/bin/node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
 runuser -u linuxpanel -- /usr/bin/env STAGE_PASSWORD="$STAGE_PASSWORD" \
  /opt/node24/bin/node --input-type=module -e '
@@ -176,6 +185,7 @@ queue 22222222222222222222222222222222 "$TARGET"
 wait_result 22222222222222222222222222222222 rolled_back
 [[ "$(head_now)" == "$OLD" ]] || fail 'Rollback did not restore HEAD'
 wait_healthy || fail 'Rollback did not restore Web'
+assert_web_runtime  # Detect mode regressions after rollback npm ci.
 [[ -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-22222222222222222222222222222222" ]] ||
  fail 'Per-request backup missing'
 
@@ -383,6 +393,7 @@ resource_elapsed_seconds="$((SECONDS-resource_start_seconds))"
 note "Measured actual peak cgroup-v2 memory.peak=${peak_bytes} bytes; MemoryMax=805306368 CPUQuota=100%; total positive HTTP update ${resource_elapsed_seconds}s; code before=${code_before_kib}KiB after=${code_after_kib}KiB"
 systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity 'CPUQuota='
 wait_healthy || fail 'Updated Web unhealthy'
+assert_web_runtime  # Real cross-UID dependency import after Broker update.
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
 sed -i '/^PANEL_UPDATER_ENABLED=1$/d' /etc/linux-panel/panel.env

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const original=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
@@ -26,6 +26,7 @@ function prepare(){
  exec('git',['-C',root,'config','user.name','Test']);
  exec('git',['-C',root,'config','user.email','test@example.invalid']);
  writeFileSync(join(root,'version'),'1\n');
+ writeFileSync(join(root,'.gitignore'),'node_modules/\napps/web/dist/\n');
  exec('git',['-C',root,'add','.']);
  exec('git',['-C',root,'commit','-qm','first']);
  const old=exec('git',['-C',root,'rev-parse','HEAD']);
@@ -37,6 +38,10 @@ function prepare(){
  const target=exec('git',['-C',root,'rev-parse','HEAD']);
  exec('git',['-C',root,'push','-q','origin','main']);
  exec('git',['-C',root,'reset','--hard',old]);
+ // The original installed service already has runtime dependencies available
+ // even when backup fails before the update reaches npm ci.
+ mkdirSync(join(root,'node_modules','fastify'),{recursive:true});
+ writeFileSync(join(root,'node_modules','fastify','package.json'),'{"name":"fastify"}\n');
  writeFileSync(join(state,'panel-state.json'),'{"original":true}\n');
  const env=join(base,'panel.env'),pin=join(base,'pin');
  writeFileSync(env,'PANEL_LISTEN_PORT=4188\nPANEL_PUBLIC_ORIGIN=http://127.0.0.1:4188\n');
@@ -46,9 +51,26 @@ function prepare(){
  fake('curl','if [ "$FAIL_HEALTH_ALL" = 1 ]; then exit 22; fi\nif [ "$FAIL_HEALTH" = 1 ] && [ "$(git -C "$TEST_ROOT" rev-parse HEAD)" = "$TEST_TARGET" ]; then exit 22; fi\nexit 0');
  fake('sleep','exit 0');
  fake('chown','exit 0');
+ fake('chgrp','printf "chgrp:%s\\n" "$*" >> "$TEST_LOG"\nexit 0');
  fake('df','printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 5000000 0 %s 0%% /\\n" "${TEST_FREE_KIB:-4000000}"');
  fake('install',"src=; dst=; for x do src=\"$dst\"; dst=\"$x\"; done\nif [ \"$FAIL_SNAPSHOT_COPY\" = 1 ];then\n case \"$dst\" in */.state-snapshot.*)\n   printf 'truncated backup bytes' > \"$dst\"\n   exit 28\n   ;;\n esac\nfi\nexec /bin/cp -- \"$src\" \"$dst\"");
- fake('npm','if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi\nif [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi\nexit 0');
+ // Simulate real npm removing/reinstalling dependencies under worker umask 077.
+ // The Web account is a different UID and must receive group read/execute.
+ fake('npm',`if [ "$1" = ci ]; then
+ mkdir -p "$TEST_ROOT/node_modules/fastify"
+ printf '{"name":"fastify"}\\n' > "$TEST_ROOT/node_modules/fastify/package.json"
+ chmod 0700 "$TEST_ROOT/node_modules" "$TEST_ROOT/node_modules/fastify"
+ chmod 0600 "$TEST_ROOT/node_modules/fastify/package.json"
+ fi
+ if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi
+ if [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi
+ if [ "$1" = run ] && [ "$2" = build:web ]; then
+ mkdir -p "$TEST_ROOT/apps/web/dist"
+ printf '<html>ok</html>\\n' > "$TEST_ROOT/apps/web/dist/index.html"
+ chmod 0700 "$TEST_ROOT/apps/web/dist"
+ chmod 0600 "$TEST_ROOT/apps/web/dist/index.html"
+ fi
+ exit 0`);
  const meminfo=join(base,'meminfo');
  writeFileSync(meminfo,'MemAvailable:    3000000 kB\\nSwapFree:    3000000 kB\\n'.replaceAll('\\n','\n'));
  let worker=original.replaceAll('/proc/meminfo',JSON.stringify(meminfo));
@@ -154,7 +176,7 @@ test('recovery-only cannot consume an unapproved new trigger',()=>{
  try{
   writeFileSync(join(f.state,'update-trigger'),'id='+'b'.repeat(32)+'\nsha='+f.target+'\n');
   const r=spawnSync('bash',[f.script,'--recover-only'],{
-    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log}
+    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log,TEST_ROOT:f.root}
   });
   assert.equal(r.status,0,r.stderr);
   assert.equal(readFileSync(join(f.state,'update-trigger'),'utf8').split('\n')[0],
@@ -230,7 +252,7 @@ test('partial backup ENOSPC preserves original state, journal and retryable reco
   assert.ok(!entries.some(x=>x.startsWith('panel-state.json.before-')),
     'Truncated snapshot must never be published as a trusted backup');
   const restored=spawnSync('bash',[f.script,'--recover-only'],{
-    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log}
+    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log,TEST_ROOT:f.root}
   });
   assert.equal(restored.status,0,JSON.stringify(restored));
   const final=JSON.parse(readFileSync(join(f.status,'result.json'),'utf8'));
@@ -241,4 +263,32 @@ test('partial backup ENOSPC preserves original state, journal and retryable reco
     '{"original":true}\n');
   assert.equal(exec('git',['-C',f.root,'rev-parse','HEAD']),f.old);
  }finally{f.cleanup();}
+});
+
+test('generated artifacts retain restricted world permissions and gain Web group read on update AND rollback',()=>{
+ for(const rollback of [false,true]){
+  const f=prepare();
+  try{
+   const out=f.run({health:rollback});
+   assert.equal(out.result.status,rollback?'rolled_back':'success',
+     JSON.stringify(out.process));
+   for(const path of [
+     join(f.root,'node_modules'),
+     join(f.root,'node_modules','fastify'),
+     join(f.root,'node_modules','fastify','package.json'),
+     join(f.root,'apps','web','dist'),
+     join(f.root,'apps','web','dist','index.html')
+   ]){
+     const mode=statSync(path).mode & 0o777;
+     assert.ok(mode & 0o040, `Web group needs read: ${path} (${mode.toString(8)})`);
+     assert.equal(mode & 0o007,0,`World must have no access: ${path}`);
+     if(statSync(path).isDirectory())
+       assert.ok(mode & 0o010,`Web group needs directory traverse: ${path}`);
+   }
+   const chmodLog=readFileSync(f.log,'utf8');
+   const checks=chmodLog.match(/chgrp:/g)??[];
+   assert.ok(checks.length>=(rollback?4:2),
+     'Artifact normalization must run again after rollback rebuild');
+  }finally{f.cleanup();}
+ }
 });

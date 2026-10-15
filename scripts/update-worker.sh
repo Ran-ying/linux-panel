@@ -84,6 +84,30 @@ start_panel(){
   fi
   systemctl start linux-panel.service
 }
+# npm ci and Vite run as linuxpanel-updater under umask 077. Freshly
+# regenerated runtime trees can therefore be updater-only (0700/0600),
+# even though the Web service uses a different UID (linuxpanel).
+# Normalize ONLY generated public code/dependency trees; never private state,
+# the whole checkout, or the root-owned recovery journal. Root has CAP_CHOWN.
+ensure_web_read_access(){
+  local d
+  for d in "$ROOT/node_modules" "$ROOT/apps/web/node_modules" \
+           "$ROOT/extensions/mcp/node_modules" "$ROOT/apps/web/dist";do
+    [[ -e "$d" || -L "$d" ]] || continue
+    if [[ ! -d "$d" || -L "$d" ]];then
+      log 'Unsafe generated artifact path; refusing Web start'
+      return 1
+    fi
+    chgrp -R -- linuxpanel "$d" || return 1
+    # The root Broker has CAP_CHOWN but intentionally NOT CAP_FOWNER.
+    # chmod must run as the updater, which owns the newly installed files.
+    as_updater chmod -R -- g+rX,g-w,o-w "$d" || return 1
+  done
+  if [[ ! -f "$ROOT/node_modules/fastify/package.json" ]];then
+    log 'Required Fastify runtime manifest not found after build'
+    return 1
+  fi
+}
 # Reusable health gate for normal deployments AND interrupted-boot recovery.
 # A systemctl start or active PID alone never proves Fastify is serving.
 panel_healthy(){
@@ -183,8 +207,8 @@ recover(){
     # A durable success result is not proof Web can start after reboot.
     # The recovery unit has no Before=Web ordering; the journal guard blocks
     # untrusted starts, and only this root worker grants a temporary permit.
-    if start_panel && systemctl is-active --quiet linux-panel.service &&
-       panel_healthy;then
+    if ensure_web_read_access && start_panel &&
+       systemctl is-active --quiet linux-panel.service && panel_healthy;then
       finish_transaction || return 1
       log "Previously committed healthy deployment $ID cleaned up"
       return 0
@@ -230,8 +254,8 @@ recover(){
     # No ordering edge to Web: the root journal ConditionPathExists guard
     # denies ordinary boot and this worker alone grants the volatile permit.
     # Both normal rollback and boot recovery must observe HTTP readiness.
-    if ! start_panel || ! systemctl is-active --quiet linux-panel.service ||
-       ! panel_healthy;then
+    if ! ensure_web_read_access || ! start_panel ||
+       ! systemctl is-active --quiet linux-panel.service || ! panel_healthy;then
       systemctl stop linux-panel.service || true
       restored=0
     fi
@@ -367,6 +391,7 @@ build(){
 }
 rollback(){ recover; }
 if ! build;then rollback;exit 1;fi
+if ! ensure_web_read_access;then rollback;exit 1;fi
 if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then
   rollback
   exit 1
