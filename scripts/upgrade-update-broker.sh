@@ -199,6 +199,25 @@ installed_verify(){
     pass 'Effective Broker unit points to fixed worker, with restricted writable roots'
   else block 'Unexpected effective Broker execution path or sandbox';fi
 }
+# Commit immutable executable/unit bytes and the directories naming them.
+# Only fixed installer-controlled paths are supplied; no MCP/user arguments.
+sync_broker_files(){
+ /usr/bin/python3 -I - "$@" <<'PYTHON_SYNC'
+import os,sys
+for spec in sys.argv[1:]:
+    kind,path=spec.split(':',1)
+    flags=os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC
+    if kind=='dir':
+        flags|=os.O_DIRECTORY
+    elif kind!='file':
+        raise ValueError('Unsupported durability entry')
+    fd=os.open(path,flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+PYTHON_SYNC
+}
 if [[ "$MODE" == check ]];then
   say INFO 'READ ONLY: existing root Broker migration preflight'
   preflight
@@ -251,6 +270,13 @@ if [[ -f "$GUARD_UNIT" ]];then
  had_guard=1
  install -o root -g root -m 0644 "$GUARD_UNIT" "$backup/guard.before"
 fi
+# Persist the operator's recovery copies *before* replacing the installed
+# trusted root worker or systemd unit. An interrupted migration must not
+# leave an unflushed or zero-byte backup pretending to be recoverable.
+backup_sync=("file:$backup/worker.before" "file:$backup/unit.before")
+if ((had_recovery));then backup_sync+=("file:$backup/recovery.before");fi
+if ((had_guard));then backup_sync+=("file:$backup/guard.before");fi
+sync_broker_files "${backup_sync[@]}" "dir:$backup" "dir:$BACKUP_ROOT"
 # stage new artifacts in each destination filesystem before swapping.
 worker_tmp="$(mktemp /usr/local/libexec/.linux-panel-worker.XXXXXXXX)"
 unit_tmp="$(mktemp /etc/systemd/system/.linux-panel-unit.XXXXXXXX)"
@@ -316,6 +342,9 @@ mv -fT -- "$worker_tmp" "$WORKER"
 mv -fT -- "$unit_tmp" "$UNIT"
 mv -fT -- "$recovery_tmp" "$RECOVERY_UNIT"
 mv -fT -- "$guard_tmp" "$GUARD_UNIT"
+sync_broker_files \
+ "file:$WORKER" "file:$UNIT" "file:$RECOVERY_UNIT" "file:$GUARD_UNIT" \
+ "dir:/usr/local/libexec" "dir:/etc/systemd/system" "dir:$GUARD_DIR"
 systemctl daemon-reload
 # Do not invoke any Broker service or restart the Web service.
 if ! cmp -s "$WORKER" "$SOURCE_WORKER" ||
