@@ -262,6 +262,25 @@ if [[ "$MODE" == verify ]];then
  summary || exit 1
  exit 0
 fi
+# Flush the immutable root executor and all unit/source-pin names before
+# treating fresh privileged installation as completed.
+sync_installed_paths(){
+ /usr/bin/python3 -I - "$@" <<'PYTHON_SYNC'
+import os,sys
+for spec in sys.argv[1:]:
+    kind,path=spec.split(':',1)
+    flags=os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC
+    if kind=='dir':
+        flags|=os.O_DIRECTORY
+    elif kind!='file':
+        raise ValueError('Unsupported durability entry')
+    fd=os.open(path,flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+PYTHON_SYNC
+}
 if [[ "$MODE" == apply ]];then
  report INFO 'Preflight before explicit privileged installation'
  fresh_checks
@@ -287,6 +306,14 @@ if [[ "$MODE" == apply ]];then
  install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update-guard.conf" "$GUARD_UNIT"
  chown -R linuxpanel-updater:linuxpanel "$ROOT"
  chmod -R g+rX,g-w,o-w "$ROOT"
+ sync_installed_paths \
+  "file:$BACKUP_DIR/panel-state.before-broker.json" \
+  "file:$BACKUP_DIR/panel.env.before-broker" \
+  "file:$BACKUP_DIR/linux-panel.service.before-broker" \
+  "file:$WORKER" "file:$PIN" "file:$PATH_UNIT" "file:$SERVICE_UNIT" \
+  "file:$RECOVERY_UNIT" "file:$GUARD_UNIT" \
+  "dir:$BACKUP_DIR" "dir:$RESULT_DIR" "dir:/usr/local/libexec" \
+  "dir:/etc/linux-panel" "dir:/etc/systemd/system" "dir:$GUARD_DIR"
  runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js" ||
    die 'Panel lost code access; manual ownership recovery required'
  systemctl daemon-reload
