@@ -158,6 +158,46 @@ assert.equal(readStatus.json.result?.structuredContent?.lastResult?.id,receipt.i
 assert.equal(readStatus.json.result?.structuredContent?.lastResult?.status,'failed');
 note('MCP OAuth scope → direct enqueue → systemd rejection → scoped status succeeded');
 
+note('Positive '+positivePath+' path: valid SHA reaches root Broker');
+const current=ok(await write('/api/actions/panel.update.check/execute',
+  {input:{targetSha}}));
+assert.equal(current.json.result.currentSha,oldSha);
+assert.equal(current.json.result.targetSha,targetSha);
+let positiveId;
+if(positivePath==='web'){
+  const proposal=ok(await write('/api/actions/panel.update.request/execute',
+    {input:{targetSha}}));
+  assert.equal(proposal.json.result.status,'approval_required');
+  positiveId=proposal.json.result.id;
+  const approval=ok(await write('/api/panel/update/approve',
+    {id:positiveId,currentPassword:password}));
+  assert.equal(approval.json.status,'queued');
+  assert.equal(approval.json.id,positiveId);
+}else{
+  const execution=await rpc(direct,'tools/call',
+    {name:'panel.update.execute',arguments:{targetSha}});
+  assert.equal(execution.status,200);
+  assert.equal(execution.json.result?.structuredContent?.status,'queued',
+    JSON.stringify(execution));
+  positiveId=execution.json.result.structuredContent.id;
+}
+assert.match(positiveId,/^[a-f0-9]{32}$/);
+await waitResult(positiveId,'success');
+const after=ok(await write('/api/actions/panel.update.check/execute',
+  {input:{targetSha}}));
+assert.equal(after.json.result.currentSha,targetSha);
+assert.equal(after.json.result.status,'up_to_date');
+assert.equal(ok(await req('/api/auth/status')).json.initialized,true);
+const afterMcp=await rpc(reader,'tools/call',
+  {name:'panel.update.status',arguments:{}});
+assert.equal(afterMcp.status,200,'Prior OAuth bearer must reconnect after restart');
+assert.equal(afterMcp.json.result?.structuredContent?.lastResult?.id,positiveId);
+assert.equal(afterMcp.json.result?.structuredContent?.lastResult?.status,'success');
+const afterDirect=await rpc(direct,'tools/list');
+assert.equal(afterDirect.status,200);
+assert.ok(afterDirect.json.result.tools.some(t=>t.name==='panel.update.execute'));
+note('Valid SHA deployed; Web and OAuth MCP resumed with correct status');
+
 note('Revoke policy and grant; old bearer must fail without deployment');
 const current=ok(await req('/api/extensions/mcp/settings')).json.policy;
 ok(await req('/api/extensions/mcp/settings',{method:'PUT',body:{
