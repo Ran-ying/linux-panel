@@ -1,5 +1,19 @@
 import os from 'node:os';
 
+async function readSystemInfo() {
+  return {
+    hostname: os.hostname(),
+    platform: os.platform(),
+    release: os.release(),
+    arch: os.arch(),
+    cpuCount: os.availableParallelism(),
+    totalMemoryBytes: os.totalmem(),
+    freeMemoryBytes: os.freemem(),
+    uptimeSeconds: os.uptime(),
+    nodeVersion: process.version
+  };
+}
+
 export default {
   id: 'system.info',
   title: '读取系统基本信息',
@@ -20,16 +34,6 @@ export default {
     additionalProperties: false
   },
   explain: 'os 模块读取当前 Node.js 进程所在主机。availableParallelism 是进程可使用的并行度，不等同于物理 CPU 核心数。',
-  createPlan: async () => [{ type: 'node-api', description: '调用 os.platform(), os.totalmem(), os.uptime() 等 Node.js 只读 API' }],
-  execute: async () => ({
-    hostname: os.hostname(),
-    platform: os.platform(),
-    release: os.release(),
-    arch: os.arch(),
-    cpuCount: os.availableParallelism(),
-    totalMemoryBytes: os.totalmem(),
-    freeMemoryBytes: os.freemem(),
-    uptimeSeconds: os.uptime(),
-    nodeVersion: process.version
-  })
+  createPlan: async () => [{ type: 'node-api', code: readSystemInfo.toString() }],
+  execute: readSystemInfo
 };
