@@ -343,10 +343,11 @@ peak_file="$(mktemp /tmp/lp-updater-memory-peak.XXXXXXXX)"
 (
  max=0
  while [[ ! -e "$peak_file.stop" ]];do
-   control_group="$(systemctl show linux-panel-update.service -p ControlGroup --value)"
+   control_group="$(systemctl show linux-panel-update.service -p ControlGroup --value 2>/dev/null || true)"
    if [[ "$control_group" == /system.slice/linux-panel-update.service &&
          -r "/sys/fs/cgroup${control_group}/memory.peak" ]];then
-     sample="$(cat "/sys/fs/cgroup${control_group}/memory.peak")"
+     # The oneshot cgroup may vanish between -r and cat on completion.
+     sample="$(cat "/sys/fs/cgroup${control_group}/memory.peak" 2>/dev/null || true)"
      if [[ "$sample" =~ ^[0-9]+$ ]] && ((sample>max));then
        max="$sample"
        printf '%s\n' "$max" > "$peak_file"
