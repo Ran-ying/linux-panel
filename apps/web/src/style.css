@@ -360,3 +360,7 @@ table{min-width:500px}
   .theme-capsule button{width:44px;height:44px}
   .auth-card{width:min(430px,100%)}
 }
+
+/* Stretch the mobile header rows; inherited dock centering must not clip navigation. */
+.module-sidebar{align-items:stretch}
+.sidebar-settings{width:100%}
