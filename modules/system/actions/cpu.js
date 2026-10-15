@@ -16,6 +16,20 @@ export function cpuUsageBetween(before, after) {
   return Number((Math.max(0, Math.min(1, 1 - (after.idle - before.idle) / elapsed)) * 100).toFixed(1));
 }
 
+async function readCpuUsage() {
+const initial = os.cpus();
+  const start = cpuSnapshot(initial);
+  await delay(250);
+  const end = cpuSnapshot(os.cpus());
+  return {
+    usagePercent: cpuUsageBetween(start, end),
+    logicalCpus: initial.length,
+    sampleWindowMs: 250,
+    model: initial[0]?.model ?? 'Unknown',
+    source: 'node-os-sample'
+  };
+}
+
 export default {
   id: 'system.cpu',
   title: 'CPU 使用情况',
@@ -34,18 +48,6 @@ export default {
     additionalProperties: false
   },
   explain: '对 os.cpus() 两次快照取差值。它是主机整体 CPU 忙碌比例的短时间近似值，不是当前 Node.js 进程 CPU 占用，也不是 load average。',
-  createPlan: async () => [{ type: 'node-api', description: '两次调用 os.cpus()，间隔约 250 ms，计算忙碌时间占比' }],
-  execute: async () => {
-    const initial = os.cpus();
-    const start = cpuSnapshot(initial);
-    await delay(250);
-    const end = cpuSnapshot(os.cpus());
-    return {
-      usagePercent: cpuUsageBetween(start, end),
-      logicalCpus: initial.length,
-      sampleWindowMs: 250,
-      model: initial[0]?.model ?? 'Unknown',
-      source: 'node-os-sample'
-    };
-  }
+  createPlan: async () => [{ type: 'node-api', code: readCpuUsage.toString() }],
+  execute: readCpuUsage
 };
