@@ -159,10 +159,10 @@ assert.equal(readStatus.json.result?.structuredContent?.lastResult?.status,'fail
 note('MCP OAuth scope → direct enqueue → systemd rejection → scoped status succeeded');
 
 note('Positive '+positivePath+' path: valid SHA reaches root Broker');
-const current=ok(await write('/api/actions/panel.update.check/execute',
+const initialCheck=ok(await write('/api/actions/panel.update.check/execute',
   {input:{targetSha}}));
-assert.equal(current.json.result.currentSha,oldSha);
-assert.equal(current.json.result.targetSha,targetSha);
+assert.equal(initialCheck.json.result.currentSha,oldSha);
+assert.equal(initialCheck.json.result.targetSha,targetSha);
 let positiveId;
 if(positivePath==='web'){
   const proposal=ok(await write('/api/actions/panel.update.request/execute',
