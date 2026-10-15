@@ -71,67 +71,76 @@ a client revokes its grant and tokens.
   client is trusted for that capability. This mode is opt-in at the global
   policy level, not a mechanism for shared third-party tenant access.
 
-## Git Web-read regression after a successful update (2026-10-15)
+## Git refs group access without breaking systemd sandbox (2026-10-15)
 
-If direct MCP execution returns `Unable to inspect Git revision` while
-`git ls-remote origin refs/heads/main` works as `linuxpanel`, do not
-disable Git ownership checks or run the root Broker directly. The
-unprivileged Web process needs read access to the **local** Git branch ref
-named by `.git/HEAD`. The root worker deliberately uses `umask 077`
-when running Git as `linuxpanel-updater`; after fast-forward, a replaced
-`.git/refs/heads/main` may be `0600` or have group
-`linuxpanel-updater`, which the distinct Web account cannot read.
+The fixed Broker runs Git as `linuxpanel-updater` with `umask 077` under
+`RestrictSUIDSGID=true`. Its distinct Web user, `linuxpanel`, must be
+able to read local Git `HEAD` for Web/MCP update preflight. Earlier
+`core.sharedRepository=0640` allowed group-read for refs but made Git
+attempt SGID directory creation for new fetched objects. The fixed root
+worker's systemd seccomp rejects this with `Operation not permitted`.
+**Do not weaken the systemd sandbox or keep numeric core.sharedRepository.**
 
-Read-only diagnosis:
+The corrected *fresh installer* uses local `core.sharedRepository=umask`
+and Linux POSIX default ACLs, via the Python stdlib helper
+[`scripts/configure-git-web-acl.py`](../scripts/configure-git-web-acl.py).
+Default ACLs apply to Git metadata directory descendants created under a
+restrictive umask without making Git explicitly request SGID bits.
+Named `linuxpanel` group entries grant only read/traverse, not write.
+New installs apply this before activating the Broker.
 
-```bash
-sudo runuser -u linuxpanel-updater -- git -C /opt/linux-panel symbolic-ref HEAD
-sudo namei -l /opt/linux-panel/.git/refs/heads/main
-sudo ls -l /opt/linux-panel/.git/packed-refs 2>/dev/null || true
-sudo runuser -u linuxpanel -- git -c safe.directory=/opt/linux-panel -C /opt/linux-panel rev-parse HEAD
-```
+### Already-installed Broker: one-time scoped operator repair
 
-**One-time, operator-reviewed repair** for an otherwise clean and healthy
-existing Broker installation (no pending transaction/markers): set
-`core.sharedRepository=0640` in the **local** checkout, and give only
-the Git reference files group **read** plus setgid on reference parents
-so future refs inherit group `linuxpanel`. This does **not** grant Web
-write access and is not a root worker replacement. Do not use the
-shorthand `core.sharedRepository=group`: that grants group write and
-would let the Web identity modify Git metadata.
+When an MCP execution returns `queued` then a durable `failed` result,
+and `journalctl -u linux-panel-update.service` shows
+`error: unable to create temporary file: Operation not permitted` at
+`git fetch`, confirm `core.sharedRepository` is `0640`; use the
+following preflight and repair. It does **not** restart the service,
+reinstall the Broker, fetch source or change public/private server data.
 
 ```bash
 ROOT=/opt/linux-panel
+sudo systemctl is-active --quiet linux-panel.service
+! systemctl is-active --quiet linux-panel-update.service
 sudo test ! -e /var/lib/linux-panel-update-root/active-transaction
 sudo test ! -e /var/lib/linux-panel/update-trigger
 sudo test ! -e /var/lib/linux-panel/update-processing
-sudo runuser -u linuxpanel-updater -- git -C "$ROOT" status --porcelain
-# The above output MUST be empty before continuing.
-sudo runuser -u linuxpanel-updater -- git -C "$ROOT" config --local core.sharedRepository 0640
-for d in "$ROOT/.git" "$ROOT/.git/refs" "$ROOT/.git/refs/heads"; do
-  sudo test -d "$d" && sudo test ! -L "$d" || exit 1
-  sudo chgrp -- linuxpanel "$d"
-  sudo runuser -u linuxpanel-updater -- chmod g+rx,g+s,g-w,o-w "$d"
+test -z "$(sudo runuser -u linuxpanel-updater -- git -C "$ROOT" status --porcelain)"
+sudo runuser -u linuxpanel-updater -- git -C "$ROOT" config --local core.sharedRepository umask
+
+# Ubuntu/Debian may require: sudo apt install acl
+command -v setfacl
+command -v getfacl
+for d in .git .git/refs .git/refs/heads .git/refs/remotes \
+         .git/refs/remotes/origin .git/objects; do
+  if sudo test -d "$ROOT/$d"; then
+    sudo test ! -L "$ROOT/$d" || exit 1
+    sudo setfacl -m 'g:linuxpanel:rx,m::rx,o::---,d:g:linuxpanel:rx,d:m::rx,d:o::---' "$ROOT/$d"
+  fi
 done
-for f in "$ROOT/.git/HEAD" "$ROOT/.git/refs/heads/main" "$ROOT/.git/packed-refs"; do
-  if sudo test -e "$f"; then
-    sudo test -f "$f" && sudo test ! -L "$f" || exit 1
-    sudo chgrp -- linuxpanel "$f"
-    sudo runuser -u linuxpanel-updater -- chmod g+r,g-w,o-w "$f"
+for f in .git/HEAD .git/config .git/refs/heads/main \
+         .git/refs/remotes/origin/main .git/packed-refs; do
+  if sudo test -f "$ROOT/$f"; then
+    sudo test ! -L "$ROOT/$f" || exit 1
+    sudo setfacl -m 'g:linuxpanel:r--,m::r--,o::---' "$ROOT/$f"
   fi
 done
 sudo runuser -u linuxpanel -- git -c safe.directory=/opt/linux-panel -C "$ROOT" rev-parse HEAD
+sudo getfacl -p "$ROOT/.git/refs/heads" "$ROOT/.git/objects"
 ```
 
-Before future commits, consider also setting setgid on
-`$ROOT/.git/objects` if a read-only Git use case needs object traversal.
-Existing installs require the above **one-time** repair; new installations
-using the current `install-update-broker.sh --apply` configure
-read-only Git sharing automatically after their initial ownership handover.
-Never run the fresh installer `--apply` again on an already installed
-Broker host. Always review the target `main` and the CI result before
-retrying `panel_update_execute`; queue success does not imply deployment
-success.
+**Preflight commands must each succeed before proceeding.** Git must be
+clean, no pending root journal/markers, and the Web service must be healthy.
+If `setfacl` or filesystem ACL support is unavailable, stop and get an
+operator-reviewed alternative instead of disabling `RestrictSUIDSGID`.
+Keep `core.sharedRepository=umask`; do **not** change it back to
+`0640` or `group`.
+
+After checking the exact reviewed `main` and green CI, enqueue one update
+through MCP and check the persisted result, clean exit of the worker and
+Web/MCP health. Never equate a `queued` response with deployment success,
+and do not reinstall/migrate the immutable privileged worker for this
+ACL-only issue.
 
 ## Independent operator-owned Broker installation: check → apply → verify → activate
 
