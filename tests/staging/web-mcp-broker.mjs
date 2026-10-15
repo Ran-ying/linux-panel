@@ -38,16 +38,23 @@ async function status(){
  return r.json.result;
 }
 async function waitResult(id,expected){
- for(let i=0;i<90;i++){
-   const s=await status();
-   if(s.lastResult?.id===id){
-      assert.equal(s.lastResult.status,expected,JSON.stringify(s));
-      assert.equal(s.pending,null,'Broker result must clear matching queued request');
-      return;
+ let lastNetworkError;
+ for(let i=0;i<240;i++){
+   try{
+     const s=await status();
+     if(s.lastResult?.id===id){
+       assert.equal(s.lastResult.status,expected,JSON.stringify(s));
+       assert.equal(s.pending,null,'Broker result must clear matching queued request');
+       return;
+     }
+   }catch(e){
+     // Fastify deliberately restarts mid-deployment. Never suppress API errors.
+     if(e?.name==='AssertionError')throw e;
+     lastNetworkError=e;
    }
-   await pause(500);
+   await pause(1000);
  }
- throw new Error('No Broker result for '+id);
+ throw new Error('Broker result timeout for '+id+(lastNetworkError?': '+lastNetworkError:''));
 }
 function parseRpc(t){
  const d=t.split('\n').filter(v=>v.startsWith('data:'));
