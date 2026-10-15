@@ -68,7 +68,10 @@ TARGET="$(git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 OLD="$(git -C "$ROOT" rev-parse "$TARGET^")"
 [[ "$TARGET" =~ ^[a-f0-9]{40}$ && "$OLD" =~ ^[a-f0-9]{40}$ ]] ||
  fail 'Invalid staging commit graph'
-git -C "$ROOT" reset --hard "$OLD"
+# Keep latest `main` checked out through the fresh Broker installation.
+# Only after latest --apply/--verify/ACL checks do we reset to OLD, to
+# exercise the separate production update route. Otherwise staging tests
+# the historical installer at OLD and silently misses fresh-install faults.
 note "Old HEAD: $OLD"
 note "Target HEAD: $TARGET"
 useradd --system --user-group --home-dir /var/lib/linux-panel \
@@ -117,6 +120,38 @@ note 'Apply existing restricted broker in DISABLED state'
 bash "$ROOT/scripts/install-update-broker.sh" --check
 bash "$ROOT/scripts/install-update-broker.sh" --apply
 bash "$ROOT/scripts/install-update-broker.sh" --verify
+# Fresh installation must make local HEAD readable to Web (without write)
+# and keep inherited POSIX ACLs. This catches the real cross-UID failure that
+# ordinary Node tests and a root-only Git checkout both missed in production.
+assert_web_git_acl(){
+ local expected="$1" web_sha='' shared=''
+ shared="$(runuser -u linuxpanel-updater -- git -C "$ROOT" config --local --get core.sharedRepository)" ||
+   fail 'Fresh Broker lacks local core.sharedRepository'
+ [[ "$shared" == umask ]] ||
+   fail "Unsafe Git sharedRepository mode ($shared); SGID conflicts with systemd seccomp"
+ web_sha="$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+   -C "$ROOT" rev-parse HEAD)" ||
+   fail 'Web cannot resolve Git HEAD'
+ [[ "$web_sha" == "$expected" ]] ||
+   fail "Web sees wrong Git HEAD: $web_sha"
+ runuser -u linuxpanel -- test -r "$ROOT/.git/refs/heads/main" ||
+   fail 'Web cannot read loose local main ref'
+ ! runuser -u linuxpanel -- test -w "$ROOT/.git/refs/heads/main" ||
+   fail 'Web account must not write local main ref'
+ /usr/bin/python3 -I - "$ROOT" <<'PY_ACL'
+import os, sys, pathlib
+root=pathlib.Path(sys.argv[1])
+for item in ('.git/refs/heads', '.git/objects'):
+    value=os.getxattr(root/item,'system.posix_acl_default')
+    assert len(value)>4 and value[:4]==(2).to_bytes(4,'little'), item
+PY_ACL
+}
+note 'Newly installed Git ACL accepts Web read and denies Web writes'
+assert_web_git_acl "$TARGET"
+# Fresh installer completed at the newest version; prepare an older runtime
+# for the actual Broker fast-forward without touching installed root artifacts.
+runuser -u linuxpanel-updater -- git -C "$ROOT" reset --hard "$OLD"
+assert_web_git_acl "$OLD"
 ! systemctl is-enabled --quiet linux-panel-update.path || fail 'Premature Broker activation'
 ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
  fail 'Web update gate unexpectedly enabled'
@@ -381,6 +416,8 @@ STAGE_PASSWORD="$STAGE_PASSWORD" STAGE_POSITIVE_PATH="$STAGE_POSITIVE_PATH" \
  STAGE_OLD_SHA="$OLD" STAGE_TARGET_SHA="$TARGET" \
  /opt/node24/bin/node "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
 [[ "$(head_now)" == "$TARGET" ]] || fail 'Positive HTTP update did not reach target SHA'
+note 'Web still reads Git HEAD after real restricted Git fetch and fast-forward'
+assert_web_git_acl "$TARGET"
 grep -Fq '"status":"success"' "$RESULT" || fail 'Root Broker did not report success'
 touch "$peak_file.stop"
 wait "$resource_sampler_pid" || fail 'Cgroup resource sampler unexpectedly failed'
