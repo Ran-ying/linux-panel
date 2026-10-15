@@ -1,3 +1,13 @@
+# One execution disclosure with concrete collector code — 2026-10-16
+
+Owner rejected repeated prose and vague “etc. APIs” previews. Read Action cards now have a single Execution content disclosure, replacing the old description/explanation disclosure, separate preview button and repeated preview heading/note/JSON UI. Existing write-operation notices remain visible. Opening the disclosure fetches preview independently of data loading and retains current results.
+
+The four API/file collectors expose the actual named execution function's source in preview `steps[].code`; execute uses that same function. System info lists every field/API/property (hostname, platform, release, arch, availableParallelism, totalmem, freemem, uptime, process.version), rather than a hand-written approximate API list. Memory/CPU/disk show their actual collector bodies, and services retain the concrete systemctl command/arguments. No synthetic Shell command or execution-history claim is introduced.
+
+Nine collector/registry tests and Vue build passed locally. Browser checks cover all nine system-info reads, the single disclosure/no redundant button, preserved results and exact service command. CI/screenshot review/deployment pending.
+
+Base/last confirmed test deployment: `aa41b5d3bb463544c1b21abc8ea672fc2b1d3599`, PR #90; durable MCP transaction `69da84b4b1377d633acbae4d682e3ef4`, success at 2026-10-15T22:00:46Z, panel active/running. Issue #54 records final evidence.
+
 # Theme selection border and readable execution steps — 2026-10-16
 
 Owner reported ambiguous Auto/moon selection in dark mode and requested seeing what each Action actually runs. The selected appearance button now has a 2px focus-color border in either palette. Rename preview entry to “View execution content” and render declared steps as commands with arguments, file reads, API descriptions or other implementation steps. The preview remains informational; existing data results and refresh preferences are retained. Raw step JSON remains available under a disclosure. No command is synthesized for Actions that directly use Node APIs, and this is not an execution-history log.

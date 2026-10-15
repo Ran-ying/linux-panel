@@ -10,6 +10,26 @@ export function parseMeminfo(content) {
   return values;
 }
 
+async function readMemoryUsage() {
+let totalBytes = os.totalmem();
+  let freeBytes = os.freemem();
+  let availableBytes = freeBytes;
+  let source = 'node-os-estimate';
+  if (process.platform === 'linux') {
+    const info = parseMeminfo(await readFile('/proc/meminfo', 'utf8'));
+    if (info.has('MemTotal')) totalBytes = info.get('MemTotal');
+    if (info.has('MemFree')) freeBytes = info.get('MemFree');
+    if (info.has('MemAvailable')) {
+      availableBytes = info.get('MemAvailable');
+      source = 'proc-meminfo';
+    }
+  }
+  availableBytes = Math.max(0, Math.min(totalBytes, availableBytes));
+  const usedBytes = totalBytes - availableBytes;
+  const usagePercent = totalBytes > 0 ? Number((usedBytes / totalBytes * 100).toFixed(1)) : 0;
+  return { totalBytes, freeBytes, availableBytes, usedBytes, usagePercent, source };
+}
+
 export default {
   id: 'system.memory',
   title: '内存使用情况',
@@ -27,26 +47,6 @@ export default {
     additionalProperties: false
   },
   explain: 'Linux 读取 /proc/meminfo：MemAvailable 估计不发生交换时可使用的内存。macOS os.freemem() 不等于系统活动监视器的内存压力。',
-  createPlan: async () => [process.platform === 'linux'
-    ? { type: 'file-read', path: '/proc/meminfo', description: '读取 MemTotal、MemFree、MemAvailable' }
-    : { type: 'node-api', description: '使用 os.totalmem() 和 os.freemem() 估算，macOS 数值仅供参考' }],
-  execute: async () => {
-    let totalBytes = os.totalmem();
-    let freeBytes = os.freemem();
-    let availableBytes = freeBytes;
-    let source = 'node-os-estimate';
-    if (process.platform === 'linux') {
-      const info = parseMeminfo(await readFile('/proc/meminfo', 'utf8'));
-      if (info.has('MemTotal')) totalBytes = info.get('MemTotal');
-      if (info.has('MemFree')) freeBytes = info.get('MemFree');
-      if (info.has('MemAvailable')) {
-        availableBytes = info.get('MemAvailable');
-        source = 'proc-meminfo';
-      }
-    }
-    availableBytes = Math.max(0, Math.min(totalBytes, availableBytes));
-    const usedBytes = totalBytes - availableBytes;
-    const usagePercent = totalBytes > 0 ? Number((usedBytes / totalBytes * 100).toFixed(1)) : 0;
-    return { totalBytes, freeBytes, availableBytes, usedBytes, usagePercent, source };
-  }
+  createPlan: async () => [{ type: process.platform === 'linux' ? 'file-read' : 'node-api', code: readMemoryUsage.toString() }],
+  execute: readMemoryUsage
 };
