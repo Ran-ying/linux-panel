@@ -1,6 +1,7 @@
 import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy } from '../../platform/mcp-policy.js';
 import * as auditHelpers from '../../platform/state-store.js';
 import { installOAuthRoutes } from './oauth-router.js';
+import {hash, allowedScopes} from './oauth-store.js';
 
 /**
  * Optional transport extension. Never trust Web cookies on /mcp.
@@ -111,7 +112,33 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
           auth.requirePermission({user:{id:live.userId,role:live.role}},direct.permission);
           const value=await engine.run(direct.id,input,'mcp',{
             authenticated:true,channel:'mcp',userId:live.userId,
-            clientId:live.clientId,directUpdateAuthorized:true
+            clientId:live.clientId,directUpdateAuthorized:true,
+            // Called by controller inside its atomic store.mutate(), AFTER
+            // Git revision I/O. Revocation/credential-epoch/policy changes
+            // serialized before this mutation deny the unqueued operation.
+            authorizeEnqueue:(state)=>{
+              const accessHash=hash(live.token);
+              const policy=mcpPolicy(state), oauth=state.mcp;
+              const token=oauth?.tokens?.find(t=>t.accessHash===accessHash &&
+                Number.isFinite(Date.parse(t.accessExpiresAt)) &&
+                Date.parse(t.accessExpiresAt)>Date.now());
+              const grant=token && oauth?.grants?.find(g=>g.id===token.grantId && !g.revoked);
+              const user=grant && state.users.find(u=>u.id===grant.userId);
+              const permitted=policy.enabled===true && policy.allowDirectUpdates===true &&
+                process.env.PANEL_UPDATER_ENABLED==='1' &&
+                allowedScopes(registry,state).includes('panel:update:execute') &&
+                registry.get(direct.id)===direct &&
+                token?.clientId===live.clientId &&
+                grant?.clientId===live.clientId &&
+                user?.id===live.userId &&
+                (user?.credentialEpoch??0)===(grant?.credentialEpoch??0) &&
+                grant?.resource===String(live.resource) &&
+                token?.scopes?.includes('panel:update:execute') &&
+                grant?.scopes?.includes('panel:update:execute');
+              if(!permitted)throw Object.assign(new Error(
+                'Direct update authorization revoked before queue commit'),{statusCode:403});
+              auth.requirePermission({user},direct.permission);
+            }
           });
           return {content:[{type:'text',text:JSON.stringify(value.result)}],
             structuredContent:value.result};
