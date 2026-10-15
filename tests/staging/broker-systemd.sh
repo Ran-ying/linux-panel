@@ -68,7 +68,10 @@ TARGET="$(git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 OLD="$(git -C "$ROOT" rev-parse "$TARGET^")"
 [[ "$TARGET" =~ ^[a-f0-9]{40}$ && "$OLD" =~ ^[a-f0-9]{40}$ ]] ||
  fail 'Invalid staging commit graph'
-git -C "$ROOT" reset --hard "$OLD"
+# Keep latest `main` checked out through the fresh Broker installation.
+# Only after latest --apply/--verify/ACL checks do we reset to OLD, to
+# exercise the separate production update route. Otherwise staging tests
+# the historical installer at OLD and silently misses fresh-install faults.
 note "Old HEAD: $OLD"
 note "Target HEAD: $TARGET"
 useradd --system --user-group --home-dir /var/lib/linux-panel \
@@ -144,6 +147,10 @@ for item in ('.git/refs/heads', '.git/objects'):
 PY_ACL
 }
 note 'Newly installed Git ACL accepts Web read and denies Web writes'
+assert_web_git_acl "$TARGET"
+# Fresh installer completed at the newest version; prepare an older runtime
+# for the actual Broker fast-forward without touching installed root artifacts.
+runuser -u linuxpanel-updater -- git -C "$ROOT" reset --hard "$OLD"
 assert_web_git_acl "$OLD"
 ! systemctl is-enabled --quiet linux-panel-update.path || fail 'Premature Broker activation'
 ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
