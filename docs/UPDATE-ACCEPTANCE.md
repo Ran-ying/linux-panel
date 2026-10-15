@@ -80,6 +80,25 @@ remains OPEN until those transitions are exercised under an actual VM
 shutdown with before/after integrity and operator evidence. Do not mark
 production-safe based on the smoke run alone.
 
+## Direct MCP authorization versus queue-commit race
+
+An MCP `panel.update.execute` request can legitimately spend time in
+asynchronous Git revision discovery after its initial bearer check.
+The direct-update adapter now passes a trusted synchronous authorization
+predicate through the Action engine, which the controller evaluates inside
+the **same serialized private-state mutation** that records an approved
+request. The predicate verifies the live token digest/expiry, grant scope,
+revocation flag, client/user/credential epoch, OAuth resource, role and
+current Web MCP policy. If a grant revocation or policy change commits
+first, the pending direct call is rejected with 403 **before** publishing
+either a queued request or the Broker trigger file. If queue commit occurs
+first, a later revocation cannot cancel an already-authorized deployment;
+that remains an explicit independent update transaction.
+
+This establishes a clear authorization linearization point, rather than
+mistaking the first bearer verification for an irrevocable permission to
+enqueue after arbitrarily slow I/O.
+
 ## Private-state persistence boundary
 
 The non-root Node.js `StateStore.mutate()` already fsyncs a new 0600 JSON

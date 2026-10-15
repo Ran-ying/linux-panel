@@ -158,3 +158,31 @@ test('direct enqueue fails closed and clears approval on missing Broker trigger 
   assert.equal((await ctrl.status()).pending,null);
   assert.equal((await store.snapshot()).updateRequest,undefined);
 });
+
+test('direct update grant revoked during Git revision read cannot create a Broker marker',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'lp-direct-revoke-race-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const root=join(dir,'checkout'),trigger=join(dir,'update-trigger');
+  await cmd('init',root);
+  await cmd('-C',root,'config','user.name','Test');
+  await cmd('-C',root,'config','user.email','test@example.invalid');
+  await cmd('-C',root,'commit','--allow-empty','-m','initial');
+  const store=new StateStore(join(dir,'state.json'));
+  const controller=createUpdateController({store,root,auth:new AuthService(store),
+    enabled:true,triggerPath:trigger,resultPath:join(dir,'result.json')});
+  // An independent queued state mutation simulates an administrator's grant
+  // revocation while async Git I/O is still unresolved. The direct queue
+  // authorization check must occur INSIDE its later serialized commit.
+  await store.mutate(s=>{s.directGrantRevoked=false;});
+  const queued=controller.executeDirect({userId:'admin',clientId:'oauth-a',
+    targetSha:'a'.repeat(40),
+    authorizeEnqueue:s=>{
+      if(s.directGrantRevoked)throw Object.assign(
+        new Error('Direct update scope revoked'),{statusCode:403});
+    }});
+  await store.mutate(s=>{s.directGrantRevoked=true;});
+  await assert.rejects(queued,{statusCode:403});
+  assert.equal((await store.snapshot()).updateRequest,undefined);
+  await assert.rejects(readFile(trigger,'utf8'),{code:'ENOENT'});
+  assert.equal((await store.snapshot()).audit.filter(x=>x.event==='panel.update.direct_queued').length,0);
+});

@@ -112,7 +112,7 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
   // with a live *separate* panel:update:execute OAuth grant and Web policy.
   // This is not a generic shell or an alternate remote selector. The fixed
   // root Broker re-verifies that target equals pinned origin/main and is FF.
-  const executeDirect=async({userId,clientId,targetSha})=>{
+  const executeDirect=async({userId,clientId,targetSha,authorizeEnqueue})=>{
     ensure();
     if(typeof userId!=='string'||!userId||typeof clientId!=='string'||!clientId)
       throw error('Authenticated update client required',403);
@@ -127,6 +127,10 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
       createdAt:new Date().toISOString(),expiresAt:Date.now()+TTL,
       approved:true,userId,clientId};
     await store.mutate(s=>{
+      // Linearization point for direct OAuth authorization and queue state.
+      // Revalidate against THIS serialized state snapshot, after potentially
+      // slow Git revision reads; grant revocation completed first must win.
+      if(typeof authorizeEnqueue==='function') authorizeEnqueue(s);
       const q=s.updateRequest;
       if(isBlocking(q,lastResult))
         throw error('Concurrent update request',409);
