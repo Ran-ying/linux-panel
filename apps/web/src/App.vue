@@ -50,7 +50,7 @@ async function chooseTab(tab, focus = false) {
 
 function collapseNavigation() {
   mobileExpanded.value = false;
-  sidebarToggle.value?.focus();
+  sidebarToggle.value?.focus({ preventScroll: true });
 }
 
 async function selectPage(id) {
