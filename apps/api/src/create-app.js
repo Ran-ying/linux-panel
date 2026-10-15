@@ -5,6 +5,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ActionRegistry } from '../../../core/action-registry.js';
 import { ActionEngine } from '../../../core/action-engine.js';
+import { ActionCommands } from '../../../platform/action-commands.js';
 import { ModuleManager } from '../../../core/module-manager.js';
 import { loadWebPresentations } from './web-presentations.js';
 import { StateStore, addAudit, DEFAULT_SETTINGS } from '../../../platform/state-store.js';
@@ -68,7 +69,8 @@ export async function createApp({
   registerListenerActions(registry,listenerController);
   // Platform capabilities are first-class Actions, not transport extensions.
   modules.loaded.push({ id:'panel', name:'面板维护', version:'0.5.0' });
-  const engine = new ActionEngine(registry);
+  const commands = new ActionCommands(store);
+  const engine = new ActionEngine(registry, {commands});
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
   const secure = publicOrigin.startsWith('https://');
   // Optional transport extensions are a separate lifecycle from business Actions.
@@ -254,6 +256,22 @@ export async function createApp({
       catch { return false; }
     }).map(a => a.id));
     return { presentations: presentations.filter(p => visible.has(p.actionId)) };
+  });
+  app.get('/api/actions/:id/commands', async request => {
+    const action=registry.get(request.params.id);
+    if (!action || action.exposure?.web!==true) throw Object.assign(new Error('Action unavailable'),{statusCode:404});
+    auth.requirePermission(request.panelIdentity,action.permission);
+    return commands.config(action);
+  });
+  app.put('/api/actions/:id/commands', async request => {
+    const action=registry.get(request.params.id);
+    if (!action || action.exposure?.web!==true) throw Object.assign(new Error('Action unavailable'),{statusCode:404});
+    auth.requirePermission(request.panelIdentity,'account:write');
+    auth.requirePermission(request.panelIdentity,action.permission);
+    const body=request.body;
+    if (!body || Object.keys(body).length!==1 || !Object.hasOwn(body,'commands'))
+      throw badRequest('Invalid command configuration');
+    return commands.save(action,body.commands,request.panelIdentity.user.id);
   });
   app.post('/api/actions/:id/preview', async request => {
     const action = registry.get(request.params.id);
