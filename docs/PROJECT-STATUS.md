@@ -1,3 +1,9 @@
+# Three-way appearance capsule — 2026-10-16
+
+Owner requested replacing the Follow system checkbox with Auto between sun and moon. Shared login/sidebar appearance control now offers Light → Auto → Dark as three always-available buttons; pressed state reflects the stored preference, with Auto following OS changes through the existing theme controller. No separate checkbox or disabled manual buttons remain. Browser coverage verifies ordering, switching, preference persistence and OS-follow behavior at five widths, alongside fixed phone header/short-screen navigation checks.
+
+Base main and last confirmed test deployment: `14a12fc6dacaefc57f8b6671a2f140880a7457af`, PR #88; durable MCP transaction `948d93cbb2bfb8672799ecfb04094db3`, success at 2026-10-15T21:37:59Z, panel active/running. CI/deployment pending at this snapshot; Issue #54 records final evidence.
+
 # Fixed phone header and tabbed overlay navigation — 2026-10-16
 
 Owner-requested mobile UI: keep panel name/version at left and appearance controls at right, replace the two visible navigation sections with business/panel tabs, and place an always-reachable collapse control below the selected list. The phone header is fixed inside viewport gutters. Only the collapsed header's measured height reserves document space; expanding overlays content without pushing it down. The selected list scrolls vertically when the header reaches the viewport's bottom gutter. Selecting a module collapses navigation and returns content to the top. Desktop keeps its existing sidebar layout.
