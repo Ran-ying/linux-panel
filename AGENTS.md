@@ -8,7 +8,7 @@
 2. [Cross-conversation handoff Issue #54](https://github.com/Ran-ying/linux-panel/issues/54) — living chronology; latest entry may supersede the static status document.
 3. [Broker acceptance/release evidence Issue #35](https://github.com/Ran-ying/linux-panel/issues/35) — CI/QEMU/systemd and production activation, known test limitations.
 4. [MCP update execution Issue #23](https://github.com/Ran-ying/linux-panel/issues/23) — historical OAuth scope blocker, trusted-client redesign and live tool discovery verification.
-5. [Architecture](docs/architecture.md), [updater](docs/UPDATER.md), [operator deployment gate](docs/PRODUCTION-DEPLOYMENT-GATE.md), [security](docs/security.md), [threat model](docs/THREAT-MODEL.md), [roadmap](docs/roadmap.md).
+5. [v0.5 release execution plan](docs/V0.5-RELEASE-PLAN.md), [roadmap](docs/roadmap.md), [architecture](docs/architecture.md), [updater](docs/UPDATER.md), [operator deployment gate](docs/PRODUCTION-DEPLOYMENT-GATE.md), [security](docs/security.md) and [threat model](docs/THREAT-MODEL.md).
 
 ## Design principles
 
@@ -20,6 +20,10 @@
 - Build/test/fault-inject only on disposable test machines. Do not disrupt other production services. Real host changes need operator approval and verification; a GitHub PR is not a deployment.
 - This repo is public: **no private hostnames/IPs, tokens, OAuth client IDs, passwords, cookies, account state, personal server configurations, or restore secrets** in issues, commits, logs or tests.
 - Check current `main`, open issues/PRs and active tool list. Do not assume a previously described tool is still exposed or that old status notes remain accurate. Use small reviewed branches/PRs with CI; report source evidence versus operator-reported evidence separately.
+
+## Agent routing for the next release gates
+
+For coding, repo-wide fixes, installation CLI and CI integration, **prefer Codex Cloud** working in small PRs. For browser-oriented acceptance, cross-app issue/release evidence, and documentation packages, **use ChatGPT Work**. ChatGPT coordinates milestone gates, reviews the exact CI and only performs production MCP deploys under the owner's explicit authorization. The owner is responsible for physical iPhone/Android testing and root-only VPS decisions. No cloud-only screenshot can substitute for actual device QA. Keep the phase checklists and exit criteria in [the v0.5 release plan](docs/V0.5-RELEASE-PLAN.md).
 
 ## Mandatory milestone wrap-up and cross-conversation handoff
 
