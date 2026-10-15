@@ -462,3 +462,11 @@ table{min-width:500px}
     border-radius:10px;background:var(--nav-bg)}
   .sidebar-tabs button{border-radius:7px}
 }
+
+@media(max-width:730px){
+  .sidebar-navigation{padding:0 12px 12px}
+  .sidebar-modules{scrollbar-gutter:auto}
+  .module-nav,.platform-nav{gap:8px}
+  .module-sidebar .module-toggle{border:1px solid var(--border-panel);border-radius:8px}
+  .sidebar-settings>.module-toggle{margin-top:8px}
+}
