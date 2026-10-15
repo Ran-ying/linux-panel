@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, onBeforeUnmount, watch, nextTick, ref, computed } from 'vue';
 import ActionCard from './components/ActionCard.vue';
 import UpdateManager from './components/UpdateManager.vue';
 import ListenerManager from './components/ListenerManager.vue';
@@ -18,6 +18,49 @@ const presentations = ref({});
 const settings = ref({ panelName: 'Linux Panel' });
 const activePage = ref('settings');
 const error = ref('');
+const mobileExpanded = ref(false);
+const mobileTab = ref('modules');
+const sidebarBrand = ref(null);
+const sidebarTabs = ref(null);
+const sidebarToggle = ref(null);
+const mobileHeaderHeight = ref(180);
+let headerObserver;
+
+watch([sidebarBrand, sidebarTabs, sidebarToggle], nodes => {
+  headerObserver?.disconnect();
+  if (!nodes.every(Boolean)) return;
+  const measure = () => {
+    mobileHeaderHeight.value = Math.ceil(nodes.reduce((height, node) =>
+      height + node.getBoundingClientRect().height, 2));
+  };
+  headerObserver = new ResizeObserver(measure);
+  nodes.forEach(node => headerObserver.observe(node));
+  measure();
+}, { flush: 'post' });
+onBeforeUnmount(() => headerObserver?.disconnect());
+
+async function chooseTab(tab, focus = false) {
+  mobileTab.value = tab;
+  mobileExpanded.value = true;
+  if (focus) {
+    await nextTick();
+    sidebarTabs.value?.querySelector('[aria-selected="true"]')?.focus();
+  }
+}
+
+function collapseNavigation() {
+  mobileExpanded.value = false;
+  sidebarToggle.value?.focus();
+}
+
+function selectPage(id) {
+  activePage.value = id;
+  mobileExpanded.value = false;
+  if (window.matchMedia('(max-width:730px)').matches) {
+    window.scrollTo({ top: 0 });
+    sidebarToggle.value?.focus();
+  }
+}
 
 const moduleGroups = computed(() => buildModuleNavigation(moduleDefinitions.value, actions.value));
 const businessGroups = computed(() => moduleGroups.value.filter(group => group.id !== 'panel'));
@@ -50,6 +93,8 @@ async function loadDashboard() {
 
 function signOutLocally() {
   session.value = null;
+  mobileExpanded.value = false;
+  mobileTab.value = 'modules';
   moduleDefinitions.value = [];
   actions.value = [];
   presentations.value = {};
@@ -113,36 +158,54 @@ onMounted(async () => {
   <main v-else class="layout" :aria-busy="checking">
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <div class="columns">
-      <aside class="module-sidebar">
-        <div class="sidebar-brand">
+      <div class="sidebar-slot" :style="{ '--mobile-header-height': mobileHeaderHeight + 'px' }">
+      <aside class="module-sidebar" :class="{ 'is-expanded': mobileExpanded, 'is-panel-tab': mobileTab === 'panel' }"
+        @keydown.esc="collapseNavigation">
+        <div ref="sidebarBrand" class="sidebar-brand">
           <div class="sidebar-heading"><h1>{{ settings.panelName || 'Linux Panel' }}</h1><span class="panel-version" aria-label="版本">v{{ panelVersion }}</span></div>
           <ThemeControl />
         </div>
-        <div class="sidebar-modules">
+        <div ref="sidebarTabs" class="sidebar-tabs" role="tablist" aria-label="导航分类"
+          @keydown.left.prevent="chooseTab('modules', true)" @keydown.right.prevent="chooseTab('panel', true)">
+          <button id="modules-tab" type="button" role="tab" :aria-selected="mobileTab === 'modules'"
+            :tabindex="mobileTab === 'modules' ? 0 : -1" aria-controls="business-navigation"
+            @click="chooseTab('modules')">功能模块</button>
+          <button id="panel-tab" type="button" role="tab" :aria-selected="mobileTab === 'panel'"
+            :tabindex="mobileTab === 'panel' ? 0 : -1" aria-controls="panel-navigation"
+            @click="chooseTab('panel')">面板功能</button>
+        </div>
+        <div id="sidebar-navigation" class="sidebar-navigation">
+        <div id="business-navigation" class="sidebar-modules">
           <div class="sidebar-group-label">功能模块</div>
         <nav class="module-nav" aria-label="业务模块">
           <button v-for="module in businessGroups" :key="module.id" type="button" class="module-toggle"
-            :class="{ active: activePage === module.id }" @click="activePage=module.id">
+            :class="{ active: activePage === module.id }" @click="selectPage(module.id)">
             {{ module.name }}
           </button>
           <div v-if="checking" class="sidebar-placeholder" aria-hidden="true"><span v-for="n in 3" :key="n" class="skeleton-line"></span></div>
           <p v-else-if="!businessGroups.length" class="muted small">尚无业务模块</p>
         </nav>
         </div>
-        <div class="sidebar-settings">
+        <div id="panel-navigation" class="sidebar-settings">
           <div class="sidebar-group-label">面板功能</div>
           <nav class="platform-nav" aria-label="面板功能">
             <button v-for="module in panelGroups" :key="module.id" type="button" class="module-toggle"
               :class="{ active: activePage === module.id }" @click="activePage=module.id">{{ module.name }}</button>
           </nav>
           <button type="button" class="module-toggle" :class="{ active: activePage === 'settings' }"
-            @click="activePage='settings'" :disabled="checking">面板设置</button>
+            @click="selectPage('settings')" :disabled="checking">面板设置</button>
           <div v-if="session && !checking" class="sidebar-account">
             <span>{{ session.user.username }}</span>
             <button type="button" @click="logout">退出登录</button>
           </div>
         </div>
+        </div>
+        <button ref="sidebarToggle" type="button" class="sidebar-collapse" :aria-expanded="mobileExpanded"
+          aria-controls="sidebar-navigation" @click="mobileExpanded ? collapseNavigation() : chooseTab(mobileTab)">
+          {{ mobileExpanded ? '收起' : '展开导航' }}
+        </button>
       </aside>
+      </div>
       <div v-if="checking" class="module-content dashboard-placeholder" aria-label="主界面加载中">
         <div class="module-intro"><h2>系统概览</h2></div>
         <section v-for="n in 3" :key="n" class="action-card" aria-hidden="true">
