@@ -238,3 +238,28 @@ test('legacy session upgrades once and synchronizes cookie without reviving expi
   await app.inject({method:'POST',url:'/api/auth/logout',headers});
   assert.equal((await app.inject({url:'/api/auth/session',headers})).statusCode,401);
 });
+
+test('command configuration is authenticated, CSRF/Origin protected and changes real read results',async t=>{
+  if(process.getuid?.()===0){t.skip('terminal execution refuses root');return;}
+  const {app,admin,login,store}=await fixture(t,true);
+  await admin();
+  const url='/api/actions/system.info/commands';
+  assert.equal((await app.inject(url)).statusCode,401);
+  const {cookie,payload}=await login();
+  const headers={cookie,'x-panel-csrf':payload.csrf,origin:'http://127.0.0.1:5173'};
+  const config=(await app.inject({url,headers})).json();
+  assert.equal(config.editable,true);
+  assert.equal(config.fields.length,9);
+  const commands=Object.fromEntries(config.fields.map(field=>[field.key,field.value]));
+  commands.hostname='printf configured-host';
+  assert.equal((await app.inject({method:'PUT',url,headers:{cookie},payload:{commands}})).statusCode,403);
+  assert.equal((await app.inject({method:'PUT',url,headers:{...headers,origin:'https://evil.example'},payload:{commands}})).statusCode,403);
+  assert.equal((await app.inject({method:'PUT',url,headers,payload:{commands:{...commands,extra:'id'}}})).statusCode,400);
+  assert.equal((await app.inject({method:'PUT',url,headers,payload:{commands}})).statusCode,200);
+  assert.equal((await store.snapshot()).actionCommands['system.info'].hostname,'printf configured-host');
+  const preview=await app.inject({method:'POST',url:'/api/actions/system.info/preview',headers,payload:{input:{}}});
+  assert.equal(preview.json().steps[0].command,'printf configured-host');
+  const result=await app.inject({method:'POST',url:'/api/actions/system.info/execute',headers,payload:{input:{}}});
+  assert.equal(result.statusCode,200,result.body);
+  assert.equal(result.json().result.hostname,'configured-host');
+});
