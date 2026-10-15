@@ -1,3 +1,11 @@
+# Bounded rounded Action cards — 2026-10-15
+
+Owner follow-up: cap main content at 1100px, keep it aligned beside the sidebar, frame every Action and the module title (including System Overview) with the same 14px rounded rectangle and full border as the sidebar. The shared 16px spacing now separates sidebar/content, title/cards and successive cards. Narrow screens retain equal 16px side gutters and the same vertical rhythm. Existing sidebar grouping, bounded height, module scrolling and loading-screen behavior are preserved.
+
+Browser acceptance covers every module and Settings at 320/390/730/1280/1920px, checking width cap, full rounded borders, sidebar/content spacing, successive card spacing and container overflow, alongside the existing authentication/theme/offline and crowded-sidebar scenarios. CI/screenshot review and deployment are pending at this snapshot.
+
+Last confirmed test-server deployment is PR #79 main `c81bd8284b4a9353e8d4948feb0a82af73912681`, durable MCP success `8e5d489a2282a540a3e0c5b7fb30eb59` at 18:08:01Z. Check Issue #54 for the final merged SHA, CI evidence and this UI update's durable deployment result. No Action permissions, authentication, updater or release tag changed.
+
 # Rounded sidebar and loading chrome — 2026-10-15
 
 Owner follow-up: restore the sidebar rounded rectangular outer frame with equal 16px left/top/bottom viewport gutters, cap its height and independently scroll only the business-module region. Separate business modules from built-in panel functions; maintenance and Settings belong to the fixed panel section, with account/logout below. Keep compact main-module spacing from PR #78. Version is now beside the panel name, not fixed at the top-right corner.
