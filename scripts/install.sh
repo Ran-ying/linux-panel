@@ -17,6 +17,9 @@ Options:
                       Default for loopback: http://127.0.0.1:PORT
   --node-bin FILE     Dedicated Node binary (npm in the same directory)
   --preflight         Read-only compatibility and port-conflict report
+  --check             Alias for --preflight (no changes)
+  --admin-password-stdin Read one admin password from stdin; for unattended CI.
+                      Never place passwords in arguments or environment values.
   --resume            Resume an interrupted FIRST install (before admin init).
                       Requires a clean, root-owned /opt/linux-panel Git checkout,
                       and no service, private state or panel.env.
@@ -43,6 +46,7 @@ REPO='https://github.com/Ran-ying/linux-panel.git'
 REF='main'
 PREFLIGHT_ONLY=0
 LP_RESUME=0
+LP_PASSWORD_STDIN=0
 while (($#)); do
   case "$1" in
     --host|--port|--public-origin|--repo|--ref|--node-bin)
@@ -53,7 +57,8 @@ while (($#)); do
         --repo) REPO="$2";; --ref) REF="$2";;
         --node-bin) LP_REQUESTED_NODE_BIN="$2";;
       esac; shift 2;;
-    --preflight) PREFLIGHT_ONLY=1; shift;;
+    --preflight|--check) PREFLIGHT_ONLY=1; shift;;
+    --admin-password-stdin) LP_PASSWORD_STDIN=1; shift;;
     --resume) LP_RESUME=1; shift;;
     --help|-h) usage; exit 0;;
     *) die "Unknown option: $1; see --help. Proxy/TLS configuration is outside this installer.";;
@@ -102,6 +107,20 @@ if ((PREFLIGHT_ONLY)); then
   exit 0
 fi
 ((EUID==0)) || die 'Run actual installation as root/sudo'
+if ((LP_PASSWORD_STDIN)); then
+  [[ ! -t 0 ]] || die '--admin-password-stdin requires redirected input'
+  # Keep the input out of argv, environment and every Git/npm child process.
+  unset LP_ADMIN_PASSWORD
+  IFS= read -r LP_ADMIN_PASSWORD || [[ -n "$LP_ADMIN_PASSWORD" ]] || die 'Missing admin password'
+  if IFS= read -r LP_EXTRA_LINE || [[ -n "$LP_EXTRA_LINE" ]]; then
+    die 'Provide exactly one password line'
+  fi
+  LP_PASSWORD_BYTES=$(printf '%s' "$LP_ADMIN_PASSWORD" | wc -c)
+  ((LP_PASSWORD_BYTES>=12 && LP_PASSWORD_BYTES<=256)) || die 'Password must be 12-256 UTF-8 bytes'
+  exec </dev/null
+else
+  [[ -t 0 ]] || die 'Interactive administrator setup needs a TTY; for CI use --admin-password-stdin'
+fi
 if [[ -n "$LP_REQUESTED_NODE_BIN" ]]; then
   export PATH="$(dirname "$NODE_BIN"):$PATH"
 fi
@@ -153,7 +172,12 @@ runuser -u linuxpanel -- test -r /opt/linux-panel/apps/web/dist/index.html ||
 runuser -u linuxpanel -- "$NODE_BIN" --input-type=module -e "await import('fastify'); await import('@fastify/static');" ||
   die 'Web account cannot import production Node dependencies after install'
 log 'Initialize admin credentials interactively (only once)'
-runuser -u linuxpanel -- env PANEL_DATA_DIR=/var/lib/linux-panel "$NODE_BIN" /opt/linux-panel/scripts/admin-init.js admin
+if ((LP_PASSWORD_STDIN)); then
+  printf '%s\n' "$LP_ADMIN_PASSWORD" | runuser -u linuxpanel -- env PANEL_DATA_DIR=/var/lib/linux-panel "$NODE_BIN" /opt/linux-panel/scripts/admin-init.js admin --password-stdin
+  unset LP_ADMIN_PASSWORD
+else
+  runuser -u linuxpanel -- env PANEL_DATA_DIR=/var/lib/linux-panel "$NODE_BIN" /opt/linux-panel/scripts/admin-init.js admin
+fi
 sed "s|ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" \
   deployment/systemd/linux-panel.service.example > /etc/systemd/system/linux-panel.service
 chmod 0644 /etc/systemd/system/linux-panel.service

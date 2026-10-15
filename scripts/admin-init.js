@@ -6,6 +6,25 @@ import { StateStore } from '../platform/state-store.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const username = process.argv[2] || 'admin';
+const fromStdin = process.argv[3] === '--password-stdin';
+if (process.argv.length > (fromStdin ? 4 : 3)) {
+  process.stderr.write('Usage: admin-init.js [username] [--password-stdin]\n');
+  process.exit(1);
+}
+
+async function stdinPassword() {
+  if (process.stdin.isTTY) throw new Error('--password-stdin requires a pipe or redirected file');
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of process.stdin) {
+    size += chunk.length;
+    if (size > 1024) throw new Error('Password input too large');
+    chunks.push(chunk);
+  }
+  const value = Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '');
+  if (/[\r\n\0]/.test(value)) throw new Error('Provide exactly one password line');
+  return value;
+}
 
 async function hiddenInput(prompt) {
   if (!process.stdin.isTTY || !process.stdin.setRawMode)
@@ -46,8 +65,8 @@ try {
   const path = resolve(process.env.PANEL_DATA_DIR || resolve(root, 'data'), 'panel-state.json');
   const auth = new AuthService(new StateStore(path));
   if (await auth.isInitialized()) throw new Error('Already initialized. No Web bootstrap or default password exists.');
-  const password = await hiddenInput('Create administrator password (12+ bytes): ');
-  const confirm = await hiddenInput('Confirm password: ');
+  const password = fromStdin ? await stdinPassword() : await hiddenInput('Create administrator password (12+ bytes): ');
+  const confirm = fromStdin ? password : await hiddenInput('Confirm password: ');
   if (password !== confirm) throw new Error('Passwords do not match');
   const user = await auth.bootstrap(username, password);
   process.stdout.write(`Created administrator "${user.username}". Private state saved under PANEL_DATA_DIR.\n`);

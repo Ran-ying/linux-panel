@@ -369,3 +369,19 @@ curl -i http://127.0.0.1:4188/api/auth/status
 **当前更新 Broker 未完成真实环境的故障注入与回滚验收**。安装面板不等于允许 AI 自动更新。参见 [UPDATER.md](UPDATER.md)、[UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) 和 [UPGRADING.md](UPGRADING.md)。
 
 如安装被 BLOCK，请修复后重新预检；如在 npm/build/账号初始化/systemd 步骤中失败，可能存在部分安装，**不要直接删除状态后重装**。共享主机需在业务低峰维护并记录原 Git SHA 和服务配置；日志中不要分享密码、Cookie、Token、OAuth 授权码、TOTP 恢复码或私钥。
+
+## 7. 引导安装与无人值守 CI
+
+首次使用可运行 `sudo bash scripts/setup.sh`，依次填写地址、端口、Node 路径和公开 Origin。向导先执行只读预检、展示实际命令，只有输入 `INSTALL` 才安装应用。它不会安装或启用 Broker，也不会打开 MCP 策略。
+
+- `bash scripts/setup.sh --plan --port 4888`：只打印命令。
+- `sudo bash scripts/setup.sh --check --node-bin /opt/node24/bin/node`：只读检查。
+- `sudo bash scripts/setup.sh --apply ...`：明确执行首次应用安装；已有实例仍拒绝覆盖。
+
+CI 使用 `--admin-password-stdin` 从标准输入提供**一行 12–256 UTF-8 字节**密码。不要把密码写入命令参数、环境变量或仓库；使用 CI secret manager 提供的受保护输入流。安装器不把输入传给 Git/npm，初始化后丢弃内存中的值。普通终端安装仍使用两次隐藏输入。密码输入错误须修正后重试，不要删已有账号或状态。
+
+自动验收位于 `.github/workflows/fresh-install.yml`：一次性 Ubuntu 24.04 runner 执行完整应用安装、systemd 启动、真实登录、重复安装拒绝、私有配置权限与 Broker 默认未安装检查。**Debian 12 实机完整安装尚未验收**；Broker 的更新/回滚验收仍是独立工作流。
+
+### 中断与移除
+
+先区分未初始化的部分安装和已经有账号的实例；`--resume` 仅接受前者且不能覆盖状态、配置或服务。失败后保留输出，按现有诊断和 UPGRADING.md 排查，勿删除私有状态来绕过检查。移除前备份 `/var/lib/linux-panel` 和 `/etc/linux-panel`，并实际验证备份可恢复；有 Broker 的实例必须先按 UPDATER.md 禁用 watcher、检查无事务并单独移除其 root 单元。应用服务由管理员停止/禁用后再归档配置、代码和状态；本向导不自动删除数据、不改代理或其他服务。
