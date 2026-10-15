@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Real guest-wide power cuts in a disposable QEMU Ubuntu 24.04 VM.
+# This tests fsync barriers, NOT the full root Broker Git/npm transaction.
+set -Eeuo pipefail
+[[ "$EUID" != 0 && -v GITHUB_ACTIONS && "$GITHUB_ACTIONS" == true &&
+   "$RUNNER_ENVIRONMENT" == github-hosted && "$RUNNER_OS" == Linux &&
+   -f "$GITHUB_WORKSPACE/platform/state-store.js" ]] ||
+  { echo "::error::Disposable GitHub-hosted Linux CI only" >&2; exit 2; }
+work="$(mktemp -d "$RUNNER_TEMP/lp-qemu-cut.XXXXXXXX")"
+vm_pid=''
+fail(){ echo "::error::QEMU power-cut: $*" >&2; exit 1; }
+note(){ echo "[qemu-cut] $*"; }
+cleanup(){
+  if [[ -n "$vm_pid" ]];then kill -KILL "$vm_pid" 2>/dev/null || true;fi
+  rm -rf -- "$work"
+}
+trap cleanup EXIT
+for cmd in qemu-system-x86_64 qemu-img cloud-localds ssh scp curl sha256sum python3 node;do
+  command -v "$cmd" >/dev/null || fail "Missing test command: $cmd"
+done
+note 'Fetch/verify official Ubuntu 24.04 cloud image (not a shared VPS)'
+base=https://cloud-images.ubuntu.com/releases/noble/release
+name=ubuntu-24.04-server-cloudimg-amd64.img
+curl -fsSL --retry 3 "$base/SHA256SUMS" -o "$work/SHA256SUMS"
+curl -fsSL --retry 3 "$base/$name" -o "$work/$name"
+grep -E '[[:space:]][*]?ubuntu-24\.04-server-cloudimg-amd64\.img$' \
+ "$work/SHA256SUMS" > "$work/image.sha"
+[[ -s "$work/image.sha" ]] || fail 'Official image checksum absent'
+(cd "$work" && sha256sum -c image.sha) || fail 'Cloud image checksum mismatch'
+cp "$work/$name" "$work/guest.qcow2"
+qemu-img resize "$work/guest.qcow2" 8G >/dev/null
+ssh-keygen -q -t ed25519 -N '' -f "$work/key"
+pubkey="$(cat "$work/key.pub")"
+cat > "$work/user-data" <<CLOUD
+#cloud-config
+ssh_pwauth: false
+users:
+  - default
+  - name: stage
+    shell: /bin/bash
+    groups: [sudo]
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - $pubkey
+CLOUD
+cat > "$work/meta-data" <<'META'
+instance-id: linux-panel-qemu-powercut-01
+local-hostname: lp-disposable-vm
+META
+cloud-localds "$work/seed.img" "$work/user-data" "$work/meta-data"
+ssh_run(){ ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=3 \
+  -i "$work/key" -p 22647 stage@127.0.0.1 "$@"; }
+scp_run(){ scp -q -P 22647 -o BatchMode=yes -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+  -i "$work/key" "$1" "stage@127.0.0.1:$2"; }
+boot(){
+  rm -f "$work/vm.pid"
+  qemu-system-x86_64 -machine accel=kvm:tcg -cpu max -smp 2 -m 2048 \
+    -drive "file=$work/guest.qcow2,format=qcow2,if=virtio" \
+    -drive "file=$work/seed.img,format=raw,media=cdrom" \
+    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:22647-:22 \
+    -device virtio-net-pci,netdev=net0 -display none \
+    -serial "file:$work/console.log" \
+    -daemonize -pidfile "$work/vm.pid" || fail 'QEMU did not start'
+  vm_pid="$(cat "$work/vm.pid")"
+  for i in $(seq 1 180);do
+    if ssh_run true >/dev/null 2>&1;then
+      ssh_run 'sudo cloud-init status --wait >/dev/null' ||
+        fail 'Guest cloud-init failed'
+      return
+    fi
+    sleep 2
+  done
+  tail -n 70 "$work/console.log" || true
+  fail 'Guest SSH did not become ready'
+}
+hard_cut(){
+  [[ "$vm_pid" =~ ^[0-9]+$ ]] || fail 'No valid guest VM process'
+  note "Host SIGKILL of QEMU process $vm_pid — no guest shutdown"
+  kill -KILL "$vm_pid" || fail 'VM hard power cut failed'
+  for i in $(seq 1 80);do
+    if ! kill -0 "$vm_pid" 2>/dev/null;then break;fi
+    sleep 0.1
+  done
+  vm_pid=''
+  rm -f "$work/vm.pid"
+}
+boot
+note 'Transfer actual StateStore and extracted fixed-worker fsync function'
+cp "$GITHUB_WORKSPACE/platform/state-store.js" "$work/state-store.js"
+printf '{"type":"module"}\n' > "$work/package.json"
+awk '/^durable_sync\(\)\{/{inside=1} inside{print} inside && /^}/{exit}' \
+ "$GITHUB_WORKSPACE/scripts/update-worker.sh" > "$work/durable-sync.sh"
+grep -q 'os.fsync(fd)' "$work/durable-sync.sh" || fail 'Worker fsync extraction failed'
+cat > "$work/state-test.mjs" <<'NODE'
+import {StateStore} from './state-store.js';
+const store=new StateStore('/home/stage/state/private.json');
+if(process.argv[2]==='write'){
+ await store.mutate(s=>{
+  s.settings.panelName='QEMU_POWER_CUT_COMMITTED';
+  s.audit.push({id:'qemu',at:'test',event:'powercut.durable'});
+ });
+}else{
+ const s=await store.snapshot();
+ if(s.settings.panelName!=='QEMU_POWER_CUT_COMMITTED' ||
+    !s.audit.some(a=>a.event==='powercut.durable'))
+   throw new Error('Private state lost across QEMU power cut');
+}
+NODE
+cat > "$work/phase1.sh" <<'PHASE1'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+source /home/stage/durable-sync.sh
+install -d -o root -g root -m 0700 /var/lib/linux-panel-update-root
+install -d -o root -g root -m 0700 /var/lib/linux-panel
+dir=/var/lib/linux-panel-update-root
+tmp="$(mktemp "$dir/.pending-transaction.XXXXXXXX")"
+printf 'id=%032d\nsha=%040d\nold=%040d\n' 1 2 3 > "$tmp"
+chmod 0600 "$tmp"
+durable_sync file "$tmp"
+mv -nT "$tmp" "$dir/active-transaction"
+durable_sync dir "$dir"
+printf 'id=%032d\nsha=%040d\n' 1 2 > /var/lib/linux-panel/update-processing
+chmod 0600 /var/lib/linux-panel/update-processing
+durable_sync file /var/lib/linux-panel/update-processing
+durable_sync dir /var/lib/linux-panel
+PHASE1
+cat > "$work/phase2.sh" <<'PHASE2'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+source /home/stage/durable-sync.sh
+dir=/var/lib/linux-panel-update-status
+install -d -o root -g root -m 0750 "$dir"
+tmp="$(mktemp "$dir/.update-result.XXXXXXXX")"
+printf '{"id":"%032d","sha":"%040d","status":"success","at":"2026-10-15T00:00:00Z"}\n' 1 2 > "$tmp"
+chmod 0640 "$tmp"
+durable_sync file "$tmp"
+mv -fT "$tmp" "$dir/result.json"
+durable_sync dir "$dir"
+rm -f /var/lib/linux-panel/update-processing
+durable_sync dir /var/lib/linux-panel
+rm -f /var/lib/linux-panel-update-root/active-transaction
+durable_sync dir /var/lib/linux-panel-update-root
+PHASE2
+for name in state-store.js package.json durable-sync.sh state-test.mjs phase1.sh phase2.sh;do
+  scp_run "$work/$name" "/home/stage/$name"
+done
+scp_run "$(command -v node)" /home/stage/node
+ssh_run 'chmod 700 /home/stage/node; mkdir -p /home/stage/state; chmod 700 /home/stage/state'
+ssh_run '/home/stage/node /home/stage/state-test.mjs write'
+ssh_run 'sudo bash /home/stage/phase1.sh'
+note 'POWER CUT A — synced state, journal, processing marker'
+hard_cut
+boot
+ssh_run '/home/stage/node /home/stage/state-test.mjs verify'
+ssh_run 'sudo test -s /var/lib/linux-panel-update-root/active-transaction &&
+  sudo test -s /var/lib/linux-panel/update-processing' ||
+  fail 'Power cut A lost journal or processing marker'
+mode="$(ssh_run 'sudo stat -c %a /var/lib/linux-panel-update-root/active-transaction')"
+[[ "$mode" == 600 ]] || fail 'Power cut A lost journal owner-only permissions'
+note 'PASS A: private state, journal and processing survived guest power cut'
+ssh_run 'sudo bash /home/stage/phase2.sh'
+note 'POWER CUT B — synced success and journal/processing cleanup'
+hard_cut
+boot
+ssh_run '/home/stage/node /home/stage/state-test.mjs verify'
+ssh_run "sudo grep -Fq '\"status\":\"success\"' /var/lib/linux-panel-update-status/result.json" ||
+  fail 'Power cut B lost success record'
+ssh_run 'sudo test ! -e /var/lib/linux-panel-update-root/active-transaction &&
+  sudo test ! -e /var/lib/linux-panel/update-processing' ||
+  fail 'Power cut B resurrected cleaned transaction marker'
+note 'PASS B: result and cleanup survived hard reset and reboot'
+note 'PARTIAL gate only — not full Git/npm/systemd Broker transaction power-loss acceptance'
