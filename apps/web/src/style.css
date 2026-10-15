@@ -413,3 +413,10 @@ table{min-width:500px}
   .columns{grid-template-columns:minmax(0,1fr);min-height:0}
   .module-intro{padding:14px}
 }
+
+/* Render the application shell immediately while session/data requests run. */
+.sidebar-placeholder{display:flex;flex-direction:column;gap:20px;padding:16px 14px}
+.skeleton-line{display:block;height:14px;border-radius:7px;background:var(--border-panel)}
+.dashboard-placeholder .action-card{display:flex;flex-direction:column;gap:18px;min-height:170px}
+.skeleton-title{width:35%;height:20px}
+.skeleton-short{width:60%}
