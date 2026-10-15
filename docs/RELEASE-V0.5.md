@@ -1,6 +1,6 @@
-# Linux Panel v0.5.0 — acceptance draft
+# Linux Panel v0.5.0
 
-**Draft: stable publication is pending the unchecked acceptance items below.** This draft does not claim physical-device testing, independent security audit or owner snapshot restoration.
+**Release approved by the project owner on 2026-10-15.** The owner accepted publication with the known limitations below. Physical-device testing, independent security audit and owner snapshot restoration are not claimed.
 
 ## Changes
 
@@ -14,19 +14,19 @@
 
 ## Installation and operations
 
-Start with [INSTALL.md](INSTALL.md). Use [UPGRADING.md](UPGRADING.md) for existing instances; do not overwrite private state with the first-install helper. Broker installation and activation are separate opt-ins in [UPDATER.md](UPDATER.md). Installed immutable root workers require separate operator migration when their bytes change.
+Start with [INSTALL.md](https://github.com/Ran-ying/linux-panel/blob/main/docs/INSTALL.md). Use [UPGRADING.md](https://github.com/Ran-ying/linux-panel/blob/main/docs/UPGRADING.md) for existing instances; do not overwrite private state with the first-install helper. Broker installation and activation are separate opt-ins in [UPDATER.md](https://github.com/Ran-ying/linux-panel/blob/main/docs/UPDATER.md). Installed immutable root workers require separate operator migration when their bytes change.
 
 Verified full application installation: Ubuntu 24.04. Debian 12 is an intended supported target whose complete install still needs acceptance. Node 24 is recommended. Check disk/RAM/swap preflight; resource recommendations are not performance guarantees.
 
-## Known limitations and publication checklist
+## Known limitations and follow-up work
 
 - [ ] Real iPhone Safari and Android Chrome home-screen installation, standalone login, keyboard and safe-area review.
 - [ ] Complete Debian 12 installation.
 - [ ] Owner snapshot restore/console recovery acceptance.
-- [ ] Owner decision on existing public historical private-host metadata. Current tracked source has no matching private hostname; no history rewrite was performed.
+- [x] Owner accepted publication with existing public historical private-host metadata on 2026-10-15. Current tracked source has no matching private hostname; no history rewrite was performed.
 - [ ] Independent security/release review and final issue triage.
-- [ ] Review exact release SHA, green CI, stage-by-stage test-server deployment results and final publication decision.
+- [x] Owner reviewed the reported green CI, four successful staged test-server deployments and outstanding limitations, and explicitly approved v0.5 publication on 2026-10-15.
 
 PWA viewport zoom restriction was expressly requested and may reduce accessibility. Offline mode is a static reconnect explanation; it cannot administer the server or serve cached private API data. There is no multi-admin RBAC, generic root shell, SSO or independent security certification.
 
-Evidence index: [PUBLIC-RELEASE.md](PUBLIC-RELEASE.md), [PROJECT-STATUS.md](PROJECT-STATUS.md), [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54), and [release plan](V0.5-RELEASE-PLAN.md). Do not equate a draft, green build, queued update, successful deployment and complete stable-release acceptance.
+Evidence index: [PUBLIC-RELEASE.md](https://github.com/Ran-ying/linux-panel/blob/main/docs/PUBLIC-RELEASE.md), [PROJECT-STATUS.md](https://github.com/Ran-ying/linux-panel/blob/main/docs/PROJECT-STATUS.md), [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54), and [release plan](https://github.com/Ran-ying/linux-panel/blob/main/docs/V0.5-RELEASE-PLAN.md). Publication is an owner decision; the unchecked follow-up items remain unverified and must not be described as passed.
