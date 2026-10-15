@@ -48,7 +48,7 @@ start_panel(){
 # A systemctl start or active PID alone never proves Fastify is serving.
 panel_healthy(){
   local PANEL_ENV DEFAULT_PORT OVERRIDE_PORT PROBE_PORT ORIGIN HOST ready attempt
-# Probe the configured listener, not a hard-coded 4188.
+  # Probe the configured listener, not a hard-coded 4188.
   # The state is untrusted for executable purposes; only validated numeric port
   # and exact configured HTTP Host are ever used with curl.
   PANEL_ENV=/etc/linux-panel/panel.env
@@ -65,7 +65,7 @@ panel_healthy(){
   ' "$STATE/panel-state.json")"
   PROBE_PORT="${OVERRIDE_PORT:-$DEFAULT_PORT}"
   [[ "$PROBE_PORT" =~ ^[0-9]{4,5}$ ]] && ((PROBE_PORT>=1024 && PROBE_PORT<=65535)) ||
-    { rollback; exit 1; }
+    return 1
   ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' "$PANEL_ENV" | tail -n 1)"
   [[ -n "$ORIGIN" ]] || ORIGIN="http://127.0.0.1:$PROBE_PORT"
   HOST="${ORIGIN#http://}"
