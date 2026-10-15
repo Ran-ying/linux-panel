@@ -456,3 +456,9 @@ table{min-width:500px}
 
 /* Three explicit preferences: light, automatic/system, dark. */
 .theme-capsule .theme-auto{font-size:.72rem;font-weight:650;letter-spacing:-.02em}
+
+@media(max-width:730px){
+  .sidebar-tabs{margin:8px 12px 12px;padding:3px;gap:4px;border:1px solid var(--border-panel);
+    border-radius:10px;background:var(--nav-bg)}
+  .sidebar-tabs button{border-radius:7px}
+}
