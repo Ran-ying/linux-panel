@@ -10,6 +10,7 @@ const props = defineProps({
 const emit = defineEmits(['signed-out', 'settings-changed']);
 const settings = ref({ panelName: 'Linux Panel', language: 'zh-CN', theme: 'dark' });
 const sessions = ref([]);
+const sessionDays = ref(30);
 const totpInfo=ref({enabled:false,recoveryCodesRemaining:0});
 const totpSetup=ref(null);
 const recoveryCodes=ref([]);
@@ -38,14 +39,16 @@ async function request(url, options = {}) {
 
 async function reload() {
   try {
-    const [cfg, list, events, factors] = await Promise.all([
+    const [cfg, list, events, factors, policy] = await Promise.all([
       request('/api/panel/settings'),
       request('/api/auth/sessions'),
       request('/api/panel/audit'),
-      request('/api/auth/totp')
+      request('/api/auth/totp'),
+      request('/api/auth/session-policy')
     ]);
     settings.value = cfg.settings;
     sessions.value = list.sessions;
+    sessionDays.value = policy.days;
     audit.value = events.events;
     totpInfo.value=factors;
     emit('settings-changed', cfg.settings);
@@ -93,6 +96,15 @@ function changePassword() {
     confirmPassword.value = '';
     emit('signed-out');
   }, '密码已更新；请重新登录');
+}
+
+function saveSessionPolicy() {
+  return execute(async () => {
+    await request('/api/auth/session-policy', {
+      method: 'PUT', body: JSON.stringify({ days: sessionDays.value })
+    });
+    await reload();
+  }, '登录有效期已保存，当前设备的到期时间已更新');
 }
 
 function revokeSession(id, current) {
@@ -178,6 +190,12 @@ onMounted(reload);
     </section>
     <section class="settings-section">
       <div class="section-heading"><h3>登录会话</h3><button type="button" @click="reload">刷新</button></div>
+      <form @submit.prevent="saveSessionPolicy" class="settings-form">
+        <label for="session-days">登录有效期（天）</label>
+        <input id="session-days" type="number" min="1" max="365" step="1" required v-model.number="sessionDays" />
+        <p class="muted small">默认 30 天，可设置 1–365 天。保存后，当前设备从现在起重新计时，后续登录使用此有效期；其他已登录设备保持原到期时间。</p>
+        <button type="submit" class="form-button" :disabled="busy">保存登录有效期</button>
+      </form>
       <p v-if="!sessions.length" class="muted">没有有效会话</p>
       <div v-for="session in sessions" :key="session.id" class="session-row">
         <div>
