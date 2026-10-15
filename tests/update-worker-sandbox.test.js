@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,statSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,statSync,chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const original=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
@@ -26,6 +26,10 @@ function prepare(){
  exec('git',['-C',root,'config','user.name','Test']);
  exec('git',['-C',root,'config','user.email','test@example.invalid']);
  writeFileSync(join(root,'version'),'1\n');
+ mkdirSync(join(root,'apps','api','src'),{recursive:true});
+ writeFileSync(join(root,'package.json'),'{"name":"fixture","type":"module","version":"1.0.0"}\n');
+ writeFileSync(join(root,'apps','api','src','server.js'),'export const version = 1;\n');
+ writeFileSync(join(root,'apps','api','src','create-app.js'),'export const boot = 1;\n');
  writeFileSync(join(root,'.gitignore'),'node_modules/\napps/web/dist/\n');
  exec('git',['-C',root,'add','.']);
  exec('git',['-C',root,'commit','-qm','first']);
@@ -34,10 +38,16 @@ function prepare(){
  exec('git',['-C',root,'remote','add','origin',remote]);
  exec('git',['-C',root,'push','-q','-u','origin','main']);
  writeFileSync(join(root,'version'),'2\n');
+ writeFileSync(join(root,'package.json'),'{"name":"fixture","type":"module","version":"2.0.0"}\n');
+ writeFileSync(join(root,'apps','api','src','create-app.js'),'export const boot = 2;\n');
  exec('git',['-C',root,'commit','-qam','second']);
  const target=exec('git',['-C',root,'rev-parse','HEAD']);
  exec('git',['-C',root,'push','-q','origin','main']);
  exec('git',['-C',root,'reset','--hard',old]);
+ // Simulate restrictive checkout ownership after Git reset under umask 077.
+ chmodSync(join(root,'package.json'),0o600);
+ chmodSync(join(root,'apps','api','src','create-app.js'),0o600);
+ chmodSync(join(root,'apps','api','src'),0o700);
  // The original installed service already has runtime dependencies available
  // even when backup fails before the update reaches npm ci.
  mkdirSync(join(root,'node_modules','fastify'),{recursive:true});
@@ -89,6 +99,10 @@ function prepare(){
   ['"$(stat -c %u:%a "$backup")" == 0:600','"$(stat -c %a "$backup")" == 600'],
   ['export PATH=/usr/sbin:/usr/bin:/sbin:/bin','export PATH='+JSON.stringify(bin)+':/usr/sbin:/usr/bin:/sbin:/bin'],
   ['as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }','as_updater(){ "$@"; }'],
+  ['web_can_read(){\\n  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$1"\\n}','web_can_read(){ /usr/bin/test -r "$1"; }'],
+  ['"$(stat -c %U "$ROOT")" == "$USER"','-O "$ROOT"'],
+  ['"$(stat -c %U "$path")" != "$USER"','! -O "$path"'],
+  ['"$(stat -c %U "$parent")" != "$USER"','! -O "$parent"'],
   ['[[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" && "$(stat -c %u "$ROOT_BACKUP")" -eq 0 ]] || { record failed;exit 2; }','[[ -d "$ROOT_BACKUP" && ! -L "$ROOT_BACKUP" ]] || { record failed; exit 2; }']
  ])worker=swap(worker,a,b);
  const securityLine=worker.split('\n').find(x=>x.includes('[[ "$EXPECTED" =~ ^('));
@@ -289,6 +303,31 @@ test('generated artifacts retain restricted world permissions and gain Web group
    const checks=chmodLog.match(/chgrp:/g)??[];
    assert.ok(checks.length>=(rollback?4:2),
      'Artifact normalization must run again after rollback rebuild');
+  }finally{f.cleanup();}
+ }
+});
+
+test('tracked source and root package manifest get Web group read/traverse on update and rollback',()=>{
+ for(const rollback of [false,true]){
+  const f=prepare();
+  try{
+   const initial=readFileSync(join(f.state,'panel-state.json'),'utf8');
+   const out=f.run({health:rollback});
+   assert.equal(out.result.status,rollback?'rolled_back':'success',
+    JSON.stringify(out.process));
+   assert.equal(readFileSync(join(f.state,'panel-state.json'),'utf8'),initial);
+   for(const path of [
+    join(f.root,'package.json'),
+    join(f.root,'apps','api','src','server.js'),
+    join(f.root,'apps','api','src','create-app.js'),
+    join(f.root,'apps','api','src')
+   ]){
+    const mode=statSync(path).mode & 0o777;
+    assert.ok(mode & 0o040,'Missing Web group read: '+path+' '+mode.toString(8));
+    assert.equal(mode & 0o007,0,'World access must remain denied: '+path);
+    if(statSync(path).isDirectory())
+     assert.ok(mode & 0o010,'Web needs directory traverse: '+path);
+   }
   }finally{f.cleanup();}
  }
 });
