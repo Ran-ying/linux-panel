@@ -15,8 +15,12 @@ permissions:
 
 jobs:
   qemu-guest-power-cut:
-    name: Three VM power cuts / fsync and root-worker boot rollback
+    name: "Isolated QEMU guest / ${{ matrix.scenario }}"
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [file, broker]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -34,5 +38,7 @@ jobs:
           sudo apt-get -qq update
           sudo apt-get install -y -qq --no-install-recommends \
             qemu-system-x86 qemu-utils cloud-image-utils
-      - name: Hard kill guest three times, verify fsync and real root-worker recovery
+      - name: Hard kill fresh isolated guest and verify scenario
+        env:
+          LP_QEMU_SCENARIO: ${{ matrix.scenario }}
         run: bash tests/staging/qemu-powercut-smoke.sh
