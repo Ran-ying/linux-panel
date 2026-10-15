@@ -139,7 +139,7 @@ onMounted(refresh);
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="message" role="status" class="notice success-notice">{{ message }}</p>
     <p v-if="!enabled" class="notice">受限更新 Broker 尚未启用。仍可只读检查 Git 更新，但不能申请或执行部署；不可绕过旧版 systemd 隔离要求。</p>
-    <template>
+    <!-- Render controls directly. A bare nested HTML <template> is inert. -->
       <label for="panel-target-sha">目标完整 Git SHA（可选）</label>
       <input id="panel-target-sha" v-model.trim="sha" :disabled="busy"
         maxlength="40" spellcheck="false" autocapitalize="off" autocomplete="off"
@@ -216,6 +216,5 @@ onMounted(refresh);
           更新失败或已回滚。请检查服务状态与 Broker 的 systemd 日志；不能将代码回滚视为服务已恢复。
         </p>
       </section>
-    </template>
   </section>
 </template>
