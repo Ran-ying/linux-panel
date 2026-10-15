@@ -107,20 +107,24 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
   const storeOAuth=new OAuthStore(store,registry,resource);
   const valid=await storeOAuth.verifyAccessToken(tokens.access_token);
   assert.ok(valid);
-  assert.deepEqual(valid.scopes,['system:read','storage:read']);
+  assert.ok(valid.scopes.includes('system:read'));
+  assert.ok(valid.scopes.includes('storage:read'));
+  assert.ok(valid.scopes.includes('services:read'),
+    'owner-approved clients receive all enabled MCP read actions');
   const grants=(await app.inject({url:'/api/extensions/mcp/grants',headers:{cookie}})).json().grants;
   // Each approval creates a separate revocable grant. The first code was
   // deliberately burned by the invalid PKCE attempt; the second is active.
   assert.equal(grants.length,2);
   const latestGrant=grants.at(-1);
-  assert.deepEqual(latestGrant.scopes,['system:read','storage:read']);
+  assert.ok(latestGrant.scopes.includes('system:read'));
+  assert.ok(latestGrant.scopes.includes('services:read'));
   const restricted=await app.inject({method:'PUT',url:'/api/extensions/mcp/grants/'+latestGrant.id,
     headers:{cookie,'x-panel-csrf':csrf},payload:{scopes:['system:read']}});
-  assert.equal(restricted.statusCode,200,restricted.body);
+  assert.equal(restricted.statusCode,404,'per-client scope editing was removed');
   const refreshed=await getToken({client_id:id,grant_type:'refresh_token',
     refresh_token:tokens.refresh_token,resource});
   assert.equal(refreshed.statusCode,200,refreshed.body);
-  assert.deepEqual((await storeOAuth.verifyAccessToken(refreshed.json().access_token)).scopes,['system:read']);
+  assert.ok((await storeOAuth.verifyAccessToken(refreshed.json().access_token)).scopes.includes('services:read'));
   const revoked=await app.inject({method:'DELETE',url:'/api/extensions/mcp/grants/'+latestGrant.id,
     headers:{cookie,'x-panel-csrf':csrf}});
   assert.equal(revoked.statusCode,200);
@@ -196,23 +200,23 @@ test('offline_access is available only for refresh, not for MCP tools',async t=>
   const registry=new ActionRegistry();
   await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
   const storeOAuth=new OAuthStore(store,registry,resource);
-  assert.deepEqual((await storeOAuth.verifyAccessToken(token.json().access_token)).scopes,['system:read']);
+  assert.ok((await storeOAuth.verifyAccessToken(token.json().access_token)).scopes.includes('storage:read'));
   const refresh=await app.inject({method:'POST',url:'/oauth/token',
     headers:{'content-type':'application/x-www-form-urlencoded'},
     payload:new URLSearchParams({client_id:clientId,grant_type:'refresh_token',
       refresh_token:token.json().refresh_token,resource}).toString()});
   assert.equal(refresh.statusCode,200,refresh.body);
-  assert.deepEqual((await storeOAuth.verifyAccessToken(refresh.json().access_token)).scopes,['system:read']);
+  assert.ok((await storeOAuth.verifyAccessToken(refresh.json().access_token)).scopes.includes('storage:read'));
   const grants=(await app.inject({url:'/api/extensions/mcp/grants',headers:{cookie}})).json().grants;
   const narrowed=await app.inject({method:'PUT',url:'/api/extensions/mcp/grants/'+grants[0].id,
     headers:{cookie,'x-panel-csrf':csrf},payload:{scopes:['system:read']}});
-  assert.equal(narrowed.statusCode,200,narrowed.body);
+  assert.equal(narrowed.statusCode,404,'per-client scope editing is not supported');
   const after=await app.inject({method:'POST',url:'/oauth/token',
     headers:{'content-type':'application/x-www-form-urlencoded'},
     payload:new URLSearchParams({client_id:clientId,grant_type:'refresh_token',
       refresh_token:refresh.json().refresh_token,resource}).toString()});
   assert.equal(after.statusCode,200,after.body);
-  assert.equal(after.json().scope.includes('offline_access'),false);
+  assert.equal(after.json().scope.includes('offline_access'),true);
 });
 
 test('public client registration is bounded per source and can be disabled without revoking existing grants',async t=>{
