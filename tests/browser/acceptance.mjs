@@ -45,7 +45,7 @@ try {
     assert.equal(await page.locator('.sidebar-account').count(),0,'pending shell must not display private account data');
     releaseAuth();
     await navigation;
-    await page.unroute('**/api/auth/status');
+    await page.unroute('**/api/auth/session');
     await page.locator('#login-pass').fill(password);
     await page.locator('button[type="submit"]').click();
     await page.locator('.module-nav button').first().waitFor();
@@ -60,9 +60,12 @@ try {
     await page.locator('.module-nav button').first().waitFor();
     await page.unroute('**/api/auth/session');
     const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
+    assert.ok(!names.some(name=>name.trim()==='磁盘使用情况'),'disk usage must not have a separate sidebar item');
     for(const name of [...names,'面板设置']){
       await page.getByRole('button',{name:name.trim(),exact:true}).click();
       await page.locator('.module-content').waitFor();
+      if(name.trim()==='系统概览')
+        await page.getByRole('heading',{name:'根文件系统磁盘占用',exact:true}).waitFor();
       // All module containers must fit; tables/nav may scroll internally.
       const outside=await page.locator('.module-content, .action-card, .settings-section, .sidebar-brand, .module-nav, .sidebar-settings')
         .evaluateAll(nodes=>nodes.filter(n=>{
