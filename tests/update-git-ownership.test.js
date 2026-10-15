@@ -48,13 +48,31 @@ test('Web Git revision check accepts only configured foreign-owned checkout',asy
     else process.env.GIT_CONFIG_GLOBAL=oldGlobal;
   });
   if(foreignOwner) {
+    const gitEnv={env:{...process.env,GIT_TERMINAL_PROMPT:'0'}};
     await assert.rejects(execFile('git',['-c','safe.directory=','-C',root,'rev-parse','HEAD'],
-      {env:{...process.env,GIT_TERMINAL_PROMPT:'0'}}),/dubious ownership/i,
+      gitEnv),/dubious ownership/i,
       'Web user must reproduce Git different-owner failure without exception');
+    // Regression: the app receives a file URL path ending in '/', but Git
+    // needs the exact canonical directory when checking safe.directory.
+    // Git versions differ on trailing-slash canonicalization. On the
+    // production Git version the unnormalized override fails; Git 2.55 on
+    // CI accepts it. The normalized path must succeed on both versions.
+    try {
+      const raw=await execFile('git',['-c',`safe.directory=${root}/`,
+        '-C',`${root}/`,'rev-parse','HEAD'],gitEnv);
+      assert.equal(raw.stdout.trim(),head);
+      t.diagnostic('This Git version also accepts a trailing slash');
+    } catch(cause) {
+      assert.match(cause.message,/dubious ownership/i);
+      t.diagnostic('This Git version requires normalized safe.directory');
+    }
+    assert.equal((await execFile('git',['-c',`safe.directory=${root}`,
+      '-C',`${root}/`,'rev-parse','HEAD'],gitEnv)).stdout.trim(),head,
+      'a normalized safe.directory override allows the configured checkout');
   } else {
     t.diagnostic('Cross-UID ownership fixture unavailable on this host; parsing still checked.');
   }
-  const ctrl=createUpdateController({store:{},root,auth:{},enabled:true});
+  const ctrl=createUpdateController({store:{},root:root+'/',auth:{},enabled:true});
   assert.deepEqual(await ctrl.check({targetSha:head}),{
     status:'up_to_date',currentSha:head,targetSha:head,source:'supplied_sha'
   });
