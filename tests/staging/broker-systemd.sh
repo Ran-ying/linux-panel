@@ -232,6 +232,46 @@ sed -i '/^PANEL_UPDATER_ENABLED=1$/d' /etc/linux-panel/panel.env
 systemctl restart linux-panel.service
 wait_healthy || fail 'Web unhealthy after staging gate reset'
 unset STAGE_PASSWORD
+note 'Recovery must withhold rolled_back until restarted Web answers HTTP'
+# A synthetic crash before backup: old revision and state already intact.
+# Install a disposable runtime-only dummy Web process that reports active but
+# never answers HTTP, then require the root recovery journal to survive.
+unhealthy_id=66666666666666666666666666666666
+saved_state_sha="$(sha256sum /var/lib/linux-panel/panel-state.json | awk '{print $1}')"
+printf 'id=%s\\nsha=%s\\nold=%s\\n' "$unhealthy_id" "$TARGET" "$TARGET" \\
+ > /var/lib/linux-panel-update-root/active-transaction
+chmod 0600 /var/lib/linux-panel-update-root/active-transaction
+systemctl stop linux-panel.service
+install -d -m 0755 /run/systemd/system/linux-panel.service.d
+cat >/run/systemd/system/linux-panel.service.d/stage-unhealthy.conf <<'STAGE_SERVICE'
+[Service]
+ExecStart=
+ExecStart=/usr/bin/sleep 90
+Restart=no
+STAGE_SERVICE
+systemctl daemon-reload
+if systemctl start linux-panel-update-recover.service;then
+ fail 'Active-but-unhealthy Web must never be accepted as rolled_back'
+fi
+wait_result "$unhealthy_id" failed
+[[ -f "$transaction" ]] || fail 'Unhealthy rollback erased transaction'
+! systemctl is-active --quiet linux-panel.service ||
+ fail 'Failed recovery left unhealthy Web process active'
+[[ ! -e /run/linux-panel-root-updater/allow-panel-start ]] ||
+ fail 'Failed recovery left volatile startup bypass'
+[[ "$(sha256sum /var/lib/linux-panel/panel-state.json | awk '{print $1}')" == "$saved_state_sha" ]] ||
+ fail 'Failed recovery modified private state'
+rm -f /run/systemd/system/linux-panel.service.d/stage-unhealthy.conf
+systemctl daemon-reload
+systemctl reset-failed linux-panel.service linux-panel-update-recover.service || true
+systemctl start linux-panel-update-recover.service
+wait_result "$unhealthy_id" rolled_back
+[[ ! -e "$transaction" ]] || fail 'Successful retry retained root journal'
+wait_healthy || fail 'Retry did not restore real Web listener'
+[[ "$(sha256sum /var/lib/linux-panel/panel-state.json | awk '{print $1}')" == "$saved_state_sha" ]] ||
+ fail 'Retry altered original private state'
+note 'Active-but-unhealthy recovery denied and manual retry passed'
+
 note 'Failed boot recovery must block panel until root operator resolves journal'
 # Synthetic transaction points to an OLD SHA but deliberately lacks its
 # per-request state snapshot. This exercises the fail-closed path without
