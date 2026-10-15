@@ -236,12 +236,20 @@ for i in $(seq 1 180);do
   sleep 0.2
 done
 ((oom_reached)) || fail 'Broker never reached the deliberate npm-ci cgroup OOM'
-for i in $(seq 1 100);do
-  ! systemctl is-active --quiet linux-panel-update.service && break
+# is-active exits nonzero while a Type=oneshot unit is *activating*:
+# that does not mean the root worker exited. Do not start recovery until PID1
+# explicitly reports a terminal state, or it can race the live root lock.
+oom_terminal=0
+for i in $(seq 1 450);do
+  worker_state="$(systemctl show linux-panel-update.service -p ActiveState --value)"
+  if [[ "$worker_state" == failed || "$worker_state" == inactive ]];then
+    oom_terminal=1
+    break
+  fi
   sleep 0.2
 done
-! systemctl is-active --quiet linux-panel-update.service ||
-  fail 'OOM-constrained worker did not terminate'
+((oom_terminal)) ||
+  fail 'OOM-constrained worker never entered failed/inactive terminal state'
 systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity
 rm -f /var/lib/linux-panel-updater/STAGE_FORCE_CGROUP_OOM   /var/lib/linux-panel-updater/STAGE_CGROUP_OOM_REACHED
 # The killed worker may have rolled back itself, or be unable to do so while
