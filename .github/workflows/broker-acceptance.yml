@@ -17,8 +17,12 @@ permissions:
 
 jobs:
   disposable-real-systemd:
-    name: Real systemd / npm / rollback (ephemeral Ubuntu)
+    name: Real systemd / npm / rollback (${{ matrix.positive_path }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        positive_path: [web, mcp]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +44,7 @@ jobs:
             RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
             RUNNER_OS="$RUNNER_OS" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            STAGE_POSITIVE_PATH="${{ matrix.positive_path }}" \
             STAGE_NODE_BIN="$(command -v node)" \
             STAGE_NPM_BIN="$(command -v npm)" \
             bash tests/staging/broker-systemd.sh

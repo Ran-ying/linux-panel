@@ -209,13 +209,10 @@ wait_healthy || fail 'Recovery failed to restart healthy Web'
 systemctl start linux-panel-update-recover.service
 note 'SIGKILL interrupted deployment recovered through real systemd unit'
 
-note 'Case 3: same old revision retries successfully with real npm and systemd'
-queue 33333333333333333333333333333333 "$TARGET"
-wait_result 33333333333333333333333333333333 success
-[[ "$(head_now)" == "$TARGET" ]] || fail 'Update did not reach main target'
-wait_healthy || fail 'Updated Web unhealthy'
-[[ ! -e /var/lib/linux-panel/update-trigger &&
-   ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
+note 'Case 4: valid Web or MCP update after real crash recovery'
+[[ "${STAGE_POSITIVE_PATH:-}" == web || "${STAGE_POSITIVE_PATH:-}" == mcp ]] ||
+  fail 'Positive path must be web or mcp'
+[[ "$(head_now)" == "$OLD" ]] || fail 'Positive HTTP test requires old revision'
 note 'Real HTTP Web approval + OAuth PKCE + MCP → systemd Broker'
 # Enabled only in throwaway GitHub-hosted runner.
 ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
@@ -223,8 +220,14 @@ note 'Real HTTP Web approval + OAuth PKCE + MCP → systemd Broker'
 printf '\nPANEL_UPDATER_ENABLED=1\n' >>/etc/linux-panel/panel.env
 systemctl restart linux-panel.service
 wait_healthy || fail 'Web unhealthy after staging-only gate enable'
-STAGE_PASSWORD="$STAGE_PASSWORD" /opt/node24/bin/node \
- "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
+STAGE_PASSWORD="$STAGE_PASSWORD" STAGE_POSITIVE_PATH="$STAGE_POSITIVE_PATH" \
+ STAGE_OLD_SHA="$OLD" STAGE_TARGET_SHA="$TARGET" \
+ /opt/node24/bin/node "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
+[[ "$(head_now)" == "$TARGET" ]] || fail 'Positive HTTP update did not reach target SHA'
+grep -Fq '"status":"success"' "$RESULT" || fail 'Root Broker did not report success'
+wait_healthy || fail 'Updated Web unhealthy'
+[[ ! -e /var/lib/linux-panel/update-trigger &&
+   ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
 sed -i '/^PANEL_UPDATER_ENABLED=1$/d' /etc/linux-panel/panel.env
 systemctl restart linux-panel.service
 wait_healthy || fail 'Web unhealthy after staging gate reset'
@@ -343,4 +346,4 @@ bash "$MIGRATION" --verify
 note 'Real migration from old immutable root-worker succeeded and stayed DISABLED'
 
 note 'Real staging systemd/git/npm update and retry PASSED'
-note 'Not tested: machine power loss, interrupted kernel, Web OAuth approval'
+note 'Not tested: machine power loss, interrupted kernel, resource starvation'

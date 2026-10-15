@@ -6,6 +6,13 @@ import {randomBytes,createHash} from 'node:crypto';
 const origin='http://127.0.0.1:49377';
 const callback='https://chatgpt.com/connector_platform_oauth_redirect';
 const password=process.env.STAGE_PASSWORD;
+const positivePath=process.env.STAGE_POSITIVE_PATH;
+const targetSha=process.env.STAGE_TARGET_SHA;
+const oldSha=process.env.STAGE_OLD_SHA;
+assert.ok(['web','mcp'].includes(positivePath),'Only explicit positive staging scenarios');
+assert.match(targetSha??'',/^[a-f0-9]{40}$/,'Staging target must be an exact commit');
+assert.match(oldSha??'',/^[a-f0-9]{40}$/,'Staging old revision must be an exact commit');
+assert.notEqual(targetSha,oldSha,'Staging positive update must change the revision');
 assert.match(password??'',/^[0-9a-f]{64}$/,'Only ephemeral generated admin secret is allowed');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const getText=async(r)=>({response:r,text:await r.text()});
@@ -31,16 +38,23 @@ async function status(){
  return r.json.result;
 }
 async function waitResult(id,expected){
- for(let i=0;i<90;i++){
-   const s=await status();
-   if(s.lastResult?.id===id){
-      assert.equal(s.lastResult.status,expected,JSON.stringify(s));
-      assert.equal(s.pending,null,'Broker result must clear matching queued request');
-      return;
+ let lastNetworkError;
+ for(let i=0;i<240;i++){
+   try{
+     const s=await status();
+     if(s.lastResult?.id===id){
+       assert.equal(s.lastResult.status,expected,JSON.stringify(s));
+       assert.equal(s.pending,null,'Broker result must clear matching queued request');
+       return;
+     }
+   }catch(e){
+     // Fastify deliberately restarts mid-deployment. Never suppress API errors.
+     if(e?.name==='AssertionError')throw e;
+     lastNetworkError=e;
    }
-   await pause(500);
+   await pause(1000);
  }
- throw new Error('No Broker result for '+id);
+ throw new Error('Broker result timeout for '+id+(lastNetworkError?': '+lastNetworkError:''));
 }
 function parseRpc(t){
  const d=t.split('\n').filter(v=>v.startsWith('data:'));
@@ -143,6 +157,46 @@ assert.equal(readStatus.status,200);
 assert.equal(readStatus.json.result?.structuredContent?.lastResult?.id,receipt.id);
 assert.equal(readStatus.json.result?.structuredContent?.lastResult?.status,'failed');
 note('MCP OAuth scope → direct enqueue → systemd rejection → scoped status succeeded');
+
+note('Positive '+positivePath+' path: valid SHA reaches root Broker');
+const initialCheck=ok(await write('/api/actions/panel.update.check/execute',
+  {input:{targetSha}}));
+assert.equal(initialCheck.json.result.currentSha,oldSha);
+assert.equal(initialCheck.json.result.targetSha,targetSha);
+let positiveId;
+if(positivePath==='web'){
+  const proposal=ok(await write('/api/actions/panel.update.request/execute',
+    {input:{targetSha}}));
+  assert.equal(proposal.json.result.status,'approval_required');
+  positiveId=proposal.json.result.id;
+  const approval=ok(await write('/api/panel/update/approve',
+    {id:positiveId,currentPassword:password}));
+  assert.equal(approval.json.status,'queued');
+  assert.equal(approval.json.id,positiveId);
+}else{
+  const execution=await rpc(direct,'tools/call',
+    {name:'panel.update.execute',arguments:{targetSha}});
+  assert.equal(execution.status,200);
+  assert.equal(execution.json.result?.structuredContent?.status,'queued',
+    JSON.stringify(execution));
+  positiveId=execution.json.result.structuredContent.id;
+}
+assert.match(positiveId,/^[a-f0-9]{32}$/);
+await waitResult(positiveId,'success');
+const after=ok(await write('/api/actions/panel.update.check/execute',
+  {input:{targetSha}}));
+assert.equal(after.json.result.currentSha,targetSha);
+assert.equal(after.json.result.status,'up_to_date');
+assert.equal(ok(await req('/api/auth/status')).json.initialized,true);
+const afterMcp=await rpc(reader,'tools/call',
+  {name:'panel.update.status',arguments:{}});
+assert.equal(afterMcp.status,200,'Prior OAuth bearer must reconnect after restart');
+assert.equal(afterMcp.json.result?.structuredContent?.lastResult?.id,positiveId);
+assert.equal(afterMcp.json.result?.structuredContent?.lastResult?.status,'success');
+const afterDirect=await rpc(direct,'tools/list');
+assert.equal(afterDirect.status,200);
+assert.ok(afterDirect.json.result.tools.some(t=>t.name==='panel.update.execute'));
+note('Valid SHA deployed; Web and OAuth MCP resumed with correct status');
 
 note('Revoke policy and grant; old bearer must fail without deployment');
 const current=ok(await req('/api/extensions/mcp/settings')).json.policy;
