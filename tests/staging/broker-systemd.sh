@@ -126,6 +126,19 @@ note 'Apply existing restricted broker in DISABLED state'
 bash "$ROOT/scripts/install-update-broker.sh" --check
 bash "$ROOT/scripts/install-update-broker.sh" --apply
 bash "$ROOT/scripts/install-update-broker.sh" --verify
+# Fresh-install negative regression: verify MUST refuse a source tree where
+# updater can read the code but the running Web service UID cannot.
+for source in package.json apps/api/src/create-app.js;do
+  runuser -u linuxpanel-updater -- chmod 0600 "$ROOT/$source"
+  if bash "$ROOT/scripts/install-update-broker.sh" --verify >/dev/null 2>&1;then
+    fail "Fresh Broker verify accepted Web-unreadable runtime source: $source"
+  fi
+  runuser -u linuxpanel-updater -- chmod 0640 "$ROOT/$source"
+  runuser -u linuxpanel -- test -r "$ROOT/$source" ||
+    fail "Could not restore Web source access: $source"
+done
+bash "$ROOT/scripts/install-update-broker.sh" --verify
+note 'Fresh Broker installer rejects unreadable root manifest/API source'
 # Fresh installation must make local HEAD readable to Web (without write)
 # and keep inherited POSIX ACLs. This catches the real cross-UID failure that
 # ordinary Node tests and a root-only Git checkout both missed in production.
