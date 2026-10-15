@@ -11,9 +11,15 @@ vm_pid=''
 fail(){ echo "::error::QEMU power-cut: $*" >&2; exit 1; }
 note(){ echo "[qemu-cut] $*"; }
 cleanup(){
+  local rc=$?
+  if ((rc));then
+    echo "::error::QEMU smoke exited $rc; last guest serial output:" >&2
+    if [[ -f "$work/console.log" ]];then tail -n 120 "$work/console.log" >&2;fi
+  fi
   if [[ -n "$vm_pid" ]];then kill -KILL "$vm_pid" 2>/dev/null || true;fi
   rm -rf -- "$work"
 }
+trap 'rc=$?; echo "::error::QEMU failing command at line $LINENO: $BASH_COMMAND (exit $rc)" >&2' ERR
 trap cleanup EXIT
 for cmd in qemu-system-x86_64 qemu-img cloud-localds ssh scp curl sha256sum python3 node;do
   command -v "$cmd" >/dev/null || fail "Missing test command: $cmd"
@@ -63,6 +69,7 @@ ssh_retry(){
     ((rc==255)) || return "$rc"
     sleep 2
   done
+  echo "::error::Post-reboot SSH transport failed after 15 retries: $*" >&2
   return "$rc"
 }
 boot(){
@@ -79,6 +86,7 @@ boot(){
     # One successful SSH connect is insufficient: cloud-init may still
     # restart sshd. Require the complete remote readiness command.
     if ssh_run 'sudo cloud-init status --wait >/dev/null' >/dev/null 2>&1;then
+      note 'QEMU guest SSH and cloud-init ready'
       return
     fi
     sleep 2
