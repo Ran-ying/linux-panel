@@ -392,19 +392,24 @@ table{min-width:500px}
   .module-sidebar .module-toggle{width:100%;white-space:normal}
 }
 
-/* Bounded content with the same frame and rhythm as the sidebar. */
+/* Center sidebar and content together; keep one shared, wider card gap. */
+:root{--content-space:24px}
+.layout{max-width:1200px;margin-inline:auto;padding:var(--sidebar-space)}
+.columns{grid-template-columns:230px minmax(0,1fr);gap:var(--content-space);
+  min-height:calc(100dvh - 2 * var(--sidebar-space))}
+.module-sidebar{margin:0;width:100%}
 .module-content{
-  width:calc(100% - var(--sidebar-space));max-width:1100px;align-self:start;
-  display:flex;flex-direction:column;gap:var(--sidebar-space);
-  margin:var(--sidebar-space) 0;padding:0;background:transparent;
+  width:100%;max-width:none;align-self:start;display:flex;flex-direction:column;
+  gap:var(--content-space);margin:0;padding:0;background:transparent;
 }
-.action-flow{gap:var(--sidebar-space)}
+.action-flow{gap:var(--content-space)}
 .module-intro,.action-card,.settings-section{
   margin:0;border:1px solid var(--border-panel);border-radius:14px;
   background:var(--panel-bg);
 }
 .module-intro{padding:16px 18px}
 @media(max-width:730px){
-  .module-content{width:calc(100% - 2 * var(--sidebar-space));margin:0 var(--sidebar-space) var(--sidebar-space)}
+  .layout{padding:var(--sidebar-space) var(--sidebar-space) max(var(--sidebar-space),env(safe-area-inset-bottom,0px))}
+  .columns{grid-template-columns:minmax(0,1fr);min-height:0}
   .module-intro{padding:14px}
 }
