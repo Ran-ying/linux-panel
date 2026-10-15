@@ -170,6 +170,15 @@ done
 [[ "$(systemctl is-enabled linux-panel-update-recover.service)" == enabled &&
     "$(systemctl is-enabled lp-qemu-boot-verify.service)" == enabled ]] ||
  { echo 'Recovery or serial verifier not enabled before cut' >&2; exit 1; }
+# Commit pre-existing fixture files and the checked-out old Git tree before
+# injecting the crash. Only the Broker's IN-FLIGHT journal and npm run should
+# remain uncommitted at the power cut; the baseline guest installation is not
+# itself part of this crash test.
+durable_sync file /opt/node24/bin/npm
+durable_sync dir /opt/node24/bin
+sync -f /opt/linux-panel
+sync -f /var/lib/linux-panel-updater
+sync -f /etc/systemd/system
 # Prove this exact systemd TTY forwarding reaches the host QEMU serial file
 # BEFORE the hard cut. Otherwise absence of a later PASS is ambiguous.
 systemd-run --quiet --wait --collect --unit=lp-qemu-serial-probe \
