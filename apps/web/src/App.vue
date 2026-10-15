@@ -1,17 +1,13 @@
 <script setup>
-import { onMounted, ref, computed, inject } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import ActionCard from './components/ActionCard.vue';
 import UpdateManager from './components/UpdateManager.vue';
 import ListenerManager from './components/ListenerManager.vue';
 import LoginPanel from './components/LoginPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
+import ThemeControl from './components/ThemeControl.vue';
+import {version as panelVersion} from '../../../package.json';
 import { buildModuleNavigation } from './module-navigation.js';
-
-const themeController = inject('themeController');
-const themePreference = ref(themeController?.getPreference() ?? 'system');
-function onThemeChange(event) {
-  themePreference.value = themeController?.setPreference(event.target.value) ?? 'system';
-}
 
 const initialized = ref(false);
 const checking = ref(true);
@@ -108,33 +104,18 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="appearance-control">
-    <label for="appearance-choice">外观</label>
-    <select id="appearance-choice" :value="themePreference" aria-label="界面外观"
-      @change="onThemeChange">
-      <option value="system">跟随系统</option>
-      <option value="light">浅色</option>
-      <option value="dark">深色</option>
-    </select>
-  </div>
+  <span class="panel-version" aria-label="版本">v{{ panelVersion }}</span>
+  <div v-if="!session" class="login-appearance"><ThemeControl /></div>
   <div v-if="checking" class="auth-shell"><p role="status">正在检查登录状态…</p></div>
   <LoginPanel v-else-if="!session" :initialized="initialized" @signed-in="signIn" />
   <main v-else class="layout">
-    <header>
-      <div class="eyebrow">LINUX PANEL / V0.5</div>
-      <div class="header-row">
-        <h1>{{ settings.panelName || 'Linux Panel' }}</h1>
-        <div class="account-area">
-          <span>{{ session.user.username }}</span>
-          <button type="button" @click="logout">退出登录</button>
-        </div>
-      </div>
-      <p>登录后才能查看模块和调用 Action。身份、权限与面板设置属于内置平台功能。</p>
-    </header>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <div class="columns">
       <aside class="module-sidebar">
-        <div class="label">功能模块</div>
+        <div class="sidebar-brand">
+          <h1>{{ settings.panelName || 'Linux Panel' }}</h1>
+          <ThemeControl />
+        </div>
         <nav class="module-nav" aria-label="业务模块">
           <button v-for="module in moduleGroups" :key="module.id" type="button" class="module-toggle"
             :class="{ active: activePage === module.id }" @click="activePage=module.id">
@@ -143,9 +124,12 @@ onMounted(async () => {
           <p v-if="!moduleGroups.length" class="muted small">尚无业务模块</p>
         </nav>
         <div class="sidebar-settings">
-          <div class="label">平台</div>
           <button type="button" class="module-toggle" :class="{ active: activePage === 'settings' }"
             @click="activePage='settings'">面板设置</button>
+          <div class="sidebar-account">
+            <span>{{ session.user.username }}</span>
+            <button type="button" @click="logout">退出登录</button>
+          </div>
         </div>
       </aside>
       <SettingsPanel v-if="activePage === 'settings'" :key="'settings'"
@@ -153,9 +137,7 @@ onMounted(async () => {
         @signed-out="signOutLocally" @settings-changed="value=>settings=value" />
       <div v-else-if="activeGroup" :key="activeGroup.id" class="module-content">
         <div class="module-intro">
-          <div class="label">模块 / {{ activeGroup.id }}</div>
           <h2>{{ activeGroup.name }}</h2>
-          <p>本模块共有 {{ activeGroup.actions.length }} 个可用操作，以下按顺序展示。</p>
         </div>
         <UpdateManager v-if="activeGroup.id === 'panel'" :csrf="session.csrf"
           @unauthorized="signOutLocally" />
@@ -170,6 +152,5 @@ onMounted(async () => {
         <section v-else-if="activeGroup.id !== 'panel'" class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>
       </div>
     </div>
-    <footer>v0.5：TOTP 可选，MCP 和更新权限默认关闭；启用可信客户端直接更新后，无需每次 Web 审批。</footer>
   </main>
 </template>
