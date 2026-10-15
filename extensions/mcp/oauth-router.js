@@ -137,19 +137,18 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
     if(!client || !client.redirectUris.includes(input.redirect_uri))
       throw error('Invalid OAuth client or redirect_uri');
     const allowed=new Set(allowedScopes(registry,await store.snapshot()));
-    // OAuth scope and state are optional. Without scope, explicitly present
-    // the currently permitted read-only scopes on the consent page.
-    // Never grant write permissions by omission: a client requesting no
-    // explicit scope gets read-only grants, regardless of policy toggles.
-    // panel:update and future panel:update:execute require an exact OAuth
-    // scope request followed by visible, interactive user consent.
-    const scopes=typeof input.scope==='string' && input.scope.trim()
+    // OAuth is a one-time client login for this personal panel. Scope
+    // requests remain compatible with existing clients, but do not restrict
+    // the client's future Action list. Every enabled capability is explicitly
+    // disclosed at consent and granted to the connected client.
+    const requested=typeof input.scope==='string' && input.scope.trim()
       ? [...new Set(input.scope.split(/\s+/).filter(Boolean))]
-      : [...allowed].filter(scope=>!scope.startsWith('panel:update'));
-    if((input.scope?.length??0)>1024 || scopes.length>12 ||
-       !scopes.some(s=>s!==OFFLINE_SCOPE) ||
-       scopes.some(s=>s!==OFFLINE_SCOPE && !allowed.has(s)))
+      : [];
+    if((input.scope?.length??0)>1024 || requested.length>12 ||
+       requested.some(s=>s!==OFFLINE_SCOPE && !allowed.has(s)))
       throw error('Unavailable OAuth scope');
+    const scopes=[...allowed,...(requested.includes(OFFLINE_SCOPE)?[OFFLINE_SCOPE]:[])];
+    if (!scopes.length) throw error('No MCP Actions available');
     const params={...Object.fromEntries(fields.filter(key=>typeof input[key]==='string')
       .map(key=>[key,input[key]])),resource:resourceUrl,scope:scopes.join(' ')};
     return {client,scopes,params};
@@ -184,7 +183,7 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
 <p>客户端 ID：<code>${escapeHtml(client.id)}</code></p>
 <p>授权码接收地址：<code>${escapeHtml(request.query.redirect_uri)}</code></p>
 <p>回调来源：${escapeHtml(redirectHost)}</p>
-<p>客户端请求以下权限：</p><ul>${scopeLabels}</ul>
+<p>登录后可使用当前面板全局开放的工具（以后开放的新工具也自动可用）：</p><ul>${scopeLabels}</ul>
 <p>仅在你主动发起连接并确认客户端与回调地址可信时授权。</p>
 <form method="POST" action="/oauth/authorize">${hidden}
 <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
@@ -277,11 +276,6 @@ export function installOAuthRoutes(app,{store,auth,registry,resourceUrl,origin})
   app.get('/api/extensions/mcp/grants',async request=>{
     auth.requirePermission(request.panelIdentity,'mcp:manage');
     return {grants:await data.grants(request.panelIdentity.user.id)};
-  });
-  app.put('/api/extensions/mcp/grants/:id',async request=>{
-    auth.requirePermission(request.panelIdentity,'mcp:manage');
-    await data.restrictGrant(request.params.id,request.panelIdentity.user.id,request.body?.scopes);
-    return {ok:true};
   });
   app.delete('/api/extensions/mcp/grants/:id',async request=>{
     auth.requirePermission(request.panelIdentity,'mcp:manage');

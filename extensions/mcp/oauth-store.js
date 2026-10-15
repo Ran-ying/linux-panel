@@ -17,9 +17,9 @@ const MAX_CLIENTS = 60, MAX_GRANTS = 100, MAX_CODES = 150, MAX_TOKENS = 500;
 
 export function allowedScopes(registry, state) {
   if (!mcpPolicy(state).enabled) return [];
-  const scopes = [...new Set(exposedReadActions(registry)
-    .filter(a => mcpPolicy(state).tools[a.id] === true)
-    .map(a => a.permission))];
+  // Scopes describe the server-wide capability set, not per-client entitlements.
+  // All authenticated owner-approved MCP clients get all currently exposed Actions.
+  const scopes = [...new Set(exposedReadActions(registry).map(a => a.permission))];
   if (mcpPolicy(state).allowUpdates === true) scopes.push('panel:update');
   // A distinct high-impact scope is never implied by panel:update and is
   // available only when the privileged Broker has been explicitly activated.
@@ -126,7 +126,9 @@ export class OAuthStore {
         (user.credentialEpoch??0)!==(grant.credentialEpoch??0) ||
         record.clientId!==grant.clientId) return null;
     const allowed = new Set(allowedScopes(this.registry,state));
-    const scopes=record.scopes.filter(s=>grant.scopes.includes(s) && allowed.has(s));
+    // Previously issued OAuth grants remain valid and gain newly enabled Actions.
+    // Revoking a whole grant or user credentials still invalidates the token.
+    const scopes=[...allowed];
     return { token, clientId:record.clientId, scopes, expiresAt:Math.floor(Date.parse(record.accessExpiresAt)/1000),
       userId:user.id, role:user.role, resource:new URL(this.resourceUrl), grantId:grant.id };
   }
@@ -135,18 +137,6 @@ export class OAuthStore {
     return (state.mcp?.grants ?? []).filter(g=>g.userId===userId)
       .map(g=>({id:g.id,clientId:g.clientId,clientName:state.mcp.clients.find(c=>c.id===g.clientId)?.name??'Unknown client',
         scopes:g.scopes,revoked:g.revoked,createdAt:g.createdAt}));
-  }
-  async restrictGrant(id,userId,scopes) {
-    await this.store.mutate(state=>{
-      const mcp=oauthData(state),grant=mcp.grants.find(g=>g.id===id && g.userId===userId && !g.revoked);
-      if (!grant) throw Object.assign(new Error('Grant not found'),{statusCode:404});
-      if (!Array.isArray(scopes) || !scopes.some(s=>s!=='offline_access') ||
-          scopes.some(s=>!grant.scopes.includes(s) || (s!=='offline_access' &&
-          !allowedScopes(this.registry,state).includes(s))))
-        throw Object.assign(new Error('Cannot add scopes to an existing grant'),{statusCode:400});
-      grant.scopes=[...new Set(scopes)];
-      addAudit(state,'mcp.grant.restricted',userId,grant.clientId);
-    });
   }
   async revokeGrant(id,userId) {
     await this.store.mutate(state=>{

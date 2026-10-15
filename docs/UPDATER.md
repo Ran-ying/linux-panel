@@ -5,7 +5,7 @@ The tool is intentionally **not** an arbitrary command executor.
 ## Roles
 
 - `panel.update.request` 是标准写入（申请型）**Action**，Web 模块页面与 ChatGPT/MCP 均通过同一 `ActionEngine` 调用；`panel.update.status` 是只读 Action，也可在 Web 面板查看。
-- MCP 调用还要求 `panel:update` OAuth Scope、全局策略显式授权；Web 调用需要管理员 Session 和 CSRF。两条入口由 ActionEngine 验证相同的 JSON Schema。
+- MCP 客户端经 OAuth 登录一次后，可使用面板全局开放的 MCP Actions；不再按客户端 OAuth Scope 过滤工具。`panel.update.request` 仍需要全局 `allowUpdates`，`panel.update.execute` 仍需要全局 `allowDirectUpdates` 和已激活 Broker；Web 调用需要管理员 Session 和 CSRF。两条入口由 ActionEngine 验证相同的 JSON Schema。
 - The MCP tool can propose **only one Git commit SHA**. No shell command,
   branch name, arbitrary URL, or user-provided script can be executed.
 - The Web administrator must inspect the old/new SHA and confirm with their
@@ -22,43 +22,54 @@ The tool is intentionally **not** an arbitrary command executor.
 - The operator-controlled `PANEL_UPDATER_ENABLED=1` switch is the platform-level *deployment* gate. Read-only `panel.update.check` and `panel.update.status` remain usable without it; their status reports `brokerEnabled: false`. It is **off by default** after broker installation too, and requires a separate staging acceptance plus explicit `--activate --ack-acceptance`.
 - A logged-in administrator may check, request, cancel an unapproved request, or approve updates in the **Web 面板维护** page even if MCP is completely disabled.
 - **Web one-click launch (after checking a candidate)**: the Web page presents the exact current/target SHA, asks for one explicit checkbox + administrator password (TOTP only if enabled), then performs the normal proposal and privileged approval back-to-back. There is no second Web approval click. This is a Web UX convenience, not an autonomous MCP permission; the Broker still validates the trusted remote, fast-forward, build, health and rollback. A successful queue response **is not proof** of deployment. If the second step fails, the pending proposal remains visible for review/retry.
-- Proposal MCP requires MCP enabled, `allowUpdates=true`, and `panel:update`. Direct MCP requires an activated Broker, `allowDirectUpdates=true`, and a **separately consented** `panel:update:execute` OAuth grant; neither route confers the other's permissions.
+- Trusted MCP clients share the **global** policy: enabling MCP exposes registered read Actions; `allowUpdates=true` adds proposal, while `allowDirectUpdates=true` **and an activated Broker** add direct execution. Existing authenticated clients gain or lose these tools immediately when the global policy changes. Client scopes remain OAuth compatibility metadata, **not per-client business-action permission gates**.
 - `panel.update.check` is a read-only Web Action. It identifies SHA origin as `origin_main` (queried from configured Git remote) or `supplied_sha` (not remotely verified). Neither is a substitute for the broker's pinned-remote verification.
 - `POST /api/panel/update/approve` requires Web Session, CSRF, password re-verification and optional fresh TOTP. `POST /api/panel/update/cancel` cancels only a still-unapproved proposal; MCP has no route to approve or cancel.
 - The platform correlates the broker result ID with an approved proposal: a completed result stops showing as queued and releases the proposal slot. A still-running approval remains locked until its 15-minute expiry; overdue or failed jobs require independent operational inspection.
 - Legacy `/api/extensions/mcp/update` and `.../approve` aliases remain temporarily for compatibility; new Web components use platform Actions and platform URLs.
 
-## Explicitly delegated MCP direct updates (default OFF)
+## Personal trusted MCP client mode (global exposure)
 
-Web's one-confirmation update remains independent of MCP. Existing
-`panel.update.request` and `panel:update` only create proposals requiring Web
-approval. There is now a distinct high-impact MCP-only Action:
+The owner manages trusted AI clients on one personal panel. After an OAuth
+authorization-code/PKCE login, **every authenticated non-revoked client** sees
+all read-only registry Actions with explicit `exposure.mcp=true`, including new
+ones added later. Legacy per-client OAuth scopes and persisted per-read-Action
+checkboxes no longer restrict tool discovery or invocation. The OAuth consent
+page describes the **full currently enabled tool set**, regardless of what
+individual scopes the client happened to request. Existing grants also become
+eligible for newly globally enabled Actions on `tools/list` refresh.
+This is an intentional change from the former independently scoped model.
 
-- `panel.update.execute` requires a new `panel:update:execute` OAuth grant.
-- Web → MCP settings → **Allow MCP direct updates** must be explicitly enabled,
-  independently from the `allowUpdates` proposal policy.
-- The operator-owned Broker must first pass separate staging/rollback
-  acceptance and be activated with `PANEL_UPDATER_ENABLED=1`. Merely installing
-  its privileged worker does not enable either route.
-- OAuth clients must **explicitly request** `panel:update:execute` and the
-  administrator must confirm the interactive consent. Omitting OAuth scope
-  gives **read-only** grants only; old `panel:update` grants are not upgraded.
-- On every call the server verifies a live bearer, admin role, separate
-  OAuth scope, current direct-update policy and activated Broker gate. The
-  administrator can revoke the client grant or disable the policy immediately.
-- Only an exact 40-character Git SHA or an empty argument to select configured
-  `origin/main` is accepted. The fixed root Broker verifies pinned source,
-  exact main HEAD, fast-forward lineage, resource thresholds, build, health
-  and rollback. There is **no arbitrary shell or remote selector**.
-- A `queued` result is not proof the deployment succeeded. Review the Broker
-  result and systemd journal; requests are audited and concurrent work denied.
+The Web MCP settings now have a compact set of **global** switches: endpoint,
+new client registration, update proposals (`allowUpdates`), and direct
+execution (`allowDirectUpdates`). They **do not** make /mcp anonymous:
+valid bearer tokens, user account/credential checks and full-client revocation
+are still required; unknown registry Actions and generic command execution
+remain forbidden. Per-client scope editing was removed, but disconnecting
+a client revokes its grant and tokens.
 
-Direct MCP execution is a conscious delegation of deployment power to an
-OAuth client. Some clients may ask for their own tool confirmation; the
-server does not demand a *second* Web approval once the direct scope has
-been explicitly granted. Never enable it on the shared production VPS
-before the real root/systemd test matrix in
-[UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) is completed.
+### Update actions remain constrained
+
+- `panel.update.request`: exposed when `allowUpdates` and the Broker gate
+  are enabled; requires separate Web review/approval, **regardless of
+  historical OAuth scope**.
+- `panel.update.execute`: exposed when `allowDirectUpdates` and the Broker
+  gate are enabled; **no second Web approval per call** for an authenticated
+  client, including clients previously authorized only for read Actions.
+- Direct-action calls revalidate an active token, non-revoked grant, admin
+  account/credential epoch, live global policy, exact Action registration,
+  source pin and the fixed Broker gate before queue commit. All update
+  targets are exact 40-char SHA or trusted `origin/main`; no arbitrary
+  command, URL, or remote.
+- Disabling direct execution removes that Action for *every* client
+  immediately; client grant revocation terminates access completely. A
+  `queued` receipt is **not** an update success; inspect the final Broker
+  status, journal and Web health.
+- **Security consequence:** enabling a new MCP Action for a connected AI
+  client automatically makes it available to **all** connected AI clients,
+  including existing sessions. Only enable direct updates when every current
+  client is trusted for that capability. This mode is opt-in at the global
+  policy level, not a mechanism for shared third-party tenant access.
 
 ## Independent operator-owned Broker installation: check → apply → verify → activate
 

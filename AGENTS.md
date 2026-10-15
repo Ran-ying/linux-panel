@@ -13,7 +13,7 @@
 ## Design principles
 
 - The same core ActionEngine serves authenticated Web and, when separately enabled, MCP/OAuth. Modules: `apps/api`, `apps/web`, `core`, `modules`, `extensions/mcp`, `platform`, `scripts`, `deployment`, `tests`.
-- OAuth grant scopes, current server policy and action exposure must **all** permit an MCP action. Read-only MCP actions differ from update proposals (`panel:update`) and from direct enqueue (`panel:update:execute`). An old scope grant never silently upgrades.
+- **Personal trusted-client model:** OAuth authorizes a client login; every active grant can see all explicitly MCP-exposed read Actions, plus globally enabled update proposal or direct-execute Actions. No per-client/per-read-Action scopes or checkboxes. New enabled Actions become available even to old grants; revoke the whole client or disable the global Action policy to revoke access. The Broker's independent validation remains mandatory.
 - The updater accepts pinned `origin/main` Git SHA only, performs unprivileged build and fixed privileged systemd deployment/health/rollback. Never introduce arbitrary command execution or silently give root to Web/MCP.
 - App install, Broker install, Broker activation, MCP policy, OAuth consent and an actual update are distinct. `queued` is **not** `success`; check persisted result, health, rollback and journal.
 - The owner prefers trusted personal MCP to be convenient once explicitly delegated; do not add redundant per-update Web approvals on the direct-execute path. Still honor actual OAuth scopes, allowlists and Broker integrity.

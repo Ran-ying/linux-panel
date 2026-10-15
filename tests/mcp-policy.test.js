@@ -15,7 +15,7 @@ test('MCP default policy is disabled and denies every Action', async t => {
   assert.equal(actionAllowed(await store.snapshot(), { kind:'read', exposure:{mcp:true}, id:'system.info' }), false);
 });
 
-test('policy rejects unknown and write Actions and persists an explicit allowlist', async t => {
+test('MCP enabled exposes declared read actions globally, not per-action settings', async t => {
   const folder = await mkdtemp(join(tmpdir(), 'mcp-policy-'));
   t.after(() => rm(folder, { recursive: true, force: true }));
   const store = new StateStore(join(folder, 'state.json'));
@@ -28,9 +28,14 @@ test('policy rejects unknown and write Actions and persists an explicit allowlis
   await assert.rejects(setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'system.restart':true}},'1'),{statusCode:400});
   await assert.rejects(setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'other.action':true}},'1'),{statusCode:400});
   const updated = await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'system.info':true}},'1');
-  assert.deepEqual(updated,{enabled:true,registrationEnabled:true,allowUpdates:false,allowDirectUpdates:false,tools:{'system.info':true}});
+  assert.deepEqual(updated,{enabled:true,registrationEnabled:true,allowUpdates:false,allowDirectUpdates:false,tools:{}});
   assert.equal(actionAllowed(await store.snapshot(),registry.get('system.info')),true);
   assert.equal(actionAllowed(await store.snapshot(),registry.get('system.restart')),false);
+  // Clearing an old checkbox or adding a newly registered read action
+  // cannot hide it from an authenticated trusted MCP client.
+  const withoutSelection=await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true},'1');
+  assert.deepEqual(withoutSelection.tools,{});
+  assert.equal(actionAllowed(await store.snapshot(),registry.get('system.info')),true);
   assert.deepEqual(exposedReadActions(registry).map(a=>a.id),['system.info']);
   await setMcpPolicy(store,registry,{enabled:false,registrationEnabled:false,tools:{'system.info':true}},'1');
   assert.equal(actionAllowed(await store.snapshot(),registry.get('system.info')),false);

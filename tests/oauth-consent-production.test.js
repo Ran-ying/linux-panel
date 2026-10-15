@@ -46,15 +46,15 @@ test('production consent allows registered ChatGPT callback, without changing si
   });
   const approval=await app.inject({url:'/oauth/authorize?'+query,headers:{host:domain,cookie}});
   assert.equal(approval.statusCode,200,approval.body);
-  // Missing OAuth scope must NEVER implicitly grant update rights.
+  // A connected trusted client receives all currently enabled global Actions.
   const withoutScope=new URLSearchParams(query);
   withoutScope.delete('scope');
-  const readOnlyConsent=await app.inject({
+  const globalConsent=await app.inject({
     url:'/oauth/authorize?'+withoutScope,headers:{host:domain,cookie}
   });
-  assert.equal(readOnlyConsent.statusCode,200,readOnlyConsent.body);
-  assert.match(readOnlyConsent.body,/<code>system:read<\/code>/);
-  assert.doesNotMatch(readOnlyConsent.body,/<code>panel:update<\/code>/);
+  assert.equal(globalConsent.statusCode,200,globalConsent.body);
+  assert.match(globalConsent.body,/<code>system:read<\/code>/);
+  assert.match(globalConsent.body,/<code>panel:update<\/code>/);
   const explicitlyRequested=new URLSearchParams(query);
   explicitlyRequested.set('scope','panel:update');
   const updateConsent=await app.inject({

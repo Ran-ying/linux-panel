@@ -18,7 +18,7 @@ function parseRPC(text) {
   return JSON.parse(text);
 }
 
-test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permission', async t=>{
+test('real HTTP MCP: global read tools even with legacy narrow grant, revoke whole client', async t=>{
   const folder=await mkdtemp(join(tmpdir(),'lp-mcp-live-'));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const statePath=join(folder,'private.json'),store=new StateStore(statePath);
@@ -60,7 +60,10 @@ test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permis
   const found=await rpc({method:'tools/list'});
   assert.equal(found.status,200,JSON.stringify(found.data));
   assert.ok(found.data.result?.tools, JSON.stringify(found.data));
-  assert.deepEqual(found.data.result.tools.map(x=>x.name),['system.info']);
+  const exposed=found.data.result.tools.map(x=>x.name);
+  assert.ok(exposed.includes('system.info'));
+  assert.ok(exposed.includes('storage.usage'),'legacy checkbox cannot hide an MCP-exposed read Action');
+  assert.ok(exposed.includes('services.list'),'old system-only OAuth grant cannot hide new tools');
   const result=await rpc({method:'tools/call',params:{name:'system.info',arguments:{}}});
   assert.equal(result.status,200,JSON.stringify(result.data));
   const output=JSON.parse(result.data.result.content[0].text);
@@ -70,7 +73,8 @@ test('real HTTP MCP protocol: filtered tools/list, read-only call, revoke permis
   const hidden=await rpc({method:'tools/list'});
   assert.equal(hidden.status,200,JSON.stringify(hidden.data));
   assert.ok(hidden.data.result?.tools, JSON.stringify(hidden.data));
-  assert.equal(hidden.data.result.tools.length,0,'storage requires a scope not granted to this token');
+  assert.deepEqual(hidden.data.result.tools.map(x=>x.name),exposed,
+    'changing obsolete per-tool checkboxes does not change the globally exposed tool list');
   await oauth.revokeGrant(grant.id,user.id);
   const revoked=await rpc({method:'tools/list'});
   assert.equal(revoked.status,401);

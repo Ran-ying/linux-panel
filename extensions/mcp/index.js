@@ -43,9 +43,10 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     ]);
     const handler = createMcpHandler(async ({ authInfo } = {}) => {
     const snapshot = await store.snapshot();
-    const permitted = new Set(authInfo?.scopes ?? []);
-    const visible = exposedReadActions(registry).filter(a =>
-      snapshot.mcp?.policy?.tools?.[a.id] === true && permitted.has(a.permission));
+    // The owner grants access to the MCP endpoint, not a separate list of
+    // rights for each OAuth client. Only registry-approved MCP read Actions
+    // are visible; the global policy controls writes separately.
+    const visible = mcpPolicy(snapshot).enabled ? exposedReadActions(registry) : [];
 
     const server = new McpServer({ name: 'linux-panel', version: '0.5.0' }, { capabilities: { tools: {} } });
     // Write proposals use the same Action registered in the platform registry.
@@ -55,8 +56,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     if (updateAction?.exposure?.mcp === true &&
         updateAction.kind === 'write' && updateAction.permission === 'panel:update' &&
         process.env.PANEL_UPDATER_ENABLED === '1' &&
-        mcpPolicy(snapshot).enabled && mcpPolicy(snapshot).allowUpdates &&
-        permitted.has(updateAction.permission)) {
+        mcpPolicy(snapshot).enabled && mcpPolicy(snapshot).allowUpdates) {
       server.registerTool(updateAction.id, {
         description:updateAction.description,
         inputSchema:z.object({targetSha:z.string().regex(/^[a-f0-9]{40}$/).optional()}).strict(),
@@ -65,8 +65,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
         const verified=ctx.http?.authInfo??authInfo;
         const live=verified?.token?await tokens.verifyAccessToken(verified.token):null;
         const policy=mcpPolicy(await store.snapshot());
-        if(!live || !live.scopes?.includes(updateAction.permission) ||
-           !live.userId || !policy.enabled || !policy.allowUpdates ||
+        if(!live || !live.userId || !policy.enabled || !policy.allowUpdates ||
            process.env.PANEL_UPDATER_ENABLED !== '1')
           return {isError:true,content:[{type:'text',text:'Not authorized for update proposals'}]};
         const source=registry.get(updateAction.id);
@@ -82,17 +81,15 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
         }catch(e){return {isError:true,content:[{type:'text',text:e.message}]};}
       });
     }
-    // Independently delegated direct update. Existing panel:update proposal
-    // grants NEVER authorize this. A live panel:update:execute bearer grant,
-    // an administrator-controlled explicit Web policy and the OS-level Broker
-    // activation gate are all required simultaneously.
+    // Trusted-client direct update: the owner enables a global Web policy and
+    // the OS-level Broker. Every valid logged-in MCP client may then enqueue;
+    // no legacy per-client OAuth Scope upgrade is needed.
     const direct=registry.get('panel.update.execute');
     if(direct?.exposure?.mcp===true &&
        direct.kind==='write' && direct.executionPolicy==='broker-enqueue' &&
        direct.permission==='panel:update:execute' &&
        process.env.PANEL_UPDATER_ENABLED==='1' &&
-       mcpPolicy(snapshot).enabled && mcpPolicy(snapshot).allowDirectUpdates &&
-       permitted.has(direct.permission)) {
+       mcpPolicy(snapshot).enabled && mcpPolicy(snapshot).allowDirectUpdates) {
       server.registerTool(direct.id,{
         description:direct.description,
         inputSchema:z.object({targetSha:z.string().regex(/^[a-f0-9]{40}$/).optional()}).strict(),
@@ -103,7 +100,6 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
         const policy=mcpPolicy(await store.snapshot());
         const current=registry.get(direct.id);
         if(!live || !live.userId || !live.clientId ||
-           !live.scopes?.includes('panel:update:execute') ||
            !policy.enabled || !policy.allowDirectUpdates ||
            process.env.PANEL_UPDATER_ENABLED!=='1' ||
            current!==direct || current.executionPolicy!=='broker-enqueue')
@@ -132,9 +128,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
                 grant?.clientId===live.clientId &&
                 user?.id===live.userId &&
                 (user?.credentialEpoch??0)===(grant?.credentialEpoch??0) &&
-                grant?.resource===String(live.resource) &&
-                token?.scopes?.includes('panel:update:execute') &&
-                grant?.scopes?.includes('panel:update:execute');
+                grant?.resource===String(live.resource);
               if(!permitted)throw Object.assign(new Error(
                 'Direct update authorization revoked before queue commit'),{statusCode:403});
               auth.requirePermission({user},direct.permission);
@@ -162,8 +156,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
         // This makes grant revocation, credential changes and policy changes
         // effective even if they happen after tools/list has been served.
         const live = verified?.token ? await tokens.verifyAccessToken(verified.token) : null;
-        if (!live || !actionAllowed(state, source) ||
-            !live.scopes?.includes(action.permission) || live.userId == null)
+        if (!live || !actionAllowed(state, source) || live.userId == null)
           return { isError: true, content: [{ type: 'text', text: 'This tool is not authorized' }] };
         // This is defense-in-depth; client credentials are not Web cookies.
         auth.requirePermission({ user: { id: live.userId, role: live.role } }, source.permission);
