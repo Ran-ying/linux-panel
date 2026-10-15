@@ -48,7 +48,7 @@ try {
     await page.unroute('**/api/auth/session');
     await page.locator('#login-pass').fill(password);
     await page.locator('button[type="submit"]').click();
-    await page.locator('.module-nav button').first().waitFor();
+    await page.locator('.module-nav button').first().waitFor({state:'attached'});
     // A returning valid session also renders the shell while validation is delayed.
     let releaseExisting;
     const existingGate=new Promise(resolve=>releaseExisting=resolve);
@@ -57,12 +57,16 @@ try {
     await page.locator('.dashboard-placeholder').waitFor();
     assert.equal(await page.locator('#login-pass,.sidebar-account').count(),0);
     releaseExisting();
-    await page.locator('.module-nav button').first().waitFor();
+    await page.locator('.module-nav button').first().waitFor({state:'attached'});
     await page.unroute('**/api/auth/session');
+    async function navigate(name){
+      if(width<=730) await page.getByRole('tab',{name:['面板维护','面板设置'].includes(name)?'面板功能':'功能模块',exact:true}).click();
+      await page.getByRole('button',{name,exact:true}).click();
+    }
     const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
     assert.ok(!names.some(name=>name.trim()==='磁盘使用情况'),'disk usage must not have a separate sidebar item');
     for(const name of [...names,'面板设置']){
-      await page.getByRole('button',{name:name.trim(),exact:true}).click();
+      await navigate(name.trim());
       await page.locator('.module-content').waitFor();
       if(name.trim()==='系统概览')
         await page.getByRole('heading',{name:'根文件系统磁盘占用',exact:true}).waitFor();
@@ -73,6 +77,10 @@ try {
           return r.left < -1 || r.right > innerWidth+1;
         }).map(n=>n.className));
       assert.deepEqual(outside,[],width+' '+name+' container overflow');
+      if(width<=730) await page.waitForFunction(()=>{
+        const header=document.querySelector('.module-sidebar').getBoundingClientRect();
+        return Math.abs(document.querySelector('.module-content').getBoundingClientRect().top-header.bottom-24)<1;
+      });
       const frames=await page.locator('.module-content').evaluate(content=>{
         const sidebar=document.querySelector('.module-sidebar');
         const side=sidebar.getBoundingClientRect(), box=content.getBoundingClientRect();
@@ -98,7 +106,7 @@ try {
       await page.getByRole('button',{name:'保存登录有效期',exact:true}).click();
       await page.getByRole('status').filter({hasText:'当前设备的到期时间已更新'}).waitFor();
       await page.reload();
-      await page.getByRole('button',{name:'面板设置',exact:true}).click();
+      await navigate('面板设置');
       await page.waitForFunction(()=>document.querySelector('#session-days')?.value==='7');
       const cookie=(await context.cookies()).find(c=>c.name==='lp_session');
       assert.ok(Math.abs(cookie.expires-Date.now()/1000-7*86400)<10,'browser cookie must use saved duration');
@@ -135,6 +143,7 @@ try {
     await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');
     await follow.uncheck();
     assert.equal(await light.isDisabled(),false);
+    if(width<=730) await page.getByRole('tab',{name:'面板功能',exact:true}).click();
     await page.getByRole('button',{name:'退出登录',exact:true}).click();
     await page.locator('#login-pass').waitFor();
     await page.reload();
@@ -166,7 +175,7 @@ try {
     console.log('PASS viewport '+width+': modules, themes, logout, cache isolation, offline/reconnect');
   }
   // Many modules must scroll inside the sidebar without pushing account controls offscreen.
-  for(const viewport of [{width:1280,height:500},{width:390,height:600}]){
+  for(const viewport of [{width:1280,height:500},{width:390,height:600},{width:390,height:280}]){
     const context=await browser.newContext({viewport});
     const page=await context.newPage();
     await page.route('**/api/modules',async route=>{
@@ -178,7 +187,22 @@ try {
     await page.goto(origin);
     await page.locator('#login-pass').fill(password);
     await page.locator('button[type="submit"]').click();
-    await page.locator('.module-nav button').last().waitFor();
+    await page.locator('.module-nav button').last().waitFor({state:'attached'});
+    const contentTop=(await page.locator('.module-content').boundingBox()).y;
+    if(viewport.width<=730){
+      await page.getByRole('tab',{name:'功能模块',exact:true}).click();
+      const sameTop=(await page.locator('.module-content').boundingBox()).y;
+      assert.ok(Math.abs(sameTop-contentTop)<1,'expanded navigation must overlay without moving content');
+      const placement=await page.locator('.module-sidebar').evaluate(sidebar=>{
+        const theme=sidebar.querySelector('.appearance-control').getBoundingClientRect();
+        const name=sidebar.querySelector('.sidebar-heading').getBoundingClientRect();
+        const toggle=sidebar.querySelector('.sidebar-collapse').getBoundingClientRect();
+        return {themeLeft:theme.left,nameRight:name.right,toggleBottom:toggle.bottom,position:getComputedStyle(sidebar).position};
+      });
+      assert.equal(placement.position,'fixed');
+      assert.ok(placement.themeLeft>=placement.nameRight,'theme control must sit right of the panel name');
+      assert.ok(placement.toggleBottom<=viewport.height-16,'collapse button must stay within bottom gutter');
+    }
     const layout=await page.locator('.module-sidebar').evaluate(sidebar=>{
       const box=sidebar.getBoundingClientRect();
       const region=sidebar.querySelector('.sidebar-modules');
@@ -195,7 +219,19 @@ try {
     assert.ok(layout.overflowing,'many modules must overflow the independent module region');
     await page.locator('.module-nav button').last().scrollIntoViewIfNeeded();
     assert.ok(await page.locator('.sidebar-modules').evaluate(n=>n.scrollTop>0));
-    await page.screenshot({path:join(output,'sidebar-overflow-'+viewport.width+'.png')});
+    await page.screenshot({path:join(output,'sidebar-overflow-'+viewport.width+'-'+viewport.height+'.png')});
+    if(viewport.width<=730){
+      await page.evaluate(()=>window.scrollTo(0,100));
+      assert.ok(Math.abs((await page.locator('.module-sidebar').boundingBox()).y-16)<1,'header must stay fixed when content scrolls');
+      await page.evaluate(()=>window.scrollTo(0,0));
+      await page.getByRole('tab',{name:'面板功能',exact:true}).click();
+      assert.equal(await page.getByRole('button',{name:'面板设置',exact:true}).isVisible(),true);
+      assert.equal(await page.getByRole('button',{name:'退出登录',exact:true}).isVisible(),true);
+      await page.getByRole('button',{name:'收起',exact:true}).click();
+      assert.equal(await page.locator('.sidebar-navigation').isVisible(),false);
+      assert.ok(Math.abs((await page.locator('.module-content').boundingBox()).y-contentTop)<1,'collapse must preserve content position');
+      await page.screenshot({path:join(output,'sidebar-collapsed-'+viewport.width+'-'+viewport.height+'.png')});
+    }
     await context.close();
     console.log('PASS bounded rounded sidebar and scrolling '+viewport.width);
   }
