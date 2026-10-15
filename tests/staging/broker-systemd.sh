@@ -327,6 +327,39 @@ note 'Case 4: valid Web or MCP update after real crash recovery'
 [[ "${STAGE_POSITIVE_PATH:-}" == web || "${STAGE_POSITIVE_PATH:-}" == mcp ]] ||
   fail 'Positive path must be web or mcp'
 [[ "$(head_now)" == "$OLD" ]] || fail 'Positive HTTP test requires old revision'
+# Resource acceptance: constrain the COMPLETE real npm ci/check/test/build
+# transaction, not only a synthetic Python allocator. This test-only cgroup
+# cap is never set on an actual VPS. No first-run package cache assumptions.
+systemctl set-property --runtime linux-panel-update.service MemoryMax=768M CPUQuota=100%
+[[ "$(systemctl show linux-panel-update.service -p MemoryMax --value)" == 805306368 ]] ||
+ fail 'Cannot apply real 768MiB root-worker cgroup cap'
+[[ "$(systemctl show linux-panel-update.service -p CPUQuotaPerSecUSec --value)" == 1s ]] ||
+ fail 'Cannot apply single-vCPU 100% CPUQuota to root worker'
+resource_start_seconds="$SECONDS"
+code_before_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
+free_before_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+note "FULL npm ci/check/test/build with MemoryMax=768MiB (free code disk ${code_before_kib}KiB)"
+# A Type=oneshot worker's cgroup disappears immediately after it exits.
+# Sample the authoritative kernel cgroup-v2 memory.peak WHILE the real
+# npm transaction is active; systemctl show MemoryPeak afterward is [not set].
+peak_file="$(mktemp /tmp/lp-updater-memory-peak.XXXXXXXX)"
+(
+ max=0
+ while [[ ! -e "$peak_file.stop" ]];do
+   control_group="$(systemctl show linux-panel-update.service -p ControlGroup --value 2>/dev/null || true)"
+   if [[ "$control_group" == /system.slice/linux-panel-update.service &&
+         -r "/sys/fs/cgroup${control_group}/memory.peak" ]];then
+     # The oneshot cgroup may vanish between -r and cat on completion.
+     sample="$(cat "/sys/fs/cgroup${control_group}/memory.peak" 2>/dev/null || true)"
+     if [[ "$sample" =~ ^[0-9]+$ ]] && ((sample>max));then
+       max="$sample"
+       printf '%s\n' "$max" > "$peak_file"
+     fi
+   fi
+   sleep 0.1
+ done
+) &
+resource_sampler_pid=$!
 note 'Real HTTP Web approval + OAuth PKCE + MCP → systemd Broker'
 # Enabled only in throwaway GitHub-hosted runner.
 ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
@@ -339,6 +372,16 @@ STAGE_PASSWORD="$STAGE_PASSWORD" STAGE_POSITIVE_PATH="$STAGE_POSITIVE_PATH" \
  /opt/node24/bin/node "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
 [[ "$(head_now)" == "$TARGET" ]] || fail 'Positive HTTP update did not reach target SHA'
 grep -Fq '"status":"success"' "$RESULT" || fail 'Root Broker did not report success'
+touch "$peak_file.stop"
+wait "$resource_sampler_pid" || fail 'Cgroup resource sampler unexpectedly failed'
+peak_bytes="$(cat "$peak_file")"
+rm -f -- "$peak_file" "$peak_file.stop"
+code_after_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
+[[ "$peak_bytes" =~ ^[0-9]+$ && "$peak_bytes" -gt 0 ]] ||
+ fail "Kernel cgroup-v2 memory.peak was never sampled for the real npm transaction: $peak_bytes"
+resource_elapsed_seconds="$((SECONDS-resource_start_seconds))"
+note "Measured actual peak cgroup-v2 memory.peak=${peak_bytes} bytes; MemoryMax=805306368 CPUQuota=100%; total positive HTTP update ${resource_elapsed_seconds}s; code before=${code_before_kib}KiB after=${code_after_kib}KiB"
+systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity 'CPUQuota='
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
