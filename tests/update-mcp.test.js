@@ -15,7 +15,7 @@ import { createUpdateController } from '../platform/update-controller.js';
 
 const origin='http://127.0.0.1:4188',resource=origin+'/mcp';
 function parse(text){const d=text.split('\n').filter(s=>s.startsWith('data:'));return JSON.parse(d.length?d.at(-1).slice(5).trim():text);}
-test('MCP update tool requires distinct panel:update scope, allowlist and explicitly installed broker',async t=>{
+test('MCP proposal is visible to old read clients when globally enabled and Broker installed',async t=>{
   const previous=process.env.PANEL_UPDATER_ENABLED;
   process.env.PANEL_UPDATER_ENABLED='1';
   t.after(()=>{if(previous===undefined)delete process.env.PANEL_UPDATER_ENABLED;else process.env.PANEL_UPDATER_ENABLED=previous;});
@@ -52,13 +52,14 @@ test('MCP update tool requires distinct panel:update scope, allowlist and explic
     return {status:res.status,data:parse(await res.text())};
   };
   const readList=await rpc(read.token,'tools/list');
-  assert.deepEqual(readList.data.result.tools.map(x=>x.name),['system.info']);
+  const readTools=readList.data.result.tools.map(x=>x.name);
+  assert.ok(readTools.includes('system.info'));
+  assert.ok(readTools.includes('panel.update.request'));
   const updateList=await rpc(update.token,'tools/list');
-  assert.deepEqual(updateList.data.result.tools.map(x=>x.name),['panel.update.request']);
-  const denied=await rpc(read.token,'tools/call',
-    {name:'panel.update.request',arguments:{targetSha:'a'.repeat(40)}});
-  assert.ok(denied.data.error || denied.data.result?.isError,'Read-only client must not invoke update tool');
-  const proposal=await rpc(update.token,'tools/call',
+  assert.deepEqual(updateList.data.result.tools.map(x=>x.name),readTools);
+  // An existing read-only-scoped OAuth grant gets the globally enabled
+  // proposal Action, without requiring a separate scope upgrade.
+  const proposal=await rpc(read.token,'tools/call',
     {name:'panel.update.request',arguments:{targetSha:'a'.repeat(40)}});
   assert.equal(proposal.status,200,JSON.stringify(proposal));
   assert.notEqual(proposal.data.result?.isError,true);
@@ -69,13 +70,14 @@ test('MCP update tool requires distinct panel:update scope, allowlist and explic
     tools:{'system.info':true}},user.id);
   const hidden=await rpc(update.token,'tools/list');
   assert.equal(hidden.status,200);
-  assert.equal(hidden.data.result.tools.length,0);
+  assert.equal(hidden.data.result.tools.some(x=>x.name==='panel.update.request'),false);
+  assert.equal(hidden.data.result.tools.some(x=>x.name==='system.info'),true);
   await data.revokeGrant(update.grant.id,user.id);
   assert.equal((await rpc(update.token,'tools/list')).status,401);
 });
 
 
-test('MCP direct update requires a separate OAuth execution scope, explicit policy and live Broker',async t=>{
+test('MCP direct update is globally enabled for existing OAuth clients and revoked immediately by policy',async t=>{
   const oldFlag=process.env.PANEL_UPDATER_ENABLED;
   const oldTrigger=process.env.PANEL_UPDATE_TRIGGER;
   process.env.PANEL_UPDATER_ENABLED='1';
@@ -125,15 +127,17 @@ test('MCP direct update requires a separate OAuth execution scope, explicit poli
     return {status:res.status,data:parse(await res.text())};
   };
   const readList=await rpc(reader.token,'tools/list');
-  assert.deepEqual(readList.data.result.tools.map(x=>x.name),['system.info']);
+  const globalTools=readList.data.result.tools.map(x=>x.name);
+  assert.ok(globalTools.includes('system.info'));
+  assert.ok(globalTools.includes('panel.update.status'));
+  assert.ok(globalTools.includes('panel.update.execute'));
   const statusList=await rpc(statusReader.token,'tools/list');
-  assert.deepEqual(statusList.data.result.tools.map(x=>x.name),['panel.update.status']);
+  assert.deepEqual(statusList.data.result.tools.map(x=>x.name),globalTools);
   const directList=await rpc(direct.token,'tools/list');
-  assert.deepEqual(directList.data.result.tools.map(x=>x.name),['panel.update.execute']);
-  assert.ok((await rpc(reader.token,'tools/call',
-    {name:'panel.update.execute',arguments:{targetSha:'a'.repeat(40)}})).data.error,
-    'read-only grant cannot directly update');
-  const queued=await rpc(direct.token,'tools/call',
+  assert.deepEqual(directList.data.result.tools.map(x=>x.name),globalTools);
+  // An older read-scoped login can now invoke direct execute *only* while
+  // the global direct gate and isolated Broker are enabled.
+  const queued=await rpc(reader.token,'tools/call',
     {name:'panel.update.execute',arguments:{targetSha:'a'.repeat(40)}});
   assert.equal(queued.status,200,JSON.stringify(queued));
   assert.notEqual(queued.data.result?.isError,true);
@@ -149,8 +153,10 @@ test('MCP direct update requires a separate OAuth execution scope, explicit poli
     enabled:true,registrationEnabled:false,allowUpdates:false,allowDirectUpdates:false,
     tools:{'system.info':true,'panel.update.status':true}
   },user.id);
-  assert.deepEqual((await rpc(direct.token,'tools/list')).data.result.tools,[],
-    'revoking direct Web policy immediately removes the tool');
+  const afterDisable=(await rpc(direct.token,'tools/list')).data.result.tools.map(x=>x.name);
+  assert.equal(afterDisable.includes('panel.update.execute'),false,
+    'revoking direct Web policy immediately removes direct update');
+  assert.equal(afterDisable.includes('panel.update.status'),true);
   await data.revokeGrant(direct.grant.id,user.id);
   assert.equal((await rpc(direct.token,'tools/list')).status,401);
 });
