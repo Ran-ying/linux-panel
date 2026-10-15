@@ -54,9 +54,18 @@ test('Web Git revision check accepts only configured foreign-owned checkout',asy
       'Web user must reproduce Git different-owner failure without exception');
     // Regression: the app receives a file URL path ending in '/', but Git
     // needs the exact canonical directory when checking safe.directory.
-    await assert.rejects(execFile('git',['-c',`safe.directory=${root}/`,
-      '-C',`${root}/`,'rev-parse','HEAD'],gitEnv),/dubious ownership/i,
-      'trailing slash in safe.directory does not match the owned checkout');
+    // Git versions differ on trailing-slash canonicalization. On the
+    // production Git version the unnormalized override fails; Git 2.55 on
+    // CI accepts it. The normalized path must succeed on both versions.
+    try {
+      const raw=await execFile('git',['-c',`safe.directory=${root}/`,
+        '-C',`${root}/`,'rev-parse','HEAD'],gitEnv);
+      assert.equal(raw.stdout.trim(),head);
+      t.diagnostic('This Git version also accepts a trailing slash');
+    } catch(cause) {
+      assert.match(cause.message,/dubious ownership/i);
+      t.diagnostic('This Git version requires normalized safe.directory');
+    }
     assert.equal((await execFile('git',['-c',`safe.directory=${root}`,
       '-C',`${root}/`,'rev-parse','HEAD'],gitEnv)).stdout.trim(),head,
       'a normalized safe.directory override allows the configured checkout');
