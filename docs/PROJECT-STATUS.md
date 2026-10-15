@@ -1,3 +1,11 @@
+# Stage 4 release preparation — 2026-10-15
+
+PR #76 prepares `docs/RELEASE-V0.5.md` and a validation-gated GitHub workflow that creates **a draft only**. It never publishes a stable release or modifies an existing release. Physical-device checks, Debian full install, owner snapshot recovery, historical-host metadata decision and independent review remain open; detailed reasons are in PUBLIC-RELEASE.md and the release notes. Owner requested stages 1–4 with test-server MCP updates after each stage; implementation and release preparation proceed, but missing real-world evidence is not fabricated.
+
+PR #75 merged at `156ba8ae4ed4ef793d8c06a19bda26e1f4dad181`; exact main CI 38763777914 and full-history scan 38763777789 passed. Third restricted MCP update `c9e8bcb4d884bc19ccce6366898b55d3` was queued from `337402c` to `156ba8a`; **at this documentation commit final status is pending**. Check Issue #54 for independently observed completion and subsequent PR #76 deployment/draft URL. Last confirmed success in this snapshot remains `337402c`. The installed root worker is unchanged.
+
+CI screenshot artifacts from merged browser run 38762271116 were downloaded and visually inspected: representative 320px maintenance/settings and 1280px system pages showed contained layout; screenshot evidence is from disposable CI, not a physical phone or private server. The browser script additionally asserts theme/logout/offline behavior at four widths.
+
 # Gate C release evidence — 2026-10-15
 
 PR #75 adds checksum-pinned Gitleaks full branch/tag history CI, current public-release checklist and corrected trusted-client MCP/TOTP/theme descriptions. Local Gitleaks 8.30.1 scan: 360 commits, zero credential findings; [initial full-history CI 38763335424](https://github.com/Ran-ying/linux-panel/actions/runs/38763335424) passed. App and MCP production audits report zero known vulnerabilities. Metadata-only historical hostname review found seven old unique blobs; current tracked tree has no private hostname match. Do not disclose old values or silently rewrite live Git history.
