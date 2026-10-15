@@ -86,7 +86,55 @@ install -o root -g root -m 0644 /home/stage/lp-recover.service \
 install -d -o root -g root -m 0755 /etc/systemd/system/linux-panel.service.d
 install -o root -g root -m 0644 /home/stage/lp-guard.conf \
  /etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf
+# Independent boot-time verification emits a PASS record through QEMU's
+# host-owned serial log. This does not require an SSH connection after a
+# hard guest power cut: the actual guest checks its own durable files, Git,
+# systemd and HTTP before emitting any success marker.
+cat >/usr/local/libexec/lp-qemu-boot-verify.sh <<'VERIFY'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ID=cccccccccccccccccccccccccccccccc
+for attempt in $(seq 1 150);do
+  if [[ -f /var/lib/linux-panel-update-status/result.json ]] &&
+     /usr/bin/python3 -c 'import json; p="/var/lib/linux-panel-update-status/result.json"; d=json.load(open(p)); assert d.get("id")=="cccccccccccccccccccccccccccccccc" and d.get("status")=="rolled_back"' >/dev/null 2>&1;then
+    break
+  fi
+  sleep 2
+done
+/usr/bin/python3 -c 'import json; p="/var/lib/linux-panel-update-status/result.json"; d=json.load(open(p)); assert d.get("id")=="cccccccccccccccccccccccccccccccc" and d.get("status")=="rolled_back"'
+expected="$(cat /home/stage/lp-old-sha)"
+actual="$(runuser -u linuxpanel-updater -- git -C /opt/linux-panel rev-parse HEAD)"
+[[ "$actual" == "$expected" ]] || { echo "LP_QEMU_BOOT_VERIFIER_FAIL: Git HEAD mismatch"; exit 1; }
+private_expected="$(cat /home/stage/lp-private-digest)"
+private_now="$(sha256sum /var/lib/linux-panel/panel-state.json | cut -d' ' -f1)"
+[[ "$private_expected" == "$private_now" ]] || { echo "LP_QEMU_BOOT_VERIFIER_FAIL: private state mismatch"; exit 1; }
+[[ ! -e /var/lib/linux-panel-update-root/active-transaction &&
+   ! -e /var/lib/linux-panel/update-processing ]] ||
+ { echo "LP_QEMU_BOOT_VERIFIER_FAIL: stranded journal"; exit 1; }
+systemctl is-active --quiet linux-panel.service ||
+ { echo "LP_QEMU_BOOT_VERIFIER_FAIL: Web inactive"; exit 1; }
+curl -fsS --max-time 5 http://127.0.0.1:4188/api/auth/status >/dev/null ||
+ { echo "LP_QEMU_BOOT_VERIFIER_FAIL: HTTP unhealthy"; exit 1; }
+echo 'LP_QEMU_LIVE_BROKER_RECOVERED'
+VERIFY
+chmod 0755 /usr/local/libexec/lp-qemu-boot-verify.sh
+cat >/etc/systemd/system/lp-qemu-boot-verify.service <<'VERIFYUNIT'
+[Unit]
+Description=Disposable QEMU root-worker crash recovery verification over serial
+After=linux-panel-update-recover.service network-online.target
+Wants=linux-panel-update-recover.service network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/lp-qemu-boot-verify.sh
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyS0
+TimeoutStartSec=400
+[Install]
+WantedBy=multi-user.target
+VERIFYUNIT
 systemctl daemon-reload
+systemctl enable lp-qemu-boot-verify.service
 systemctl enable linux-panel-update-recover.service
 # A guest-wide hard power cut immediately after privileged provisioning can
 # otherwise lose recently installed systemd unit contents or enablement
@@ -98,6 +146,8 @@ for path in \
  /etc/systemd/system/linux-panel.service \
  /etc/systemd/system/linux-panel-update.service \
  /etc/systemd/system/linux-panel-update-recover.service \
+ /etc/systemd/system/lp-qemu-boot-verify.service \
+ /usr/local/libexec/lp-qemu-boot-verify.sh \
  /etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf \
  /etc/linux-panel/panel.env \
  /etc/linux-panel/update-source \
