@@ -45,8 +45,9 @@ test('Git fetch under RestrictSUIDSGID succeeds after ACL repair, repeated refs 
   cmd('git',['clone','-q','-b','main',remote,target]);
   const group=cmd('id',['-gn']),user=cmd('id',['-un']);
   const gitdir=join(target,'.git');
-  for(const d of [gitdir,join(gitdir,'refs'),join(gitdir,'refs','heads'),join(gitdir,'objects')])
-   cmd('chmod',['g+rx,g+s,g-w,o-w',d]);
+  // The fixture itself runs inside the real systemd RestrictSUIDSGID
+  // sandbox during staging acceptance. Do not set SGID in its setup:
+  // numeric sharedRepository alone already triggers the forbidden syscall.
   const commit=(value)=>{
    writeFileSync(join(source,'test.txt'),value+'\n');
    cmd('git',['-C',source,'add','test.txt']);
