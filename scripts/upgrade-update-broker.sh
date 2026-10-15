@@ -182,6 +182,18 @@ preflight(){
      pass 'Effective existing systemd sandbox'
   else block 'Existing effective systemd sandbox not trusted';fi
 }
+# Do NOT pipe systemctl cat into grep -q under pipefail. grep -q may exit
+# as soon as it sees a guard (the systemd drop-in is not necessarily last),
+# causing systemctl cat to receive SIGPIPE and this safety check to falsely
+# BLOCK even when both conditions are loaded. First capture the complete unit
+# (including installed drop-ins); then require both exact directive lines.
+# A failed systemctl cat or an absent directive still fails closed.
+web_guard_loaded(){
+  local unit
+  unit="$(systemctl cat linux-panel.service)" || return 1
+  grep -Fxq -- 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' <<< "$unit" &&
+  grep -Fxq -- 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start' <<< "$unit"
+}
 installed_verify(){
   preflight
   if file "$WORKER" && file "$SOURCE_WORKER" && cmp -s "$WORKER" "$SOURCE_WORKER" &&
@@ -190,8 +202,7 @@ installed_verify(){
      file "$GUARD_UNIT" && cmp -s "$GUARD_UNIT" "$SOURCE_GUARD";then
     pass 'All three installed privileged artifacts exactly match source'
   else block 'Root worker/unit still differ from current checked-out source';fi
-  if systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' &&
-     systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start';then
+  if web_guard_loaded;then
     pass 'Web unit enforces transaction boot guard'
   else block 'Web recovery guard not loaded in systemd';fi
   if [[ "$(systemctl show linux-panel-update.service -p ExecStart --value)" == *"$WORKER"* ]] &&
