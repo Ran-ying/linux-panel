@@ -4,7 +4,7 @@
 
 *A modular Node.js Linux panel with a web dashboard and an optional OAuth-protected MCP endpoint.*
 
-> v0.5 开发版本：单管理员、单实例，具备 TOTP 双因素认证与受限更新提案；未经过独立安全审计。MCP、新客户端注册和远程更新权限均默认关闭。
+> v0.5 仍处于开发及发布验收阶段（非独立安全审计通过或 v1.0 稳定发布）。具备可选 TOTP、Web 更新审批、MCP 独立授权的直接更新和受限 root Broker；首次安装默认关闭高权限能力。2026-10-15 的生产 Broker 激活与 OAuth 实际授权进展见 [项目当前状态](docs/PROJECT-STATUS.md)、[长期交接 Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
 ## 功能
 
