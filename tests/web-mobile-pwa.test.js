@@ -47,7 +47,7 @@ test('viewport locking, safe areas, home-screen metadata and mobile navigation p
   assert.match(html,/rel="apple-touch-icon"/);
   assert.match(css,/env\(safe-area-inset-bottom/);
   assert.match(css,/@media\(max-width:730px\)/);
-  assert.match(css,/\.module-sidebar\{[\s\S]*?position:fixed/);
+  assert.match(css,/\.module-nav\{[\s\S]*?overflow-x:auto/);
   assert.match(css,/min-height:44px/);
   assert.match(css,/font-size:16px/);
   assert.match(entry,/registerPanelServiceWorker\(\)/);
