@@ -99,7 +99,9 @@ ensure_web_read_access(){
       return 1
     fi
     chgrp -R -- linuxpanel "$d" || return 1
-    chmod -R -- g+rX,g-w,o-w "$d" || return 1
+    # The root Broker has CAP_CHOWN but intentionally NOT CAP_FOWNER.
+    # chmod must run as the updater, which owns the newly installed files.
+    as_updater chmod -R -- g+rX,g-w,o-w "$d" || return 1
   done
   if [[ ! -f "$ROOT/node_modules/fastify/package.json" ]];then
     log 'Required Fastify runtime manifest not found after build'
