@@ -479,3 +479,6 @@ table{min-width:500px}
 .execution-plan li+li{margin-top:12px}
 .execution-plan .command-output{min-height:0;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .execution-plan p{margin:8px 0}
+
+/* One disclosure owns the implementation, without nested explanatory frames. */
+.action-explanation .execution-plan{margin:10px 0 0;padding:0;border:0;border-radius:0;background:transparent}
