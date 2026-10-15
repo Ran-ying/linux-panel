@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/update-worker.sh"
+      - "platform/state-store.js"
       - "scripts/install-update-broker.sh"
       - "scripts/upgrade-update-broker.sh"
       - "deployment/systemd/linux-panel-update.service"
