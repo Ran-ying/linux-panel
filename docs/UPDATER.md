@@ -202,8 +202,11 @@ the panel. Unfinished journal/processing files block new deployments.
 
 A separate fixed, sandboxed systemd one-shot unit,
 `linux-panel-update-recover.service`, runs only the
-`linux-panel-update-worker --recover-only` entrypoint on boot **before**
-`linux-panel.service`. It does not fetch a new target or consume update-trigger
+`linux-panel-update-worker --recover-only` entrypoint at boot, with **no**
+`Before=linux-panel.service` dependency (that would deadlock a synchronous
+Web HTTP-health probe). Instead the root journal's systemd startup guard
+fails closed until the recovery worker explicitly grants a temporary
+startup permit. It does not fetch a new target or consume update-trigger
 markers. It validates the journal and either recognizes an already recorded
 successful deployment, or restores the saved revision and private state,
 rebuilds, restarts the panel and records `rolled_back`. If restoration fails,
@@ -221,7 +224,12 @@ The ephemeral Ubuntu real-systemd workflow tests process SIGKILL during
 `npm ci` followed by manual invocation of the boot recovery service.
 It does **not** constitute a real power-off, low-memory or full-disk test.
 
-### Independent staging acceptance BEFORE activation
+#The [production deployment gate](PRODUCTION-DEPLOYMENT-GATE.md) separates
+read-only resource/identity checks, existing-Broker migration and the
+explicit operator-only activation decision. This guide never authorizes
+automatic production enablement.
+
+## Independent staging acceptance BEFORE activation
 
 Follow [UPDATE-ACCEPTANCE.md](UPDATE-ACCEPTANCE.md) on a **disposable** Ubuntu
 24.04/Debian 12+ VM (snapshot, test Git remote, no live credentials) to test
