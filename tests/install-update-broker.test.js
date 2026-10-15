@@ -113,3 +113,14 @@ test('real Git cleanliness preflight survives bash nounset and fails closed',()=
   assert.doesNotMatch(failed.stdout,/PASS: Git checkout clean/);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('npm-created dependencies are published read-only to Web on update and rollback',()=>{
+ const worker=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
+ assert.match(worker,/umask 027/);
+ assert.match(worker,/--reuid="\$USER" --regid=linuxpanel/);
+ assert.match(worker,/as_updater chgrp -R linuxpanel "\$dir"/);
+ assert.match(worker,/as_updater chmod -R g\+rX,g-w,o-w "\$dir"/);
+ assert.match(worker,/as_web test -r "\$ROOT\/node_modules\/fastify\/package\.json"/);
+ assert.match(worker,/as_updater npm run build:web && ensure_web_access/);
+ assert.match(worker,/if ! build \|\| ! ensure_web_access;then rollback/);
+});
