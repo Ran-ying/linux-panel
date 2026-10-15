@@ -74,12 +74,19 @@ try {
         const card=page.locator('.action-card').first();
         await card.locator('.result').waitFor();
         await page.waitForFunction(()=>!document.querySelector('.action-card .primary')?.disabled);
-        await card.getByRole('button',{name:'查看执行内容',exact:true}).click();
+        await card.locator('.action-explanation summary').click();
         await card.locator('.execution-plan').waitFor();
         assert.equal(await card.locator('.result').count(),1,'viewing implementation must retain the data result');
         if(name.trim()==='服务浏览')
           assert.equal((await card.locator('.command-output').innerText()).trim(),'systemctl list-units --type=service --all --no-pager --no-legend --plain');
-        else assert.match(await card.locator('.execution-plan').innerText(),/os\.platform\(\)/);
+        else {
+          const implementation=await card.locator('.command-output').innerText();
+          for(const call of ['os.hostname()','os.platform()','os.release()','os.arch()','os.availableParallelism()','os.totalmem()','os.freemem()','os.uptime()','process.version'])
+            assert.ok(implementation.includes(call),'missing concrete system.info call '+call);
+          assert.equal(await card.locator('.action-explanation').count(),1);
+          assert.equal(await card.getByRole('button',{name:'查看执行内容',exact:true}).count(),0);
+          assert.ok(!await card.locator('.action-explanation').innerText().then(text=>text.includes('等 Node.js')));
+        }
       }
       // All module containers must fit; tables/nav may scroll internally.
       const outside=await page.locator('.module-content, .action-card, .settings-section, .sidebar-brand, .module-nav, .sidebar-settings')
