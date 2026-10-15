@@ -54,6 +54,17 @@ ssh_run(){ ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
 scp_run(){ scp -q -P 22647 -o BatchMode=yes -o StrictHostKeyChecking=no \
   -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
   -i "$work/key" "$1" "stage@127.0.0.1:$2"; }
+# Retry only transport failures (ssh exit 255) for read-only probes after
+# a hard reboot. Never hide assertion failures from the guest command.
+ssh_retry(){
+  local rc=0
+  for i in $(seq 1 15);do
+    if ssh_run "$@";then return 0;else rc=$?;fi
+    ((rc==255)) || return "$rc"
+    sleep 2
+  done
+  return "$rc"
+}
 boot(){
   rm -f "$work/vm.pid"
   qemu-system-x86_64 -machine accel=kvm:tcg -cpu max -smp 2 -m 2048 \
@@ -65,9 +76,9 @@ boot(){
     -daemonize -pidfile "$work/vm.pid" || fail 'QEMU did not start'
   vm_pid="$(cat "$work/vm.pid")"
   for i in $(seq 1 180);do
-    if ssh_run true >/dev/null 2>&1;then
-      ssh_run 'sudo cloud-init status --wait >/dev/null' ||
-        fail 'Guest cloud-init failed'
+    # One successful SSH connect is insufficient: cloud-init may still
+    # restart sshd. Require the complete remote readiness command.
+    if ssh_run 'sudo cloud-init status --wait >/dev/null' >/dev/null 2>&1;then
       return
     fi
     sleep 2
@@ -153,11 +164,11 @@ ssh_run 'sudo bash /home/stage/phase1.sh'
 note 'POWER CUT A — synced state, journal, processing marker'
 hard_cut
 boot
-ssh_run '/home/stage/node /home/stage/state-test.mjs verify'
-ssh_run 'sudo test -s /var/lib/linux-panel-update-root/active-transaction &&
+ssh_retry '/home/stage/node /home/stage/state-test.mjs verify'
+ssh_retry 'sudo test -s /var/lib/linux-panel-update-root/active-transaction &&
   sudo test -s /var/lib/linux-panel/update-processing' ||
   fail 'Power cut A lost journal or processing marker'
-mode="$(ssh_run 'sudo stat -c %a /var/lib/linux-panel-update-root/active-transaction')"
+mode="$(ssh_retry 'sudo stat -c %a /var/lib/linux-panel-update-root/active-transaction')"
 [[ "$mode" == 600 ]] || fail 'Power cut A lost journal owner-only permissions'
 note 'PASS A: private state, journal and processing survived guest power cut'
 ssh_run 'sudo bash /home/stage/phase2.sh'
@@ -167,7 +178,7 @@ boot
 ssh_run '/home/stage/node /home/stage/state-test.mjs verify'
 ssh_run "sudo grep -Fq '\"status\":\"success\"' /var/lib/linux-panel-update-status/result.json" ||
   fail 'Power cut B lost success record'
-ssh_run 'sudo test ! -e /var/lib/linux-panel-update-root/active-transaction &&
+ssh_retry 'sudo test ! -e /var/lib/linux-panel-update-root/active-transaction &&
   sudo test ! -e /var/lib/linux-panel/update-processing' ||
   fail 'Power cut B resurrected cleaned transaction marker'
 note 'PASS B: result and cleanup survived hard reset and reboot'
