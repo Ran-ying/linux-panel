@@ -74,7 +74,7 @@ function prepare(){
  worker=swap(worker,securityLine,'[[ "$EXPECTED" == '+JSON.stringify(remote)+' ]] || { record failed; exit 2; }');
  // Test-only Bash builtin fault injection: emulate a kernel returning ENOSPC
  // AFTER writing partial bytes (a much harder case than preflight low df).
- worker=swap(worker,'record(){',\`printf(){
+ worker=swap(worker,'record(){',`printf(){
   if [[ "\${TEST_PARTIAL_JOURNAL:-0}" == 1 &&
         "$1" == 'id=%s\\nsha=%s\\nold=%s\\n' ]];then
     builtin printf 'id=partial\\n'
@@ -87,7 +87,7 @@ function prepare(){
   fi
   builtin printf "$@"
 }
-record(){\`);
+record(){`);
  const script=join(base,'worker.sh'),log=join(base,'events.log');
  let sequence=0;
  writeFileSync(log,'');
