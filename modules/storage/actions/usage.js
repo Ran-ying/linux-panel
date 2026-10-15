@@ -30,7 +30,7 @@ async function readDiskUsage() {
 export default {
   id: 'storage.usage',
   title: '根文件系统磁盘占用',
-  description: '通过 Node.js fs.statfs() 读取当前主机根文件系统容量。',
+  description: '读取根文件系统的总容量、已用与可用空间。',
   kind: 'read', permission: 'storage:read', exposure: { web: true, mcp: true },
   inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   outputSchema: {
@@ -44,7 +44,15 @@ export default {
     },
     additionalProperties: false
   },
-  explain: 'fs.statfs("/") 获取文件系统的块数量与可用块。已用量根据总块和空闲块计算，available 可能少于 free（保留块）。APFS 等文件系统统计口径可能与 Finder 略有差异。',
+  explain: 'Linux 通过 stat -f 获取文件系统的块数量与可用块；其他平台使用 fs.statfs("/")。已用量根据总块和空闲块计算，available 可能少于 free（保留块）。APFS 等文件系统统计口径可能与 Finder 略有差异。',
+  terminal:{
+    fields:{filesystem:"stat -f -c '%S %b %f %a' /"},
+    decode: values => {
+      const parts=values.filesystem.trim().split(/\s+/).map(BigInt);
+      if (parts.length!==4) throw new Error('Invalid filesystem counters');
+      return summarizeStatfs({bsize:parts[0],blocks:parts[1],bfree:parts[2],bavail:parts[3]});
+    }
+  },
   createPlan: async () => [{ type: 'node-api', code: readDiskUsage.toString() }],
   execute: readDiskUsage
 };
