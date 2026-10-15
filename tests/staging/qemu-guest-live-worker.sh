@@ -29,6 +29,7 @@ printf 'PANEL_LISTEN_HOST=127.0.0.1\nPANEL_LISTEN_PORT=4188\nPANEL_DATA_DIR=/var
 chmod 0600 /etc/linux-panel/panel.env
 printf 'https://github.com/Ran-ying/linux-panel.git\n' >/etc/linux-panel/update-source
 chmod 0600 /etc/linux-panel/update-source
+install -d -o linuxpanel-updater -g linuxpanel-updater -m 0755 /opt/linux-panel
 runuser -u linuxpanel-updater -- git clone -q --single-branch --branch main \
  https://github.com/Ran-ying/linux-panel.git /opt/linux-panel
 target="$(runuser -u linuxpanel-updater -- git -C /opt/linux-panel rev-parse HEAD)"
