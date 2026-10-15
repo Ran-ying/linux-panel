@@ -19,6 +19,12 @@ await mkdir(output,{recursive:true});
 await new AuthService(new StateStore(statePath)).bootstrap('admin',password);
 const app=await createApp({root,statePath,publicOrigin:origin,production:true,
   listener:{host:'127.0.0.1',port:49273}});
+// Chromium Service Worker fetches can use a separate network context from the
+// page's CDP offline emulation. Disconnect the disposable upstream too.
+let offlineDocument=false;
+app.addHook('onRequest',async (request,reply)=>{
+  if(offlineDocument && request.url==='/') reply.raw.destroy();
+});
 let browser;
 try {
   await app.listen({host:'127.0.0.1',port:49273});
@@ -144,10 +150,12 @@ try {
     });
     assert.ok(cached.every(p=>p==='/offline.html' || p.startsWith('/icons/') || p.startsWith('/assets/')),
       'private route found in browser cache');
+    offlineDocument=true;
     await context.setOffline(true);
     await page.reload();
     assert.equal(await page.locator('#login-pass').count(),0,'offline page cannot retain live login/dashboard: '+await page.locator('body').innerText());
     assert.ok((await page.locator('body').innerText()).length>20,'offline explanation missing');
+    offlineDocument=false;
     await context.setOffline(false);
     await page.reload();
     await page.locator('#login-pass').waitFor();
