@@ -1,0 +1,55 @@
+name: Disposable fresh application install
+on:
+  pull_request:
+    paths:
+      - 'scripts/install*.sh'
+      - 'scripts/setup.sh'
+      - 'scripts/admin-init.js'
+      - '.github/workflows/fresh-install.yml'
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install current PR on disposable runner, login and refuse replacement
+        env:
+          INSTALL_REF: ${{ github.head_ref }}
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = Linux
+          secret=$(mktemp)
+          trap 'rm -f "$secret"' EXIT
+          chmod 600 "$secret"
+          openssl rand -hex 24 > "$secret"
+          sudo bash scripts/setup.sh --apply --host 127.0.0.1 --port 49331 \
+            --node-bin "$(command -v node)" --ref "$INSTALL_REF" \
+            --admin-password-stdin < "$secret"
+          sudo systemctl is-active --quiet linux-panel.service
+          PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const origin='http://127.0.0.1:49331';
+          let response;
+          for(let i=0;i<30;i++){
+            try {response=await fetch(origin+'/api/auth/status');if(response.ok)break;}catch{}
+            await new Promise(r=>setTimeout(r,500));
+          }
+          assert.equal(response?.status,200);
+          const login=await fetch(origin+'/api/auth/login',{method:'POST',headers:{
+            origin,'content-type':'application/json','x-panel-client':'web'},
+            body:JSON.stringify({username:'admin',password:readFileSync(process.env.PANEL_TEST_PASSWORD_PATH,'utf8').trim()})});
+          assert.equal(login.status,200);
+          console.log('PASS real fresh install, service and password login');
+          JS
+          if sudo bash scripts/setup.sh --apply --host 127.0.0.1 --port 49331 \
+            --node-bin "$(command -v node)" --admin-password-stdin < "$secret"; then
+            echo 'FAIL repeated install overwrote existing instance'; exit 1
+          fi
+          test ! -e /etc/systemd/system/linux-panel-update.service
+          sudo test "$(sudo stat -c %a /etc/linux-panel/panel.env)" = 600
