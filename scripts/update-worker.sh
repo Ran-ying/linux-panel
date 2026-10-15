@@ -198,10 +198,16 @@ recover(){
     local restore_tmp=''
     restore_tmp="$(mktemp "$STATE/.restore-state.XXXXXXXX")" || restored=0
     if [[ -n "$restore_tmp" ]];then
-      cp -- "$backup" "$restore_tmp" || restored=0
-      chmod 0600 "$restore_tmp" || restored=0
-      chown linuxpanel:linuxpanel "$restore_tmp" || restored=0
-      mv -fT -- "$restore_tmp" "$STATE/panel-state.json" || restored=0
+      # Never publish a truncated or partially copied private-state snapshot.
+      if ! cp -- "$backup" "$restore_tmp" ||
+         ! chmod 0600 "$restore_tmp" ||
+         ! chown linuxpanel:linuxpanel "$restore_tmp" ||
+         ! durable_sync file "$restore_tmp" ||
+         ! mv -fT -- "$restore_tmp" "$STATE/panel-state.json" ||
+         ! durable_sync dir "$STATE";then
+        restored=0
+        rm -f -- "$restore_tmp"
+      fi
     fi
   elif [[ "$current" != "$OLD" ]];then
     restored=0
@@ -325,8 +331,17 @@ fi
 # Do not preserve the Web user's owner/mode with cp -a: the root Broker
 # deliberately lacks CAP_FOWNER and cannot chmod a linuxpanel-owned copy.
 # Create a new root-owned 0600 snapshot instead.
-if ! install -o root -g root -m 0600 -- "$STATE/panel-state.json" "$BACKUP";then
-  systemctl start linux-panel.service || true
+# Build the backup under a temporary name; it becomes visible to recover()
+# only once complete and fsync'd on its own filesystem. The root journal is
+# already durable, so an interrupted snapshot cannot become a trusted backup.
+backup_tmp=''
+if ! backup_tmp="$(mktemp "$ROOT_BACKUP/.state-snapshot.XXXXXXXX")" ||
+   ! install -o root -g root -m 0600 -- "$STATE/panel-state.json" "$backup_tmp" ||
+   ! durable_sync file "$backup_tmp" ||
+   ! mv -nT -- "$backup_tmp" "$BACKUP" ||
+   ! durable_sync dir "$ROOT_BACKUP";then
+  [[ -z "$backup_tmp" ]] || rm -f -- "$backup_tmp"
+  start_panel || true
   record failed
   exit 2
 fi
