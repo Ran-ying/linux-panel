@@ -1,11 +1,17 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, inject } from 'vue';
 import ActionCard from './components/ActionCard.vue';
 import UpdateManager from './components/UpdateManager.vue';
 import ListenerManager from './components/ListenerManager.vue';
 import LoginPanel from './components/LoginPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import { buildModuleNavigation } from './module-navigation.js';
+
+const themeController = inject('themeController');
+const themePreference = ref(themeController?.getPreference() ?? 'system');
+function onThemeChange(event) {
+  themePreference.value = themeController?.setPreference(event.target.value) ?? 'system';
+}
 
 const initialized = ref(false);
 const checking = ref(true);
@@ -102,6 +108,15 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div class="appearance-control">
+    <label for="appearance-choice">外观</label>
+    <select id="appearance-choice" :value="themePreference" aria-label="界面外观"
+      @change="onThemeChange">
+      <option value="system">跟随系统</option>
+      <option value="light">浅色</option>
+      <option value="dark">深色</option>
+    </select>
+  </div>
   <div v-if="checking" class="auth-shell"><p role="status">正在检查登录状态…</p></div>
   <LoginPanel v-else-if="!session" :initialized="initialized" @signed-in="signIn" />
   <main v-else class="layout">
