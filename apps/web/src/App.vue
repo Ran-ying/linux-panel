@@ -53,12 +53,13 @@ function collapseNavigation() {
   sidebarToggle.value?.focus();
 }
 
-function selectPage(id) {
+async function selectPage(id) {
   activePage.value = id;
   mobileExpanded.value = false;
   if (window.matchMedia('(max-width:730px)').matches) {
+    await nextTick();
+    sidebarToggle.value?.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
-    sidebarToggle.value?.focus();
   }
 }
 
