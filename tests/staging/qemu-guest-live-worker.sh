@@ -151,7 +151,10 @@ for path in \
  /etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf \
  /etc/linux-panel/panel.env \
  /etc/linux-panel/update-source \
- /var/lib/linux-panel/panel-state.json;do
+ /var/lib/linux-panel/panel-state.json \
+ /home/stage/lp-old-sha \
+ /home/stage/lp-target-sha \
+ /home/stage/lp-private-digest;do
  durable_sync file "$path"
 done
 for path in \
@@ -160,11 +163,18 @@ for path in \
  /etc/systemd/system/linux-panel.service.d \
  /etc/systemd/system/multi-user.target.wants \
  /etc/linux-panel \
+ /home/stage \
  /var/lib/linux-panel;do
  durable_sync dir "$path"
 done
-[[ "$(systemctl is-enabled linux-panel-update-recover.service)" == enabled ]] ||
- { echo 'Recovery unit was not enabled before cut' >&2; exit 1; }
+[[ "$(systemctl is-enabled linux-panel-update-recover.service)" == enabled &&
+    "$(systemctl is-enabled lp-qemu-boot-verify.service)" == enabled ]] ||
+ { echo 'Recovery or serial verifier not enabled before cut' >&2; exit 1; }
+# Prove this exact systemd TTY forwarding reaches the host QEMU serial file
+# BEFORE the hard cut. Otherwise absence of a later PASS is ambiguous.
+systemd-run --quiet --wait --collect --unit=lp-qemu-serial-probe \
+ -p StandardOutput=tty -p StandardError=tty -p TTYPath=/dev/ttyS0 \
+ /usr/bin/printf 'LP_QEMU_PRECUT_SERIAL_READY\n'
 systemctl start linux-panel.service
 # systemctl start returns when the process is spawned, not when the HTTP
 # listener has completed startup. Do not race the readiness signal.
