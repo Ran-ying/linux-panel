@@ -23,7 +23,7 @@ let browser;
 try {
   await app.listen({host:'127.0.0.1',port:49273});
   browser=await chromium.launch({headless:true});
-  for(const width of [320,390,730,1280]){
+  for(const width of [320,390,730,1280,1920]){
     const context=await browser.newContext({viewport:{width,height:900}});
     const page=await context.newPage();
     const errors=[];
@@ -51,19 +51,31 @@ try {
           return r.left < -1 || r.right > innerWidth+1;
         }).map(n=>n.className));
       assert.deepEqual(outside,[],width+' '+name+' container overflow');
+      const frames=await page.locator('.module-content').evaluate(content=>{
+        const sidebar=document.querySelector('.module-sidebar');
+        const side=sidebar.getBoundingClientRect(), box=content.getBoundingClientRect();
+        const nodes=[...content.querySelectorAll(':scope > .module-intro,:scope > .action-card,:scope > .settings-section,:scope > .action-flow > .action-card')];
+        const rects=nodes.map(n=>n.getBoundingClientRect());
+        return {width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
+          radius:getComputedStyle(sidebar).borderTopLeftRadius,
+          cards:nodes.map(n=>{const s=getComputedStyle(n);return {radius:s.borderTopLeftRadius,
+            borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};}),
+          gaps:rects.slice(1).map((r,i)=>r.top-rects[i].bottom)};
+      });
+      assert.ok(frames.width<=1100.5,'content must stop growing at 1100px');
+      assert.ok(Math.abs(frames.gutter-16)<1,width+' sidebar-to-content gap must be 16px');
+      assert.ok(frames.cards.length>0,'module title/card frame missing');
+      assert.ok(frames.cards.every(c=>c.radius===frames.radius && c.borders.every(b=>b==='1px')),
+        width+' '+name+' cards must match the rounded sidebar frame');
+      assert.ok(frames.gaps.every(g=>Math.abs(g-16)<1),width+' '+name+' card gaps must match sidebar gap');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
     }
-    // Compact sidebar, bottom-only separators and no card spacing.
+    // Sidebar grouping, account placement and appearance controls remain intact.
     assert.equal(await page.locator('.sidebar-settings .sidebar-account').count(),1);
     assert.equal(await page.locator('footer').count(),0);
     assert.equal(await page.locator('.sidebar-heading .panel-version').count(),1);
     assert.equal(await page.locator('.module-nav button').filter({hasText:'面板维护'}).count(),0);
     assert.equal(await page.locator('.platform-nav button').filter({hasText:'面板维护'}).count(),1);
-    const cardStyles=await page.locator('.action-card,.settings-section').evaluateAll(nodes=>nodes.map(n=>{
-      const s=getComputedStyle(n);
-      return [s.marginTop,s.marginBottom,s.marginLeft,s.marginRight,s.borderTopWidth,s.borderLeftWidth,s.borderRightWidth];
-    }));
-    assert.ok(cardStyles.every(values=>values.every(v=>v==='0px')),'cards should be contiguous with bottom borders only');
     const follow=page.getByRole('checkbox',{name:'跟随系统',exact:true});
     const dark=page.getByRole('button',{name:'深色',exact:true});
     const light=page.getByRole('button',{name:'浅色',exact:true});
