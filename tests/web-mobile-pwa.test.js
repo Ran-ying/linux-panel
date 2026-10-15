@@ -71,7 +71,11 @@ test('service worker never caches auth/API/OAuth/MCP responses or HTML navigatio
   const fetch=async request=>{
     fetchCalls.push(request.url);
     if(broken)throw Error('offline');
-    return new Response('NETWORK:'+request.url,{status:200});
+    const response = new Response('NETWORK:'+request.url,{status:200});
+    // Node's Response constructor has type=default; actual same-origin
+    // browser fetch responses have type=basic.
+    Object.defineProperty(response,'type',{value:'basic'});
+    return response;
   };
   const scope={
     self:{
