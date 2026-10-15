@@ -70,6 +70,17 @@ try {
       await page.locator('.module-content').waitFor();
       if(name.trim()==='系统概览')
         await page.getByRole('heading',{name:'根文件系统磁盘占用',exact:true}).waitFor();
+      if(width===1280 && ['系统概览','服务浏览'].includes(name.trim())){
+        const card=page.locator('.action-card').first();
+        await card.locator('.result').waitFor();
+        await page.waitForFunction(()=>!document.querySelector('.action-card .primary')?.disabled);
+        await card.getByRole('button',{name:'查看执行内容',exact:true}).click();
+        await card.locator('.execution-plan').waitFor();
+        assert.equal(await card.locator('.result').count(),1,'viewing implementation must retain the data result');
+        if(name.trim()==='服务浏览')
+          assert.equal((await card.locator('.command-output').innerText()).trim(),'systemctl list-units --type=service --all --no-pager --no-legend --plain');
+        else assert.match(await card.locator('.execution-plan').innerText(),/os\.platform\(\)/);
+      }
       // All module containers must fit; tables/nav may scroll internally.
       const outside=await page.locator('.module-content, .action-card, .settings-section, .sidebar-brand, .module-nav, .sidebar-settings')
         .evaluateAll(nodes=>nodes.filter(n=>{
@@ -137,6 +148,9 @@ try {
     assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
     assert.equal(await dark.getAttribute('aria-pressed'),'true');
     assert.equal(await auto.getAttribute('aria-pressed'),'false');
+    const selectedBorder=await dark.evaluate(node=>({width:getComputedStyle(node).borderTopWidth,color:getComputedStyle(node).borderTopColor}));
+    assert.equal(selectedBorder.width,'2px');
+    assert.notEqual(selectedBorder.color,'rgba(0, 0, 0, 0)','selected theme must keep a visible border in dark mode');
     await page.screenshot({path:join(output,width+'-dark.png'),fullPage:true});
     await light.click();
     assert.equal(await page.locator('html').getAttribute('data-theme'),'light');

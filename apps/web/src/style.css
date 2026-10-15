@@ -470,3 +470,12 @@ table{min-width:500px}
   .module-sidebar .module-toggle{border:1px solid var(--border-panel);border-radius:8px}
   .sidebar-settings>.module-toggle{margin-top:8px}
 }
+
+/* Selected preference stays distinct in both palettes, including Auto. */
+.theme-capsule button{border:2px solid transparent}
+.theme-capsule button[aria-pressed="true"]{border-color:var(--focus-ring)}
+.execution-plan{margin:12px 0;padding:12px;border:1px solid var(--border-panel);border-radius:10px;background:var(--panel-alt-bg)}
+.execution-plan ol{margin:10px 0;padding-left:22px}
+.execution-plan li+li{margin-top:12px}
+.execution-plan .command-output{min-height:0;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.execution-plan p{margin:8px 0}

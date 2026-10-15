@@ -11,6 +11,7 @@ const props = defineProps({
 const emit = defineEmits(['unauthorized']);
 const inputText = ref('{}');
 const response = ref(null);
+const executionPlan = ref(null);
 const error = ref('');
 const busy = ref(false);
 const view = ref('visual');
@@ -29,7 +30,6 @@ async function run(operation, refresh = false) {
   const requestId = ++generation;
   busy.value = true;
   error.value = '';
-  if (operation === 'preview') autoRefresh.value = false;
   controller = new AbortController();
   try {
     const input = JSON.parse(inputText.value);
@@ -46,8 +46,11 @@ async function run(operation, refresh = false) {
     if (apiResponse.status === 401) emit('unauthorized');
     if (!apiResponse.ok) throw new Error(payload.error || `HTTP ${apiResponse.status}`);
     if (disposed || generation !== requestId) return;
-    response.value = { operation, content: payload };
-    if (!refresh) view.value = operation === 'preview' ? 'json' : 'visual';
+    if (operation === 'preview') executionPlan.value = payload;
+    else {
+      response.value = { operation, content: payload };
+      if (!refresh) view.value = 'visual';
+    }
   } catch (cause) {
     if (disposed || generation !== requestId || cause.name === 'AbortError') return;
     error.value = `操作失败：${cause.message}`;
@@ -58,6 +61,18 @@ async function run(operation, refresh = false) {
       controller = undefined;
     }
   }
+}
+
+function commandLine(step) {
+  return [step.command, ...(step.args ?? [])].map(part => {
+    const value = String(part);
+    return /^[A-Za-z0-9_./:=,@%+-]+$/.test(value) ? value :
+      "'" + value.split("'").join("'\"'\"'") + "'";
+  }).join(' ');
+}
+
+function stepLabel(type) {
+  return ({execFile:'执行命令', 'file-read':'读取文件', 'node-api':'系统 API', mock:'演示数据'})[type] ?? '操作步骤';
 }
 
 // These are Web-only invocation preferences, not part of Action or MCP.
@@ -110,12 +125,27 @@ onUnmounted(() => {
       spellcheck="false" rows="3" />
 
     <div class="toolbar">
-      <button type="button" :disabled="busy" @click="run('preview')">查看操作计划</button>
+      <button type="button" :disabled="busy" @click="run('preview')">查看执行内容</button>
       <button type="button" class="primary" :disabled="busy" @click="run('execute')">
         {{ busy ? '处理中…' : action.kind === 'write' ? '申请更新' : '刷新数据' }}
       </button>
     </div>
 
+    <div v-if="executionPlan" class="execution-plan">
+      <div class="section-heading"><strong>执行内容</strong>
+        <button type="button" class="form-button" @click="executionPlan=null">收起详情</button>
+      </div>
+      <p class="muted small">以下为此操作的实现步骤；查看不会执行操作。</p>
+      <ol>
+        <li v-for="(step,index) in executionPlan.steps" :key="index">
+          <strong>{{ stepLabel(step.type) }}</strong>
+          <pre v-if="step.command" class="raw-output command-output">{{ commandLine(step) }}</pre>
+          <p v-if="step.path">文件：<code>{{ step.path }}</code></p>
+          <p v-if="step.description">{{ step.description }}</p>
+        </li>
+      </ol>
+      <details><summary>原始步骤 JSON</summary><pre class="raw-output">{{ JSON.stringify(executionPlan, null, 2) }}</pre></details>
+    </div>
     <div v-if="error" role="alert" class="error">{{ error }}</div>
     <div v-if="response" class="result">
       <div class="result-header">

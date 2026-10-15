@@ -1,3 +1,11 @@
+# Theme selection border and readable execution steps — 2026-10-16
+
+Owner reported ambiguous Auto/moon selection in dark mode and requested seeing what each Action actually runs. The selected appearance button now has a 2px focus-color border in either palette. Rename preview entry to “View execution content” and render declared steps as commands with arguments, file reads, API descriptions or other implementation steps. The preview remains informational; existing data results and refresh preferences are retained. Raw step JSON remains available under a disclosure. No command is synthesized for Actions that directly use Node APIs, and this is not an execution-history log.
+
+Browser checks verify the selected border under dark mode, exact service command display, API-step description and retained data results. Existing five-width/header/session/theme/PWA checks remain. CI/screenshot review and deployment pending at this snapshot.
+
+Base main/last confirmed test deployment: `034c2a133b8f382f4a49593f1e91bd220b66d9e0`, PR #89, durable MCP transaction `f2a10e014c66ad101880dfb9afa4249e`, success at 2026-10-15T21:51:17Z; panel active/running. Issue #54 records final merge/validation/deployment evidence.
+
 # Three-way appearance capsule — 2026-10-16
 
 Owner requested replacing the Follow system checkbox with Auto between sun and moon. Owner also requested inset rounded mobile tabs: the tab group now has a 10px rounded frame, rounded buttons, 12px side gutters and 8/12px vertical margins. Expanded module lists also have 12px side gutters, rounded rows and 8px row gaps. Collapsed-height measurement includes those margins, preserving the normal content gap.
