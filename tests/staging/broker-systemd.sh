@@ -238,7 +238,7 @@ note 'Recovery must withhold rolled_back until restarted Web answers HTTP'
 # never answers HTTP, then require the root recovery journal to survive.
 unhealthy_id=66666666666666666666666666666666
 saved_state_sha="$(sha256sum /var/lib/linux-panel/panel-state.json | awk '{print $1}')"
-printf 'id=%s\\nsha=%s\\nold=%s\\n' "$unhealthy_id" "$TARGET" "$TARGET" \\
+printf 'id=%s\nsha=%s\nold=%s\n' "$unhealthy_id" "$TARGET" "$TARGET" \
  > /var/lib/linux-panel-update-root/active-transaction
 chmod 0600 /var/lib/linux-panel-update-root/active-transaction
 systemctl stop linux-panel.service
