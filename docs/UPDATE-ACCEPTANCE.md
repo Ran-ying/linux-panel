@@ -94,6 +94,21 @@ that lies about durable writes. Snapshot-based abrupt VM shutdown, mount-level
 failure injection and resource exhaustion remain explicit Issue #35 gates.
 Never claim production hard-power-loss acceptance solely from these barriers.
 
+## Deliberate cgroup OOM recovery (disposable staging)
+
+The real Ubuntu 24.04 systemd acceptance temporarily applies
+`MemoryMax=96M` **only to the root Broker test unit**. A staging-only
+npm-ci subprocess attempts to allocate 512 MiB after the privileged
+worker has created its durable transaction journal. Acceptance requires
+no update `success`, a final `rolled_back` result, the original Git HEAD,
+healthy Web, and no stale root journal or processing marker. The runner
+removes the cgroup limit before independently invoking recovery.
+
+This deliberately forces a **real cgroup OOM**, not a mocked memory counter.
+It never runs on production VPSs and does not prove the actual 962 MiB
+server's concurrent resource use, swap headroom or ENOSPC rollback.
+Those release gates remain separate and open.
+
 ## Resource gate — conservative minimums, not a 3 GiB block
 
 The root worker refuses in-place npm deployment **before stopping Web** only
