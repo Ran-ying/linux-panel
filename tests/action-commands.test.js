@@ -42,6 +42,8 @@ test('saved command configuration persists and is shared by preview and actual A
   for(const bad of [{}, {...info.terminal.fields,extra:'id'}, {...info.terminal.fields,hostname:''},
     {...info.terminal.fields,hostname:'x'.repeat(2049)}])
     await assert.rejects(commands.save(info,bad,'fixture-admin'),{statusCode:400});
+  commands.runCommand=async ()=>'not-a-number';
+  await assert.rejects(commands.execute(info),{statusCode:502});
 });
 
 test('terminal commands run without root and have a process timeout',async t=>{
