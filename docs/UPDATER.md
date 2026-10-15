@@ -71,6 +71,51 @@ a client revokes its grant and tokens.
   client is trusted for that capability. This mode is opt-in at the global
   policy level, not a mechanism for shared third-party tenant access.
 
+## Tracked backend source permissions — October 2026 production 502 prevention
+
+The immutable Broker was previously tested for Web access to npm dependencies
+and built front-end assets only. Under the worker's `umask 077`, a Git checkout
+or rollback can replace tracked `apps/api/src/create-app.js` or root
+`package.json` as `0600` owned by `linuxpanel-updater`. The distinct Web UID
+`linuxpanel` then fails on its first backend import and Nginx returns 502.
+This happened during the attempted update after PR #82; independent recovery
+eventually restored the previous revision. Do not attribute a source-file
+`EACCES` to the newly introduced session-length logic.
+
+[PR #83](https://github.com/Ran-ying/linux-panel/pull/83) changes the immutable
+worker's `ensure_web_read_access` so **both forward deployments and recovery**
+regrant Web group read/traverse on actual Git-tracked source files and their
+checked directories, in addition to npm dependencies and built assets. The
+Web user is never granted write; `.git`, untracked files, private state and
+root-owned rollback artifacts are excluded. Actual service-UID read probes
+precede Web startup, and disposable Ubuntu systemd update/rollback tests inject
+`0600` source before asserting HTTP health.
+
+**New-user gates:** the application `scripts/install.sh` requires the Web UID
+to read and import `apps/api/src/create-app.js` and read root
+`package.json`, in addition to the entrypoint, dependencies and front-end;
+all Git-tracked backend files checked here must remain non-writable by Web.
+Optional Broker installation `scripts/install-update-broker.sh` checks these
+same files in preflight, after `--apply` and on `--verify`. A disposable
+Ubuntu fresh-install CI workflow verifies the installed runtime; independent
+real-systemd CI actively sets `package.json` and `create-app.js` to `0600`
+and requires `--verify` to reject them. These checks prevent a silent
+unreadable-source acceptance; they do not replace independent future hardware
+or distro verification.
+
+**Already-installed Broker migration:** source code updates do NOT replace the
+root-owned `/usr/local/libexec/linux-panel-update-worker`. On any host that
+still has the older worker, **do not trigger another MCP or Web auto-update**,
+even if new GitHub `main` has the fix. Follow
+[controlled privileged Broker migration](#upgrade-an-already-installed-immutable-broker-without-activation)
+with an explicit operator-approved maintenance window, provider snapshot,
+trusted source pin, clean checkout, Web update gate OFF, watcher and recovery
+unit disabled, zero transaction markers, and `upgrade-update-broker.sh --check`
+reporting zero BLOCK before `--apply`. After migration verify root worker
+byte identity and live Web health, then separately reactivate using the normal
+operator signoff. No ordinary MCP Action, `git pull` alone or root-owned
+worker self-update is a substitute for this migration.
+
 ## Git refs group access without breaking systemd sandbox (2026-10-15)
 
 The fixed Broker runs Git as `linuxpanel-updater` with `umask 077` under

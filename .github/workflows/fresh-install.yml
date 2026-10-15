@@ -31,6 +31,14 @@ jobs:
             --node-bin "$(command -v node)" --ref "$INSTALL_REF" \
             --admin-password-stdin < "$secret"
           sudo systemctl is-active --quiet linux-panel.service
+          # Validate root manifest + API source with the actual Web UID.
+          for file in package.json apps/api/src/server.js apps/api/src/create-app.js; do
+            sudo runuser -u linuxpanel -- test -r "/opt/linux-panel/$file" || exit 1
+            ! sudo runuser -u linuxpanel -- test -w "/opt/linux-panel/$file" || exit 1
+          done
+          (cd /opt/linux-panel && sudo runuser -u linuxpanel -- \
+            "$(command -v node)" --input-type=module \
+            -e "await import('./apps/api/src/create-app.js')")
           PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import assert from 'node:assert/strict';

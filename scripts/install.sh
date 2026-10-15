@@ -169,6 +169,17 @@ runuser -u linuxpanel -- test -r /opt/linux-panel/node_modules/fastify/package.j
   die 'Web account cannot read Fastify runtime dependencies after install'
 runuser -u linuxpanel -- test -r /opt/linux-panel/apps/web/dist/index.html ||
   die 'Web account cannot read built frontend assets after install'
+# The backend imports Git-tracked package.json and create-app.js at process
+# startup. Test their actual service-UID readability, not just server.js:
+# a 0600 checkout file otherwise passes npm tests as root then produces 502.
+for code in package.json apps/api/src/server.js apps/api/src/create-app.js; do
+  runuser -u linuxpanel -- test -r "/opt/linux-panel/$code" ||
+    die "Web account cannot read backend runtime file after install: $code"
+  ! runuser -u linuxpanel -- test -w "/opt/linux-panel/$code" ||
+    die "Web account must not write backend runtime file: $code"
+done
+runuser -u linuxpanel -- "$NODE_BIN" --input-type=module -e "await import('./apps/api/src/create-app.js')" ||
+  die 'Web account cannot import backend runtime modules after install'
 runuser -u linuxpanel -- "$NODE_BIN" --input-type=module -e "await import('fastify'); await import('@fastify/static');" ||
   die 'Web account cannot import production Node dependencies after install'
 log 'Initialize admin credentials interactively (only once)'

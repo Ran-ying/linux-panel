@@ -107,8 +107,13 @@ base_checks(){
  if getent group linuxpanel >/dev/null && id linuxpanel >/dev/null 2>&1;then
   pass 'Dedicated panel account and group present'
  else block 'Missing Linux Panel service account/group';fi
- if runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js";then pass 'Panel user can read code'
- else block 'Panel user cannot read code';fi
+ # An otherwise valid API entrypoint is insufficient: Node also reads
+ # root/package.json and imports create-app.js during startup.
+ for code in package.json apps/api/src/server.js apps/api/src/create-app.js;do
+  if runuser -u linuxpanel -- test -r "$ROOT/$code";then
+   pass "Web can read runtime source: $code"
+  else block "Web cannot read runtime source: $code";fi
+ done
  if [[ -x /opt/node24/bin/node && -x /opt/node24/bin/npm ]];then
   pass 'Isolated Node24 and npm exist'
  else block 'Worker requires dedicated /opt/node24/bin/node and npm';fi
@@ -208,10 +213,12 @@ installed_checks(){
   block 'Updater account missing'
  owner "$ROOT" linuxpanel-updater && pass 'Checkout owned by isolated updater' ||
   block 'Checkout owner is not updater'
- if runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js" &&
-    ! runuser -u linuxpanel -- test -w "$ROOT/apps/api/src/server.js";then
-  pass 'Web user read-only access to source'
- else block 'Web user write access to source or read access lost';fi
+ for code in package.json apps/api/src/server.js apps/api/src/create-app.js;do
+  if runuser -u linuxpanel -- test -r "$ROOT/$code" &&
+     ! runuser -u linuxpanel -- test -w "$ROOT/$code";then
+    pass "Web read-only runtime source: $code"
+  else block "Web source access invalid (must read, never write): $code";fi
+ done
  if dir "$BACKUP_DIR" && owner "$BACKUP_DIR" root;then pass 'Root backup directory exists'
  else block 'Root backup directory missing/unsafe';fi
  if dir "$RESULT_DIR" && owner "$RESULT_DIR" root;then pass 'Status directory exists'
@@ -331,8 +338,12 @@ if [[ "$MODE" == apply ]];then
   "file:$RECOVERY_UNIT" "file:$GUARD_UNIT" \
   "dir:$BACKUP_DIR" "dir:$RESULT_DIR" "dir:/usr/local/libexec" \
   "dir:/etc/linux-panel" "dir:/etc/systemd/system" "dir:$GUARD_DIR"
- runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js" ||
-   die 'Panel lost code access; manual ownership recovery required'
+ for code in package.json apps/api/src/server.js apps/api/src/create-app.js;do
+  runuser -u linuxpanel -- test -r "$ROOT/$code" ||
+   die "Panel lost runtime source read access after Broker install: $code"
+  ! runuser -u linuxpanel -- test -w "$ROOT/$code" ||
+   die "Panel gained unexpected runtime source write access: $code"
+ done
  systemctl daemon-reload
  # Deliberately do NOT start/enable the path watcher, Web gate or an update.
  report INFO 'Installed DISABLED: no automatic updater, broker trigger or panel restart'
