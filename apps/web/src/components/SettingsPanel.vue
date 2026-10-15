@@ -128,9 +128,7 @@ onMounted(reload);
 <template>
   <div class="module-content settings-page">
     <div class="module-intro">
-      <div class="label">内置功能 / 无需业务模块</div>
       <h2>面板设置</h2>
-      <p>配置面板与账号安全。即使所有业务模块都已卸载，此页面仍可使用。</p>
     </div>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="message" role="status" class="notice success-notice">{{ message }}</p>
@@ -140,7 +138,6 @@ onMounted(reload);
       <form @submit.prevent="saveSettings">
         <label for="panel-name">面板名称</label>
         <input id="panel-name" v-model="settings.panelName" required maxlength="60" />
-        <p class="muted small">界面外观可在页面顶部选择跟随系统、浅色或深色，偏好保存在当前浏览器；完整多语言界面尚未提供。</p>
         <button class="primary form-button" :disabled="busy" type="submit">保存设置</button>
       </form>
     </section>

@@ -304,3 +304,63 @@ table{min-width:500px}
 .card-heading>div,.session-row>div,.module-summary>*{min-width:0;overflow-wrap:anywhere}
 .card-heading .label,.action-card code,.settings-section code{overflow-wrap:anywhere}
 .toolbar>label{min-width:0;max-width:100%}
+
+/* Compact panel shell: one continuous surface with bottom dividers. */
+.layout{max-width:none;padding:0;min-height:100dvh}
+.columns{grid-template-columns:230px minmax(0,1fr);gap:0;align-items:stretch;min-height:100dvh}
+.module-sidebar{position:sticky;top:0;align-self:start;height:100dvh;display:flex;flex-direction:column;
+  gap:0;padding:0;border:0;border-right:1px solid var(--border-panel);border-radius:0;overflow-y:auto;box-shadow:none}
+.sidebar-brand{padding:18px 14px 14px}
+.sidebar-brand h1{font-size:1.15rem;line-height:1.4;margin:0 0 14px;overflow-wrap:anywhere}
+.module-nav{display:flex;flex-direction:column;gap:0;margin:0;flex:none;overflow:visible}
+.module-sidebar .module-toggle{width:100%;min-width:0;margin:0;padding:12px 14px;text-align:left;
+  border:0;border-bottom:1px solid var(--border-panel);border-radius:0;min-height:44px;background:transparent}
+.module-sidebar .module-toggle:hover{background:var(--nav-hover)}
+.module-sidebar .module-toggle.active{background:var(--nav-active)}
+.sidebar-settings{margin:0;padding:0;border:0;flex:none}
+.sidebar-account{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;font-size:.85rem;overflow-wrap:anywhere}
+.sidebar-account button{margin:0;padding:6px 8px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}
+.panel-version{position:fixed;z-index:30;top:calc(10px + env(safe-area-inset-top,0px));right:12px;
+  font-size:.72rem;color:var(--text-dim);background:var(--panel-bg);border-radius:4px;padding:2px 6px;font-variant-numeric:tabular-nums}
+.module-content{background:var(--panel-bg);min-width:0}
+.module-intro{margin:0;padding:20px 18px 12px;border-bottom:1px solid var(--border-panel)}
+.module-intro h2{margin:0;font-size:1.25rem}
+.action-flow,.settings-page{gap:0}
+.action-card,.settings-section{margin:0;border:0;border-bottom:1px solid var(--border-panel);border-radius:0;padding:14px 18px}
+.card-heading h3{font-size:1.05rem;margin:0 0 8px}
+.action-explanation{padding:8px 10px;margin:8px 0;font-size:.85rem}
+.action-card .toolbar{margin:10px 0 12px}
+.result{padding-top:12px}.result-header{margin-bottom:10px}
+.settings-page>.error,.settings-page>.notice{margin:12px 18px}
+.appearance-control{position:static;top:auto;right:auto;z-index:auto;display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:8px;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+.appearance-control .follow-system{display:flex;align-items:center;gap:6px;margin:0;font-size:.78rem;white-space:nowrap;cursor:pointer}
+.follow-system input{margin:0;accent-color:var(--accent-bg);width:15px;height:15px}
+.theme-capsule{display:flex;gap:2px;margin:0;padding:2px;min-width:0;border:1px solid var(--border-strong);border-radius:999px;background:var(--nav-bg)}
+.theme-capsule button{display:grid;place-items:center;width:34px;height:30px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text-secondary);cursor:pointer}
+.theme-capsule button[aria-pressed="true"]{background:var(--panel-bg);color:var(--text-primary);box-shadow:0 1px 3px var(--shadow-color)}
+.theme-capsule:disabled{opacity:.45}
+.theme-capsule:disabled button{opacity:1;cursor:not-allowed}
+.login-appearance{position:absolute;top:40px;right:18px;min-width:185px}
+.auth-shell{padding:105px 14px 24px}
+@media(max-width:730px){
+  .layout{padding:0 0 env(safe-area-inset-bottom,0px)}
+  .columns{grid-template-columns:minmax(0,1fr);min-height:0;gap:0}
+  .module-sidebar{position:static;top:auto;bottom:auto;left:auto;right:auto;height:auto;width:100%;padding:0;
+    border-right:0;border-bottom:1px solid var(--border-panel);display:flex;flex-direction:column;gap:0}
+  .sidebar-brand{padding:16px 14px 10px;max-width:100%}
+  .sidebar-brand h1{padding-right:45px;margin-bottom:10px}
+  .sidebar-brand .appearance-control{justify-content:flex-start;gap:16px}
+  .module-nav{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin}
+  .module-sidebar .module-toggle{width:auto;flex:0 0 auto;padding:10px 14px;min-height:44px;text-align:left}
+  .sidebar-settings .module-toggle{width:100%}
+  .sidebar-account{padding:8px 14px}
+  .sidebar-account button{min-height:44px}
+  .module-intro{padding:14px}.action-card,.settings-section{padding:12px 14px}
+  .theme-capsule button{width:44px;height:44px}
+  .auth-card{width:min(430px,100%)}
+}
+
+/* Stretch the mobile header rows; inherited dock centering must not clip navigation. */
+.module-sidebar{align-items:stretch}
+.sidebar-settings{width:100%}

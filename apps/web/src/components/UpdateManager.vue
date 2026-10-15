@@ -135,10 +135,9 @@ onMounted(refresh);
       <h3>受控面板更新</h3>
       <button type="button" :disabled="busy || checking" @click="refresh">刷新状态</button>
     </div>
-    <p class="muted small">平台级维护功能，不依赖 MCP 是否启用。所有检查和申请经由统一 ActionEngine；只有 Web 管理员可独立审批。TOTP 完全可选。</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="message" role="status" class="notice success-notice">{{ message }}</p>
-    <p v-if="!enabled" class="notice">受限更新 Broker 尚未启用。仍可只读检查 Git 更新，但不能申请或执行部署；不可绕过旧版 systemd 隔离要求。</p>
+    <p v-if="!enabled" class="notice">更新服务尚未启用，可检查版本，暂不能部署。</p>
     <!-- Render controls directly. A bare nested HTML <template> is inert. -->
       <label for="panel-target-sha">目标完整 Git SHA（可选）</label>
       <input id="panel-target-sha" v-model.trim="sha" :disabled="busy"
@@ -160,7 +159,7 @@ onMounted(refresh);
       <section v-if="inspection?.status==='update_available' && !update?.pending"
         class="settings-section" aria-label="Web 管理员立即更新">
         <h4>管理员直接更新</h4>
-        <p class="muted small">确认上面显示的目标 SHA 后，可一次点击完成申请和审批，不必先点“申请更新”。后台仍校验 Web Session、CSRF、密码及可选 TOTP，并交给隔离 Broker 验证后执行。</p>
+        <p class="muted small">核对目标版本后，输入密码确认更新；若已启用双因素认证，还需填写验证码。</p>
         <label class="refresh-choice">
           <input type="checkbox" v-model="exactConfirmed" :disabled="busy"/>
           我已核对完整目标 SHA，确认由受限 Broker 执行本次更新

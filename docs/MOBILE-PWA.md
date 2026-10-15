@@ -7,8 +7,8 @@ app on current iOS/iPadOS Safari and Android Chrome on a trusted HTTPS origin.
 
 - **iPhone/iPad:** open the panel over HTTPS in Safari, choose **Share → Add to Home Screen**, then open Linux Panel from its home-screen icon.
 - **Android:** open the HTTPS panel in Chrome and use **Install app** / **Add to Home screen** when offered.
-- On narrow screens, the module sidebar becomes a bottom module dock. Swipe it horizontally for more modules. Settings stays visible at the trailing edge.
-- The light/dark/system appearance selection remains browser-local. The PWA uses the same authenticated backend as the normal website.
+- On narrow screens, the sidebar becomes a compact top navigation area. The panel name and appearance controls precede horizontally scrollable module navigation; account/logout controls follow Settings.
+- Appearance remains browser-local: check Follow system to disable the manual moon/sun capsule; uncheck it to choose dark/light. The PWA uses the same authenticated backend as the normal website.
 
 ## Offline and privacy boundaries
 

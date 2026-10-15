@@ -64,21 +64,18 @@ test('inaccessible browser storage does not prevent rendering or switching',()=>
  h.controller.setPreference('invalid');
  assert.equal(h.attributes['data-theme'],'light');
 });
-test('both themes and a pre-login accessible selector exist in the app and styles',()=>{
+test('both palettes and shared accessible theme controls exist before and after login',()=>{
  const css=readFileSync(new URL('../apps/web/src/style.css',import.meta.url),'utf8');
  const app=readFileSync(new URL('../apps/web/src/App.vue',import.meta.url),'utf8');
+ const control=readFileSync(new URL('../apps/web/src/components/ThemeControl.vue',import.meta.url),'utf8');
  const main=readFileSync(new URL('../apps/web/src/main.js',import.meta.url),'utf8');
  assert.match(css,/:root\[data-theme="dark"\]/);
- assert.match(css,/--page-bg/);
- assert.match(css,/--panel-bg/);
  assert.match(css,/--focus-ring/);
- assert.match(css,/\.appearance-control select:focus-visible/);
- assert.match(app,/<select id="appearance-choice"/);
- assert.match(app,/<option value="system">跟随系统<\/option>/);
- assert.match(app,/<option value="light">浅色<\/option>/);
- assert.match(app,/<option value="dark">深色<\/option>/);
- assert.ok(app.indexOf('class="appearance-control"') < app.indexOf('v-if="checking"'),
-   'theme selector must be rendered before login and on the dashboard');
- assert.ok(main.indexOf('createThemeController(') < main.indexOf('.mount('),
-   'theme must be applied before Vue mounts');
+ assert.match(control,/type="checkbox"/);
+ assert.match(control,/<fieldset[^>]*:disabled="preference === 'system'"/);
+ assert.match(control,/aria-label="深色"/);
+ assert.match(control,/aria-label="浅色"/);
+ assert.match(app,/class="login-appearance"><ThemeControl/);
+ assert.match(app,/class="sidebar-brand"[\s\S]*?<ThemeControl/);
+ assert.ok(main.indexOf('createThemeController(') < main.indexOf('.mount('));
 });

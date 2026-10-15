@@ -1,3 +1,11 @@
+# Compact panel UI — 2026-10-15
+
+Owner-requested UI pass: remove redundant dashboard/footer/module boilerplate; show panel name and appearance controls in the sidebar; display package version at top right; move username/logout below Settings; make navigation and module/settings sections contiguous with bottom dividers and shorter padding. Appearance uses Follow system checkbox plus a disabled-while-system moon/sun capsule; local preference and OS-change behavior are preserved. Technical Action details move into a disclosure; operational warnings remain visible.
+
+On narrow screens, the sidebar becomes a compact top area with scrollable module navigation, so panel name/theme/account controls remain available. This replaces the earlier bottom-only dock. No Action permissions, Broker, module logic or server operations changed. Targeted theme/PWA tests (8) and Vue build passed locally; updated Chromium acceptance checks capsule disablement, OS-follow behavior, reload persistence, contiguous card borders and account placement across 320/390/730/1280px. Exact PR/main CI and screenshot review still pending at this snapshot.
+
+Last independently confirmed deployed source is v0.5.0 `70e64c335cc00f4e068b51404728b54cd2d4687e`, successful transaction `1de904a1f97043caf70073583e38feea`. Owner requested this UI change followed by test-server ru-server MCP update; no deployment has occurred for this UI snapshot. Check Issue #54 for exact merged SHA, CI, screenshot review and final durable deployment outcome. Module restructuring is the next separate task.
+
 # Owner-approved v0.5 publication — 2026-10-15
 
 The owner explicitly said publication of v0.5 may proceed after reviewing the reported outstanding work. This supersedes earlier statements that final publication was blocked: the remaining physical-device, Debian, snapshot-restore and independent-review items are **known follow-up gaps, not passed tests**. Existing public historical-host metadata is retained; no Git history rewrite is authorized or performed.

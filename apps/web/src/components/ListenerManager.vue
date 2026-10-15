@@ -52,10 +52,9 @@ onMounted(()=>{void refresh().catch(cause=>error.value=cause.message);});
 <template>
   <section class="action-card" aria-label="HTTP 监听设置">
     <div class="card-heading">
-      <div><div class="label">panel.listener.status / panel.listener.request</div><h3>HTTP 监听设置</h3></div>
+      <div><h3>HTTP 监听设置</h3></div>
       <span class="read-pill">变更需确认</span>
     </div>
-    <p class="card-description">面板只管理自己的 HTTP 地址与端口，不安装或编辑任何反向代理。</p>
     <p v-if="status">当前运行：<code>{{ status.active.host }}:{{ status.active.port }}</code>；
       已保存：<code>{{ status.configured.host }}:{{ status.configured.port }}</code></p>
     <p v-if="status?.restartRequired" role="status">新配置等待手动重启面板生效。重启前确认可通过新地址访问，避免失去管理连接。</p>
