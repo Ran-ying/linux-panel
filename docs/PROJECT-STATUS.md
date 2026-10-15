@@ -1,3 +1,11 @@
+# Rounded sidebar and loading chrome — 2026-10-15
+
+Owner follow-up: restore the sidebar rounded rectangular outer frame with equal 16px left/top/bottom viewport gutters, cap its height and independently scroll only the business-module region. Separate business modules from built-in panel functions; maintenance and Settings belong to the fixed panel section, with account/logout below. Keep compact main-module spacing from PR #78. Version is now beside the panel name, not fixed at the top-right corner.
+
+During initial session/initialization checks, hide version and theme controls and show a small loading indicator. Session checks still validate the server-side HttpOnly-cookie session after refresh, including expiry/revocation; no authentication caching/bypass or backend behavior was introduced. Browser acceptance blocks auth/status to test the loading screen and injects 45 disposable frontend module definitions to verify rounded frame, equal gutters, independent scrolling and accessible account controls on desktop/mobile. CI/screenshot verification and deployment pending at this snapshot.
+
+Last observed successful deployment: compact UI `9b6d793f143a92ab08155a2216d4d177b5f19815`, transaction `c993bad453bb6fbf391e964ddc13c1ec`, success at 17:53:50Z. Owner requested this correction and test-server update. Check Issue #54 for exact final CI/merge and durable MCP deployment result. Module restructuring remains separate.
+
 # Compact panel UI — 2026-10-15
 
 Owner-requested UI pass: remove redundant dashboard/footer/module boilerplate; show panel name and appearance controls in the sidebar; display package version at top right; move username/logout below Settings; make navigation and module/settings sections contiguous with bottom dividers and shorter padding. Appearance uses Follow system checkbox plus a disabled-while-system moon/sun capsule; local preference and OS-change behavior are preserved. Technical Action details move into a disclosure; operational warnings remain visible.

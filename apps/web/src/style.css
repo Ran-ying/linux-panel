@@ -364,3 +364,30 @@ table{min-width:500px}
 /* Stretch the mobile header rows; inherited dock centering must not clip navigation. */
 .module-sidebar{align-items:stretch}
 .sidebar-settings{width:100%}
+
+/* Rounded sidebar stays inside equal viewport gutters; only modules scroll. */
+:root{--sidebar-space:16px}
+.columns{grid-template-columns:262px minmax(0,1fr)}
+.module-sidebar{top:var(--sidebar-space);margin:var(--sidebar-space);width:calc(100% - 2 * var(--sidebar-space));
+  height:calc(100dvh - 2 * var(--sidebar-space));max-height:calc(100dvh - 2 * var(--sidebar-space));
+  min-height:0;border:1px solid var(--border-panel);border-radius:14px;overflow:hidden}
+.sidebar-brand{flex:none}
+.sidebar-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 8px;margin-bottom:12px;min-width:0}
+.sidebar-heading h1{margin:0;padding:0;min-width:0}
+.sidebar-heading .panel-version{position:static;inset:auto;padding:0;background:transparent;white-space:nowrap;flex:none}
+.sidebar-group-label{padding:10px 14px 6px;font-size:.72rem;font-weight:650;color:var(--text-dim)}
+.sidebar-modules{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-gutter:stable}
+.module-nav,.platform-nav{display:flex;flex-direction:column;gap:0;min-width:0;margin:0;overflow:visible}
+.sidebar-modules .module-toggle{flex:none;white-space:normal;overflow-wrap:anywhere}
+.sidebar-settings{flex:none;border-top:1px solid var(--border-panel)}
+.loading-indicator{width:24px;height:24px;border:2px solid var(--border-panel);border-top-color:var(--accent-bg);border-radius:50%;animation:panel-loading .8s linear infinite}
+@keyframes panel-loading{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.loading-indicator{animation:none}}
+@media(max-width:730px){
+  .columns{grid-template-columns:minmax(0,1fr)}
+  .module-sidebar{position:static;height:auto;max-height:calc(100dvh - 2 * var(--sidebar-space));margin:var(--sidebar-space);
+    width:calc(100% - 2 * var(--sidebar-space));border:1px solid var(--border-panel);border-radius:14px}
+  .sidebar-modules{flex:0 1 auto;max-height:32dvh}
+  .module-nav{flex-direction:column;overflow:visible}
+  .module-sidebar .module-toggle{width:100%;white-space:normal}
+}

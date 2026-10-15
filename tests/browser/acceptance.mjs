@@ -28,11 +28,19 @@ try {
     const page=await context.newPage();
     const errors=[];
     page.on('pageerror',e=>errors.push(e.message));
-    await page.goto(origin);
+    let releaseAuth;
+    const authGate=new Promise(resolve=>releaseAuth=resolve);
+    await page.route('**/api/auth/status',async route=>{await authGate;await route.continue();});
+    const navigation=page.goto(origin);
+    await page.locator('.loading-indicator').waitFor();
+    assert.equal(await page.locator('.panel-version,.appearance-control').count(),0,'loading must not show version/theme controls');
+    releaseAuth();
+    await navigation;
+    await page.unroute('**/api/auth/status');
     await page.locator('#login-pass').fill(password);
     await page.locator('button[type="submit"]').click();
     await page.locator('.module-nav button').first().waitFor();
-    const names=await page.locator('.module-nav button').allTextContents();
+    const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
     for(const name of [...names,'面板设置']){
       await page.getByRole('button',{name:name.trim(),exact:true}).click();
       await page.locator('.module-content').waitFor();
@@ -48,6 +56,9 @@ try {
     // Compact sidebar, bottom-only separators and no card spacing.
     assert.equal(await page.locator('.sidebar-settings .sidebar-account').count(),1);
     assert.equal(await page.locator('footer').count(),0);
+    assert.equal(await page.locator('.sidebar-heading .panel-version').count(),1);
+    assert.equal(await page.locator('.module-nav button').filter({hasText:'面板维护'}).count(),0);
+    assert.equal(await page.locator('.platform-nav button').filter({hasText:'面板维护'}).count(),1);
     const cardStyles=await page.locator('.action-card,.settings-section').evaluateAll(nodes=>nodes.map(n=>{
       const s=getComputedStyle(n);
       return [s.marginTop,s.marginBottom,s.marginLeft,s.marginRight,s.borderTopWidth,s.borderLeftWidth,s.borderRightWidth];
@@ -104,6 +115,40 @@ try {
     await context.close();
     console.log('PASS viewport '+width+': modules, themes, logout, cache isolation, offline/reconnect');
   }
+  // Many modules must scroll inside the sidebar without pushing account controls offscreen.
+  for(const viewport of [{width:1280,height:500},{width:390,height:600}]){
+    const context=await browser.newContext({viewport});
+    const page=await context.newPage();
+    await page.route('**/api/modules',async route=>{
+      const response=await route.fetch();
+      const data=await response.json();
+      data.modules.push(...Array.from({length:45},(_,i)=>({id:'fixture-'+i,name:'Fixture module '+i,version:'1.0.0'})));
+      await route.fulfill({response,json:data});
+    });
+    await page.goto(origin);
+    await page.locator('#login-pass').fill(password);
+    await page.locator('button[type="submit"]').click();
+    await page.locator('.module-nav button').last().waitFor();
+    const layout=await page.locator('.module-sidebar').evaluate(sidebar=>{
+      const box=sidebar.getBoundingClientRect();
+      const region=sidebar.querySelector('.sidebar-modules');
+      const account=sidebar.querySelector('.sidebar-account').getBoundingClientRect();
+      return {left:box.left,top:box.top,bottom:box.bottom,height:innerHeight,
+        radius:parseFloat(getComputedStyle(sidebar).borderTopLeftRadius),
+        overflowing:region.scrollHeight>region.clientHeight,accountBottom:account.bottom};
+    });
+    assert.ok(layout.radius>0,'sidebar must keep rounded outer frame');
+    assert.ok(Math.abs(layout.left-layout.top)<1,'top and left gutters must match');
+    assert.ok(layout.bottom<=layout.height-layout.left+1,'sidebar must preserve bottom gutter');
+    assert.ok(layout.accountBottom<=layout.bottom,'account controls must remain inside sidebar');
+    assert.ok(layout.overflowing,'many modules must overflow the independent module region');
+    await page.locator('.module-nav button').last().scrollIntoViewIfNeeded();
+    assert.ok(await page.locator('.sidebar-modules').evaluate(n=>n.scrollTop>0));
+    await page.screenshot({path:join(output,'sidebar-overflow-'+viewport.width+'.png')});
+    await context.close();
+    console.log('PASS bounded rounded sidebar and scrolling '+viewport.width);
+  }
+
 } finally {
   await browser?.close();
   await app.close();

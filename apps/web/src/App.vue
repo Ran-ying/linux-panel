@@ -20,6 +20,8 @@ const activePage = ref('settings');
 const error = ref('');
 
 const moduleGroups = computed(() => buildModuleNavigation(moduleDefinitions.value, actions.value));
+const businessGroups = computed(() => moduleGroups.value.filter(group => group.id !== 'panel'));
+const panelGroups = computed(() => moduleGroups.value.filter(group => group.id === 'panel'));
 const activeGroup = computed(() => moduleGroups.value.find(group => group.id === activePage.value));
 
 async function getJSON(url) {
@@ -104,26 +106,33 @@ onMounted(async () => {
 </script>
 
 <template>
-  <span class="panel-version" aria-label="版本">v{{ panelVersion }}</span>
-  <div v-if="!session" class="login-appearance"><ThemeControl /></div>
-  <div v-if="checking" class="auth-shell"><p role="status">正在检查登录状态…</p></div>
+  <div v-if="!checking && !session" class="login-appearance"><ThemeControl /></div>
+  <div v-if="checking" class="auth-shell" aria-busy="true"><span class="loading-indicator" role="status" aria-label="正在加载"></span></div>
   <LoginPanel v-else-if="!session" :initialized="initialized" @signed-in="signIn" />
   <main v-else class="layout">
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <div class="columns">
       <aside class="module-sidebar">
         <div class="sidebar-brand">
-          <h1>{{ settings.panelName || 'Linux Panel' }}</h1>
+          <div class="sidebar-heading"><h1>{{ settings.panelName || 'Linux Panel' }}</h1><span class="panel-version" aria-label="版本">v{{ panelVersion }}</span></div>
           <ThemeControl />
         </div>
+        <div class="sidebar-modules">
+          <div class="sidebar-group-label">功能模块</div>
         <nav class="module-nav" aria-label="业务模块">
-          <button v-for="module in moduleGroups" :key="module.id" type="button" class="module-toggle"
+          <button v-for="module in businessGroups" :key="module.id" type="button" class="module-toggle"
             :class="{ active: activePage === module.id }" @click="activePage=module.id">
             {{ module.name }}
           </button>
-          <p v-if="!moduleGroups.length" class="muted small">尚无业务模块</p>
+          <p v-if="!businessGroups.length" class="muted small">尚无业务模块</p>
         </nav>
+        </div>
         <div class="sidebar-settings">
+          <div class="sidebar-group-label">面板功能</div>
+          <nav class="platform-nav" aria-label="面板功能">
+            <button v-for="module in panelGroups" :key="module.id" type="button" class="module-toggle"
+              :class="{ active: activePage === module.id }" @click="activePage=module.id">{{ module.name }}</button>
+          </nav>
           <button type="button" class="module-toggle" :class="{ active: activePage === 'settings' }"
             @click="activePage='settings'">面板设置</button>
           <div class="sidebar-account">
