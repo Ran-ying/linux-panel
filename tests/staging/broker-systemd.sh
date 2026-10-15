@@ -330,9 +330,12 @@ note 'Case 4: valid Web or MCP update after real crash recovery'
 # Resource acceptance: constrain the COMPLETE real npm ci/check/test/build
 # transaction, not only a synthetic Python allocator. This test-only cgroup
 # cap is never set on an actual VPS. No first-run package cache assumptions.
-systemctl set-property --runtime linux-panel-update.service MemoryMax=768M
+systemctl set-property --runtime linux-panel-update.service MemoryMax=768M CPUQuota=100%
 [[ "$(systemctl show linux-panel-update.service -p MemoryMax --value)" == 805306368 ]] ||
  fail 'Cannot apply real 768MiB root-worker cgroup cap'
+[[ "$(systemctl show linux-panel-update.service -p CPUQuotaPerSecUSec --value)" == 1s ]] ||
+ fail 'Cannot apply single-vCPU 100% CPUQuota to root worker'
+resource_start_seconds="$SECONDS"
 code_before_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
 free_before_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
 note "FULL npm ci/check/test/build with MemoryMax=768MiB (free code disk ${code_before_kib}KiB)"
@@ -376,8 +379,9 @@ rm -f -- "$peak_file" "$peak_file.stop"
 code_after_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
 [[ "$peak_bytes" =~ ^[0-9]+$ && "$peak_bytes" -gt 0 ]] ||
  fail "Kernel cgroup-v2 memory.peak was never sampled for the real npm transaction: $peak_bytes"
-note "Measured actual peak cgroup-v2 memory.peak=${peak_bytes} bytes; actual MemoryMax=805306368; code space before=${code_before_kib}KiB after=${code_after_kib}KiB"
-systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity
+resource_elapsed_seconds="$((SECONDS-resource_start_seconds))"
+note "Measured actual peak cgroup-v2 memory.peak=${peak_bytes} bytes; MemoryMax=805306368 CPUQuota=100%; total positive HTTP update ${resource_elapsed_seconds}s; code before=${code_before_kib}KiB after=${code_after_kib}KiB"
+systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity CPUQuota=infinity
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
