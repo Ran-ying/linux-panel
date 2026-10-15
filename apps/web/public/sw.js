@@ -32,7 +32,7 @@ self.addEventListener('fetch', event => {
   // documents, authenticated pages, navigation responses or user state.
   if (request.mode === 'navigate') {
     if (url.pathname === '/' || url.pathname === '/index.html') {
-      event.respondWith(fetch(request, {cache:'no-store'}).catch(async () =>
+      event.respondWith(fetch(request).catch(async () =>
         (await caches.open(CACHE_NAME)).match(OFFLINE_URL)));
     }
     return;
