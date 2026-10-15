@@ -1,13 +1,14 @@
 # v0.5 Updater — Acceptance and Release Gate
 
-**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. A SIGKILL recovery rehearsal has been added, but literal hard-power-loss integrity, concurrent approvals, successful positive OAuth/Web deployment across restart, and resource-starvation scenarios remain unverified.
+**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. SIGKILL recovery and both Web/MCP valid-SHA deployment paths have now passed in isolated runners. Literal hard-power-loss integrity, concurrent approvals, and resource-starvation scenarios remain unverified.
 
 ## Real Web, PKCE OAuth and MCP-to-Broker integration (staging only)
 
 The [disposable real Ubuntu workflow](../.github/workflows/broker-acceptance.yml)
-runs `tests/staging/web-mcp-broker.mjs` after the existing real Git/npm/systemd
-cases. This test uses an ephemeral localhost Web account with a fresh random
-password; no production domains, tokens or data are used.
+runs `tests/staging/web-mcp-broker.mjs` after real Git/npm/systemd failure
+and SIGKILL recovery cases, with separate fresh `web` and `mcp` matrix runners.
+Each uses an ephemeral localhost Web account with a random password;
+no production domains, tokens or data are used.
 
 The root runner **temporarily** enables `PANEL_UPDATER_ENABLED=1` only inside
 the isolated test VM and keeps the real systemd Broker watcher active. It tests:
@@ -22,16 +23,26 @@ the isolated test VM and keeps the real systemd Broker watcher active. It tests:
 - Separate explicitly consented `panel:update:execute` grant; a real HTTP
   `tools/call` queues another deliberately invalid SHA, which is denied by
   the fixed Broker. An independent `panel:read` grant reads the exact
-  result; no successful deployment is fabricated.
+  result; the returned `queued` receipt is not mistaken for deployment success.
+- The isolated `web` scenario approves a **valid** pinned `origin/main`
+  SHA with the real password step-up; the isolated `mcp` scenario submits
+  the same valid SHA via independently consented `panel:update:execute`.
+  Both require actual root `success`, updated checkout HEAD and Web
+  `panel.update.check`, and reconnect existing Web/OAuth sessions across
+  the service restart. A pre-update `panel:read` token observes the exact
+  completed result after redeployment.
 - Turning off `allowDirectUpdates` hides the execution tool for an old
   bearer; revoking its grant makes the same token unauthorized (401).
 - Web update gate is returned to **disabled** before staging migration ends.
 
-Invalid SHAs are intentionally used to avoid a second full deployment cycle
-while proving the real request/worker/status handoff. The existing systemd
-suite separately proves successful deployment, rollback and crash recovery.
-This is still **not** evidence of production network or hard-power-loss
-behavior, or an actual user's ChatGPT connector session.
+The invalid SHA cases still prove refusal and result feedback, while the
+valid SHA matrix now independently proves successful end-to-end redeployment
+from each HTTP authorization path. The
+[2026-10-15 acceptance run](https://github.com/Ran-ying/linux-panel/actions/runs/38658227412)
+passed in both `web` and `mcp` jobs, preserving the existing crash/recovery,
+negative authorization and Broker migration tests. This does **not** prove
+physical power loss, low-resource exhaustion, shared-production behavior,
+or a user's actual ChatGPT connector session.
 
 ## Resource gate — conservative minimums, not a 3 GiB block
 
