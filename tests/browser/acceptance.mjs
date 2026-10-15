@@ -37,7 +37,7 @@ try {
       await page.getByRole('button',{name:name.trim(),exact:true}).click();
       await page.locator('.module-content').waitFor();
       // All module containers must fit; tables/nav may scroll internally.
-      const outside=await page.locator('.module-content, .action-card, .settings-section')
+      const outside=await page.locator('.module-content, .action-card, .settings-section, .sidebar-brand, .module-nav, .sidebar-settings')
         .evaluateAll(nodes=>nodes.filter(n=>{
           const r=n.getBoundingClientRect();
           return r.left < -1 || r.right > innerWidth+1;
