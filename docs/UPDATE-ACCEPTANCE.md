@@ -1,6 +1,6 @@
 # v0.5 Updater — Acceptance and Release Gate
 
-**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. A SIGKILL recovery rehearsal has been added, but literal hard-power-loss integrity, concurrent approvals, live OAuth-to-Broker handoff and resource-starvation scenarios remain unverified.
+**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. A SIGKILL recovery rehearsal has been added, but literal hard-power-loss integrity, concurrent approvals, successful positive OAuth/Web deployment across restart, and resource-starvation scenarios remain unverified.
 
 ## Real Web, PKCE OAuth and MCP-to-Broker integration (staging only)
 
