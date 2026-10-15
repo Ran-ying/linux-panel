@@ -1,3 +1,7 @@
+# Gate A browser acceptance — 2026-10-15
+
+PR #73 adds real Chromium CI at 320/390/730/1280 pixels: every module, login/logout, dark/light/system preference and reload, offline fallback/reconnect, and public-only Service Worker cache contents. [CI 38761815783](https://github.com/Ran-ying/linux-panel/actions/runs/38761815783) passed including browser tests and screenshot artifacts. Narrow flex cards now wrap long identifiers/client names. This is browser evidence, **not physical iPhone/Android installation acceptance**; A2/A3 and device-specific keyboard/safe-area behavior remain unverified. Owner authorized staged MCP updates of the test server in this conversation. At documentation time deployment of this PR is pending; last observed success remains `482d6ab`. Check Issue #54 for the eventual transaction outcome.
+
 # Linux Panel — current project status and cross-conversation handoff
 
 **Updated: 2026-10-15 (latest verified operational milestone).** At the time of writing, GitHub `main` **and** the last independently observed production MCP deployment matched `482d6ab2f21948a8b3a02836e3d0e1998e6d629b`. This documentation-only PR will create a **new GitHub SHA** when merged; it is not an additional production deployment. Read [AGENTS.md](../AGENTS.md), [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54), [Issue #35](https://github.com/Ran-ying/linux-panel/issues/35) and the [v0.5 release execution plan](V0.5-RELEASE-PLAN.md); recheck actual `main`, CI, production and tool exposure before taking new action.
