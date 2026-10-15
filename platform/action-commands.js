@@ -62,7 +62,13 @@ export class ActionCommands {
       }
       durations[key]=performance.now()-start;
     }
-    try { return action.terminal.decode(values,{durations}); }
+    try {
+      const result=action.terminal.decode(values,{durations});
+      const finite=value=>typeof value==='number'?Number.isFinite(value):
+        value && typeof value==='object'?Object.values(value).every(finite):true;
+      if(!finite(result)) throw new Error('Invalid numeric output');
+      return result;
+    }
     catch { throw Object.assign(new Error('命令输出格式不匹配，请检查保存的命令'),{statusCode:502}); }
   }
 }
