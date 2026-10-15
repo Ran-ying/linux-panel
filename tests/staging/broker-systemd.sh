@@ -44,6 +44,13 @@ if [[ "$1" == ci && -f /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI ]];then
  echo '[broker-stage] Holding npm ci until worker is killed' >&2
  while [[ -f /var/lib/linux-panel-updater/STAGE_HANG_NPM_CI ]];do sleep 0.3;done
 fi
+# A cgroup MemoryMax fault is staged only on ephemeral CI; allocate far
+# beyond the worker's temporary 96 MiB cap AFTER its durable journal exists.
+if [[ "$1" == ci && -f /var/lib/linux-panel-updater/STAGE_FORCE_CGROUP_OOM ]];then
+  touch /var/lib/linux-panel-updater/STAGE_CGROUP_OOM_REACHED
+  /usr/bin/python3 -c 'data=bytearray(512*1024*1024); print(len(data))'
+  exit 77  # Allocation should be OOM-killed, never succeed.
+fi
 if [[ ( "$1" == test || ( "$1" == run && "${2:-}" == test ) ) &&
       -f /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE ]];then
   rm /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE
@@ -208,6 +215,48 @@ wait_healthy || fail 'Recovery failed to restart healthy Web'
 # Recovery entrypoint must never consume a fresh unrelated trigger.
 systemctl start linux-panel-update-recover.service
 note 'SIGKILL interrupted deployment recovered through real systemd unit'
+
+note 'Case 4: real cgroup OOM inside npm ci must fail closed and recover'
+[[ -e /sys/fs/cgroup/cgroup.controllers ]] ||
+  fail 'OOM acceptance requires real systemd unified cgroup v2'
+# MemoryMax affects only this disposable root worker service, never Web or
+# unrelated systemd units. The root journal is written before npm ci.
+systemctl set-property --runtime linux-panel-update.service MemoryMax=96M
+[[ "$(systemctl show linux-panel-update.service -p MemoryMax --value)" == 100663296 ]] ||
+  fail 'Failed to apply 96MiB cgroup memory limit'
+touch /var/lib/linux-panel-updater/STAGE_FORCE_CGROUP_OOM
+chown linuxpanel-updater:linuxpanel-updater   /var/lib/linux-panel-updater/STAGE_FORCE_CGROUP_OOM
+queue 77777777777777777777777777777777 "$TARGET"
+oom_reached=0
+for i in $(seq 1 180);do
+  if [[ -f /var/lib/linux-panel-updater/STAGE_CGROUP_OOM_REACHED ]];then
+    oom_reached=1
+    break
+  fi
+  sleep 0.2
+done
+((oom_reached)) || fail 'Broker never reached the deliberate npm-ci cgroup OOM'
+for i in $(seq 1 100);do
+  ! systemctl is-active --quiet linux-panel-update.service && break
+  sleep 0.2
+done
+! systemctl is-active --quiet linux-panel-update.service ||
+  fail 'OOM-constrained worker did not terminate'
+systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity
+rm -f /var/lib/linux-panel-updater/STAGE_FORCE_CGROUP_OOM   /var/lib/linux-panel-updater/STAGE_CGROUP_OOM_REACHED
+# The killed worker may have rolled back itself, or be unable to do so while
+# memory-capped. In either case, only the independent recovery unit may
+# settle an outstanding root journal after lifting the resource limit.
+if [[ -f "$transaction" ]];then
+  systemctl reset-failed linux-panel-update.service || true
+  systemctl start linux-panel-update-recover.service
+fi
+wait_result 77777777777777777777777777777777 rolled_back
+[[ "$(head_now)" == "$OLD" ]] || fail 'OOM recovery left updated Git HEAD'
+wait_healthy || fail 'OOM recovery did not restore Web'
+[[ ! -e "$transaction" && ! -e /var/lib/linux-panel/update-processing ]] ||
+  fail 'OOM recovery left unfinished root transaction'
+note 'Real cgroup OOM during npm recovered old revision and Web'
 
 note 'Case 4: valid Web or MCP update after real crash recovery'
 [[ "${STAGE_POSITIVE_PATH:-}" == web || "${STAGE_POSITIVE_PATH:-}" == mcp ]] ||
