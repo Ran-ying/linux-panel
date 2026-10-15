@@ -236,8 +236,12 @@ for i in $(seq 1 120);do
  sleep 2
 done
 if ((recovered==0));then
- ssh_run 'sudo systemctl status linux-panel-update-recover.service --no-pager --lines=30' || true
- ssh_run 'sudo journalctl -u linux-panel-update-recover.service --no-pager -n 60' || true
+ note 'Recovery did not complete; inspect guest immutable artifacts before cleanup'
+ ssh_retry 'sudo systemctl status linux-panel-update-recover.service --no-pager --lines=30' || true
+ ssh_retry 'sudo systemctl is-enabled linux-panel-update-recover.service' || true
+ ssh_retry 'sudo ls -l /etc/systemd/system/linux-panel-update-recover.service /etc/systemd/system/multi-user.target.wants/linux-panel-update-recover.service' || true
+ ssh_retry 'sudo stat -c "%n size=%s mode=%a" /etc/systemd/system/linux-panel-update-recover.service /usr/local/libexec/linux-panel-update-worker' || true
+ ssh_retry 'sudo journalctl -u linux-panel-update-recover.service --no-pager -n 60' || true
  fail 'Hard-cut root worker did not recover after reboot'
 fi
 old_head="$(ssh_run 'cat /home/stage/lp-old-sha')"
