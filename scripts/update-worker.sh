@@ -38,9 +38,11 @@ finally:
 # a leftover processing marker without journal could otherwise overwrite an
 # already-committed success result with a spurious failed recovery.
 finish_transaction(){
-  rm -f -- "$PROCESSING"
-  durable_sync dir "$STATE"
-  rm -f -- "$TXN"
+  # Do not erase the root journal when processing-marker deletion or its
+  # directory fsync fails. Otherwise a crash can lose the commit barrier.
+  rm -f -- "$PROCESSING" || return 1
+  durable_sync dir "$STATE" || return 1
+  rm -f -- "$TXN" || return 1
   durable_sync dir "$ROOT_BACKUP"
 }
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
@@ -52,11 +54,16 @@ record(){
   # mktemp IN the result filesystem: mv across mounts is copy+delete, not
   # atomic. Flush the newly created file and the final parent directory.
   tmp="$(mktemp "$result_dir/.update-result.XXXXXXXX")" || return 1
-  printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$tmp"
-  chmod 0640 "$tmp"
-  chown root:linuxpanel "$tmp"
-  durable_sync file "$tmp" || { rm -f -- "$tmp"; return 1; }
-  mv -fT -- "$tmp" "$RESULT" || return 1
+  # A partial printf (ENOSPC, quota, EIO) must NEVER publish malformed JSON.
+  # Do not depend on errexit inside a caller's if/! function invocation.
+  if ! printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$tmp" ||
+     ! chmod 0640 "$tmp" ||
+     ! chown root:linuxpanel "$tmp" ||
+     ! durable_sync file "$tmp";then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  mv -fT -- "$tmp" "$RESULT" || { rm -f -- "$tmp"; return 1; }
   durable_sync dir "$result_dir"
 }
 MODE=normal
@@ -125,10 +132,15 @@ journal(){
   local tmp
   [[ ! -e "$TXN" && ! -L "$TXN" ]] || return 1
   tmp="$(mktemp "$ROOT_BACKUP/.pending-transaction.XXXXXXXX")" || return 1
-  printf 'id=%s\nsha=%s\nold=%s\n' "$ID" "$TARGET" "$OLD" > "$tmp"
-  chmod 0600 "$tmp"
-  chown root:root "$tmp"
-  durable_sync file "$tmp" || { rm -f -- "$tmp"; return 1; }
+  # Check every step explicitly: an ENOSPC-short write can leave a file
+  # that chmod/chown/fsync can still successfully publish if unchecked.
+  if ! printf 'id=%s\nsha=%s\nold=%s\n' "$ID" "$TARGET" "$OLD" > "$tmp" ||
+     ! chmod 0600 "$tmp" ||
+     ! chown root:root "$tmp" ||
+     ! durable_sync file "$tmp";then
+    rm -f -- "$tmp"
+    return 1
+  fi
   mv -nT -- "$tmp" "$TXN" || { rm -f -- "$tmp"; return 1; }
   durable_sync dir "$ROOT_BACKUP"
 }
@@ -173,7 +185,7 @@ recover(){
     # untrusted starts, and only this root worker grants a temporary permit.
     if start_panel && systemctl is-active --quiet linux-panel.service &&
        panel_healthy;then
-      finish_transaction
+      finish_transaction || return 1
       log "Previously committed healthy deployment $ID cleaned up"
       return 0
     fi
@@ -226,7 +238,7 @@ recover(){
   fi
   if ((restored==1));then
     record rolled_back
-    finish_transaction
+    finish_transaction || return 1
     log "Recovered $ID and restored old version"
     return 0
   fi
@@ -364,5 +376,5 @@ if ! panel_healthy;then
   exit 1
 fi
 record success
-finish_transaction
+finish_transaction || exit 1
 log "Updated to $TARGET"
