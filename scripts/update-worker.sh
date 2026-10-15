@@ -16,15 +16,48 @@ TXN="$ROOT_BACKUP/active-transaction"
 ALLOW_START=/run/linux-panel-root-updater/allow-panel-start
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
+# Explicit fsync for both file contents and directory metadata. Python runs
+# isolated from PYTHONPATH/user site packages and loads no checkout modules.
+# This helper is part of the immutable root worker, not a user-supplied script.
+durable_sync(){
+  local kind="$1" path="$2"
+  [[ "$kind" == file || "$kind" == dir ]] || return 1
+  /usr/bin/python3 -I -c '
+import os, sys
+flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+if sys.argv[1] == "dir":
+    flags |= os.O_DIRECTORY
+fd = os.open(sys.argv[2], flags)
+try:
+    os.fsync(fd)
+finally:
+    os.close(fd)
+' "$kind" "$path"
+}
+# Clear the in-flight marker durably BEFORE removing the journal: after a crash
+# a leftover processing marker without journal could otherwise overwrite an
+# already-committed success result with a spurious failed recovery.
+finish_transaction(){
+  rm -f -- "$PROCESSING"
+  durable_sync dir "$STATE"
+  rm -f -- "$TXN"
+  durable_sync dir "$ROOT_BACKUP"
+}
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
 as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
-  local status="$1" tmp
-  tmp="$(mktemp "$ROOT_BACKUP/.update-result.XXXXXXXX")"
+  local status="$1" tmp result_dir
+  result_dir="${RESULT%/*}"
+  [[ -d "$result_dir" && ! -L "$result_dir" ]] || return 1
+  # mktemp IN the result filesystem: mv across mounts is copy+delete, not
+  # atomic. Flush the newly created file and the final parent directory.
+  tmp="$(mktemp "$result_dir/.update-result.XXXXXXXX")" || return 1
   printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$tmp"
   chmod 0640 "$tmp"
   chown root:linuxpanel "$tmp"
-  mv -fT -- "$tmp" "$RESULT"
+  durable_sync file "$tmp" || { rm -f -- "$tmp"; return 1; }
+  mv -fT -- "$tmp" "$RESULT" || return 1
+  durable_sync dir "$result_dir"
 }
 MODE=normal
 if [[ "$#" -eq 1 && "$1" == --recover-only ]];then MODE=recover
@@ -95,7 +128,9 @@ journal(){
   printf 'id=%s\nsha=%s\nold=%s\n' "$ID" "$TARGET" "$OLD" > "$tmp"
   chmod 0600 "$tmp"
   chown root:root "$tmp"
+  durable_sync file "$tmp" || { rm -f -- "$tmp"; return 1; }
   mv -nT -- "$tmp" "$TXN" || { rm -f -- "$tmp"; return 1; }
+  durable_sync dir "$ROOT_BACKUP"
 }
 recover(){
   local idline shaline oldline current='' backup='' restored=1
