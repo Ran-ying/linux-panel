@@ -43,3 +43,18 @@ jobs:
         run: npm run check
       - name: Build production Vue frontend
         run: npm run build:web
+
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix tests/browser --no-audit --no-fund
+          tests/browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser responsive and PWA acceptance
+        env:
+          PANEL_BROWSER_OUTPUT: ${{ runner.temp }}/panel-browser-screenshots
+        run: node tests/browser/acceptance.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: panel-browser-screenshots
+          path: ${{ runner.temp }}/panel-browser-screenshots
+          if-no-files-found: ignore

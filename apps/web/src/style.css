@@ -299,3 +299,8 @@ table{min-width:500px}
 
 /* Standard buttons remain legible in light mode. */
 .form-button:not(.primary){color:var(--button-text)}
+
+/* Identifiers and client-provided names must wrap inside narrow flex cards. */
+.card-heading>div,.session-row>div,.module-summary>*{min-width:0;overflow-wrap:anywhere}
+.card-heading .label,.action-card code,.settings-section code{overflow-wrap:anywhere}
+.toolbar>label{min-width:0;max-width:100%}
