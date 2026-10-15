@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const original=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
@@ -46,9 +46,26 @@ function prepare(){
  fake('curl','if [ "$FAIL_HEALTH_ALL" = 1 ]; then exit 22; fi\nif [ "$FAIL_HEALTH" = 1 ] && [ "$(git -C "$TEST_ROOT" rev-parse HEAD)" = "$TEST_TARGET" ]; then exit 22; fi\nexit 0');
  fake('sleep','exit 0');
  fake('chown','exit 0');
+ fake('chgrp','printf "chgrp:%s\\n" "$*" >> "$TEST_LOG"\nexit 0');
  fake('df','printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 5000000 0 %s 0%% /\\n" "${TEST_FREE_KIB:-4000000}"');
  fake('install',"src=; dst=; for x do src=\"$dst\"; dst=\"$x\"; done\nif [ \"$FAIL_SNAPSHOT_COPY\" = 1 ];then\n case \"$dst\" in */.state-snapshot.*)\n   printf 'truncated backup bytes' > \"$dst\"\n   exit 28\n   ;;\n esac\nfi\nexec /bin/cp -- \"$src\" \"$dst\"");
- fake('npm','if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi\nif [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi\nexit 0');
+ // Simulate real npm removing/reinstalling dependencies under worker umask 077.
+ // The Web account is a different UID and must receive group read/execute.
+ fake('npm',`if [ "$1" = ci ]; then
+ mkdir -p "$TEST_ROOT/node_modules/fastify"
+ printf '{"name":"fastify"}\\n' > "$TEST_ROOT/node_modules/fastify/package.json"
+ chmod 0700 "$TEST_ROOT/node_modules" "$TEST_ROOT/node_modules/fastify"
+ chmod 0600 "$TEST_ROOT/node_modules/fastify/package.json"
+ fi
+ if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi
+ if [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi
+ if [ "$1" = run ] && [ "$2" = build:web ]; then
+ mkdir -p "$TEST_ROOT/apps/web/dist"
+ printf '<html>ok</html>\\n' > "$TEST_ROOT/apps/web/dist/index.html"
+ chmod 0700 "$TEST_ROOT/apps/web/dist"
+ chmod 0600 "$TEST_ROOT/apps/web/dist/index.html"
+ fi
+ exit 0`);
  const meminfo=join(base,'meminfo');
  writeFileSync(meminfo,'MemAvailable:    3000000 kB\\nSwapFree:    3000000 kB\\n'.replaceAll('\\n','\n'));
  let worker=original.replaceAll('/proc/meminfo',JSON.stringify(meminfo));
@@ -241,4 +258,32 @@ test('partial backup ENOSPC preserves original state, journal and retryable reco
     '{"original":true}\n');
   assert.equal(exec('git',['-C',f.root,'rev-parse','HEAD']),f.old);
  }finally{f.cleanup();}
+});
+
+test('generated artifacts retain restricted world permissions and gain Web group read on update AND rollback',()=>{
+ for(const rollback of [false,true]){
+  const f=prepare();
+  try{
+   const out=f.run({health:rollback});
+   assert.equal(out.result.status,rollback?'rolled_back':'success',
+     JSON.stringify(out.process));
+   for(const path of [
+     join(f.root,'node_modules'),
+     join(f.root,'node_modules','fastify'),
+     join(f.root,'node_modules','fastify','package.json'),
+     join(f.root,'apps','web','dist'),
+     join(f.root,'apps','web','dist','index.html')
+   ]){
+     const mode=statSync(path).mode & 0o777;
+     assert.ok(mode & 0o040, `Web group needs read: ${path} (${mode.toString(8)})`);
+     assert.equal(mode & 0o007,0,`World must have no access: ${path}`);
+     if(statSync(path).isDirectory())
+       assert.ok(mode & 0o010,`Web group needs directory traverse: ${path}`);
+   }
+   const chmodLog=readFileSync(f.log,'utf8');
+   const checks=chmodLog.match(/chgrp:/g)??[];
+   assert.ok(checks.length>=(rollback?4:2),
+     'Artifact normalization must run again after rollback rebuild');
+  }finally{f.cleanup();}
+ }
 });
