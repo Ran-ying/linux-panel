@@ -27,10 +27,23 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     if(targetSha !== undefined && !SHA.test(targetSha))
       throw error('Invalid target Git SHA');
     const opts={timeout:15000,maxBuffer:4096,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}};
-    const from=(await execFile('git',['-C',root,'rev-parse','HEAD'],opts)).stdout.trim();
-    const target=targetSha ?? (await execFile('git',
-      ['-C',root,'ls-remote','--exit-code','origin','refs/heads/main'],opts))
-      .stdout.trim().split(/\s+/)[0];
+    // The privileged Broker deliberately owns the source checkout as
+    // linuxpanel-updater, while the Web process runs as linuxpanel. Modern
+    // Git rejects even read-only operations from that different UID unless
+    // this exact, service-configured repository is marked safe. Scope the
+    // exception to each invocation; never alter system/global git config.
+    const gitArgs=(...args)=>['-c',`safe.directory=${root}`,'-C',root,...args];
+    let from,target;
+    try {
+      from=(await execFile('git',gitArgs('rev-parse','HEAD'),opts)).stdout.trim();
+      target=targetSha ?? (await execFile('git',
+        gitArgs('ls-remote','--exit-code','origin','refs/heads/main'),opts))
+        .stdout.trim().split(/\s+/)[0];
+    } catch {
+      // Git's raw stderr may contain remotes, filesystem layout, or config.
+      // Return a meaningful bounded error without disclosing these details.
+      throw error('Unable to inspect Git revision: verify checkout read access and origin/main connectivity',502);
+    }
     if(!SHA.test(target)||!SHA.test(from))throw error('Invalid Git commit identity',502);
     return {from,target};
   };
