@@ -45,15 +45,37 @@ try {
       assert.deepEqual(outside,[],width+' '+name+' container overflow');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
     }
-    // Persist theme across reload; OS preference follows in system mode.
-    await page.getByLabel('界面外观').selectOption('dark');
+    // Compact sidebar, bottom-only separators and no card spacing.
+    assert.equal(await page.locator('.sidebar-settings .sidebar-account').count(),1);
+    assert.equal(await page.locator('footer').count(),0);
+    const cardStyles=await page.locator('.action-card,.settings-section').evaluateAll(nodes=>nodes.map(n=>{
+      const s=getComputedStyle(n);
+      return [s.marginTop,s.marginBottom,s.marginLeft,s.marginRight,s.borderTopWidth,s.borderLeftWidth,s.borderRightWidth];
+    }));
+    assert.ok(cardStyles.every(values=>values.every(v=>v==='0px')),'cards should be contiguous with bottom borders only');
+    const follow=page.getByRole('checkbox',{name:'跟随系统',exact:true});
+    const dark=page.getByRole('button',{name:'深色',exact:true});
+    const light=page.getByRole('button',{name:'浅色',exact:true});
+    assert.equal(await dark.isDisabled(),true);
+    assert.equal(await light.isDisabled(),true);
+    await follow.uncheck();
+    await dark.click();
     await page.reload();
+    await page.locator('.module-sidebar').waitFor();
     assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
-    await page.getByLabel('界面外观').selectOption('light');
+    assert.equal(await follow.isChecked(),false);
+    await page.screenshot({path:join(output,width+'-dark.png'),fullPage:true});
+    await light.click();
     assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     await page.emulateMedia({colorScheme:'dark'});
-    await page.getByLabel('界面外观').selectOption('system');
-    assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+    await follow.check();
+    assert.equal(await dark.isDisabled(),true);
+    assert.equal(await light.isDisabled(),true);
+    await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+    await page.emulateMedia({colorScheme:'light'});
+    await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+    await follow.uncheck();
+    assert.equal(await light.isDisabled(),false);
     await page.getByRole('button',{name:'退出登录',exact:true}).click();
     await page.locator('#login-pass').waitFor();
     await page.reload();
