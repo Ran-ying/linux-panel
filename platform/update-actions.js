@@ -93,7 +93,8 @@ export function registerUpdateActions(registry, controller) {
          typeof context.clientId!=='string'||!context.clientId) {
         throw Object.assign(new Error('Trusted direct update MCP authorization required'),{statusCode:403});
       }
-      return controller.executeDirect({userId:context.userId,clientId:context.clientId,targetSha:input.targetSha});
+      return controller.executeDirect({userId:context.userId,clientId:context.clientId,
+        targetSha:input.targetSha,authorizeEnqueue:context.authorizeEnqueue});
     }
   });
 }
