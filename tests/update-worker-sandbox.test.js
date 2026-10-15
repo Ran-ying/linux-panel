@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const original=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
@@ -47,7 +47,7 @@ function prepare(){
  fake('sleep','exit 0');
  fake('chown','exit 0');
  fake('df','printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 5000000 0 %s 0%% /\\n" "${TEST_FREE_KIB:-4000000}"');
- fake('install','src=; dst=; for x do src="$dst"; dst="$x"; done; exec /bin/cp -- "$src" "$dst"');
+ fake('install',"src=; dst=; for x do src=\"$dst\"; dst=\"$x\"; done\nif [ \"$FAIL_SNAPSHOT_COPY\" = 1 ];then\n case \"$dst\" in */.state-snapshot.*)\n   printf 'truncated backup bytes' > \"$dst\"\n   exit 28\n   ;;\n esac\nfi\nexec /bin/cp -- \"$src\" \"$dst\"");
  fake('npm','if [ "$FAIL_BUILD" = 1 ] && [ "$1" = test ]; then exit 19; fi\nif [ "$FAIL_ROLLBACK" = 1 ] && [ "$1" = run ] && [ "$2" = build:web ]; then exit 37; fi\nexit 0');
  const meminfo=join(base,'meminfo');
  writeFileSync(meminfo,'MemAvailable:    3000000 kB\\nSwapFree:    3000000 kB\\n'.replaceAll('\\n','\n'));
@@ -95,7 +95,7 @@ record(){`);
  exec('bash',['-n',script]);
  return {base,root,state,status,script,log,old,target,meminfo,
   cleanup(){rmSync(base,{recursive:true,force:true})},
-  run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false,partialJournal=false,partialResult=false}={}){
+  run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false,partialJournal=false,partialResult=false,partialBackup=false}={}){
    const id=(++sequence).toString(16).padStart(32,'0');
    writeFileSync(join(state,'update-trigger'),'id='+id+'\nsha='+sha+'\n');
    const process=spawnSync('bash',[script],{encoding:'utf8',timeout:20000,env:{
@@ -104,7 +104,8 @@ record(){`);
      TEST_ROOT:root,TEST_TARGET:target,FAIL_ROLLBACK:rollback?'1':'0',
     TEST_FREE_KIB:lowDisk?'900000':'4000000',
     TEST_PARTIAL_JOURNAL:partialJournal?'1':'0',
-    TEST_PARTIAL_RESULT:partialResult?'1':'0'
+    TEST_PARTIAL_RESULT:partialResult?'1':'0',
+    FAIL_SNAPSHOT_COPY:partialBackup?'1':'0'
    }});
    const result=existsSync(join(status,'result.json'))?
     JSON.parse(readFileSync(join(status,'result.json'),'utf8')):null;
@@ -206,5 +207,38 @@ test('partial ENOSPC status write never exposes malformed JSON as result',()=>{
   assert.equal(out.head,f.old);
   assert.equal(existsSync(join(f.base,'status','result.json')),false);
   assert.equal(existsSync(join(f.base,'backup','active-transaction')),false);
+ }finally{f.cleanup();}
+});
+
+test('partial backup ENOSPC preserves original state, journal and retryable recovery',()=>{
+ const f=prepare();
+ try {
+  const out=f.run({partialBackup:true});
+  assert.notEqual(out.process.status,0,'Partial backup must abort the job');
+  assert.equal(out.result?.status,'failed');
+  assert.equal(out.head,f.old,'No new Git revision may be published');
+  assert.equal(out.state,'{"original":true}\n');
+  assert.equal(existsSync(join(f.base,'backup','active-transaction')),true);
+  assert.equal(existsSync(join(f.state,'update-processing')),true);
+  const items=readFileSync(f.log,'utf8');
+  assert.match(items,/systemctl:stop/);
+  assert.match(items,/systemctl:start/,'Old Web should restart after failed backup');
+  const entries=readdirSync(join(f.base,'backup'));
+  assert.ok(entries.some(x=>x==='active-transaction'));
+  assert.ok(!entries.some(x=>x.startsWith('.state-snapshot.')),
+    'Truncated backup temp must not remain');
+  assert.ok(!entries.some(x=>x.startsWith('panel-state.json.before-')),
+    'Truncated snapshot must never be published as a trusted backup');
+  const restored=spawnSync('bash',[f.script,'--recover-only'],{
+    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log}
+  });
+  assert.equal(restored.status,0,JSON.stringify(restored));
+  const final=JSON.parse(readFileSync(join(f.status,'result.json'),'utf8'));
+  assert.equal(final.status,'rolled_back');
+  assert.equal(existsSync(join(f.base,'backup','active-transaction')),false);
+  assert.equal(existsSync(join(f.state,'update-processing')),false);
+  assert.equal(readFileSync(join(f.state,'panel-state.json'),'utf8'),
+    '{"original":true}\n');
+  assert.equal(exec('git',['-C',f.root,'rev-parse','HEAD']),f.old);
  }finally{f.cleanup();}
 });
