@@ -1,3 +1,13 @@
+# Configurable sessions and immediate dashboard shell — 2026-10-15
+
+Owner requested extending the fixed 12-hour Web login to one month with custom duration. Default becomes 30 fixed days; Settings → Login sessions supports 1–365 integer days. Saving updates the persisted policy, current device expiry and Cookie together; later logins use the new policy, other devices retain existing expiries. Still-valid legacy sessions upgrade once on session load from their original creation time; expired/revoked sessions are never revived, and regular refresh does not slide server expiry.
+
+Owner also requested rendering the main interface before background session validation. The sidebar and rounded placeholder cards now render immediately; session checks run in the background, with login shown after rejection. Valid sessions skip the redundant auth/status request. Account information, protected modules and Actions mount only after validation/data loading; no private dashboard data is cached. Chromium holds the session response to verify immediate shell rendering without a login flash or account disclosure.
+
+New integration coverage checks default/custom duration, Cookie synchronization, persistence, independent appearance settings, other-device isolation, validation, Origin/CSRF/login enforcement, one-time legacy upgrade, expiry and revocation. Chromium additionally exercises saving/reloading the setting and checks the actual browser Cookie. CI, screenshot review and deployment are pending at this snapshot.
+
+Last observed main/test deployment is PR #81 `eaa5ba00487b303de73853cb0909ebd0f429f879`; main CI 38786935534 passed. MCP transaction `176c32a9cd7b98745436825c636b580f` persisted success at 2026-10-15T18:37:39Z with the panel service active/running. Check Issue #54 for exact final CI, merged SHA and durable deployment evidence. No MCP/OAuth token lifetimes, Broker privileges or release tag change.
+
 # Centered compact panel shell — 2026-10-15
 
 Owner refinement of PR #80: center sidebar and Action content together inside one 1200px maximum-width shell (including 16px outer padding), rather than capping only the right side. With the 230px sidebar and shared 24px gap, desktop content now stops at 914px. The same 24px gap separates module titles and successive Actions; mobile keeps 16px outer gutters and stacks sidebar/content with the same 24px gap. Rounded frames, sidebar viewport bounds/independent scrolling, grouping and loading behavior remain intact.
