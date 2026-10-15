@@ -88,6 +88,33 @@ install -o root -g root -m 0644 /home/stage/lp-guard.conf \
  /etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf
 systemctl daemon-reload
 systemctl enable linux-panel-update-recover.service
+# A guest-wide hard power cut immediately after privileged provisioning can
+# otherwise lose recently installed systemd unit contents or enablement
+# symlink metadata. Commit the unit/state/source-pin files and directory
+# entries BEFORE entering the root updater's journaled transaction.
+source /home/stage/durable-sync.sh
+for path in \
+ /usr/local/libexec/linux-panel-update-worker \
+ /etc/systemd/system/linux-panel.service \
+ /etc/systemd/system/linux-panel-update.service \
+ /etc/systemd/system/linux-panel-update-recover.service \
+ /etc/systemd/system/linux-panel.service.d/90-update-recovery-guard.conf \
+ /etc/linux-panel/panel.env \
+ /etc/linux-panel/update-source \
+ /var/lib/linux-panel/panel-state.json;do
+ durable_sync file "$path"
+done
+for path in \
+ /usr/local/libexec \
+ /etc/systemd/system \
+ /etc/systemd/system/linux-panel.service.d \
+ /etc/systemd/system/multi-user.target.wants \
+ /etc/linux-panel \
+ /var/lib/linux-panel;do
+ durable_sync dir "$path"
+done
+[[ "$(systemctl is-enabled linux-panel-update-recover.service)" == enabled ]] ||
+ { echo 'Recovery unit was not enabled before cut' >&2; exit 1; }
 systemctl start linux-panel.service
 # systemctl start returns when the process is spawned, not when the HTTP
 # listener has completed startup. Do not race the readiness signal.
