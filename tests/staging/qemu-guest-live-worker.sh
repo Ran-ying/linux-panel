@@ -45,7 +45,7 @@ cat >/opt/node24/bin/npm <<'NPM'
 # TEST SUBSTITUTE only. Avoid installing untrusted npm packages in this guest.
 set -e
 if [[ "${1:-}" == ci && -f /run/lp-hold-npm ]];then
- touch /run/lp-reached-npm
+ touch /var/lib/linux-panel-updater/lp-reached-npm
  while [[ -f /run/lp-hold-npm ]];do /usr/bin/sleep 0.3;done
 fi
 exit 0
