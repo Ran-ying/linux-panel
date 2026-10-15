@@ -70,23 +70,46 @@ try {
       await page.locator('.module-content').waitFor();
       if(name.trim()==='系统概览')
         await page.getByRole('heading',{name:'根文件系统磁盘占用',exact:true}).waitFor();
-      if(width===1280 && ['系统概览','服务浏览'].includes(name.trim())){
+      if([390,1280].includes(width) && ['系统概览','服务浏览'].includes(name.trim())){
         const card=page.locator('.action-card').first();
-        await card.locator('.result').waitFor();
-        await page.waitForFunction(()=>!document.querySelector('.action-card .primary')?.disabled);
-        await card.locator('.action-explanation summary').click();
-        await card.locator('.execution-plan').waitFor();
-        assert.equal(await card.locator('.result').count(),1,'viewing implementation must retain the data result');
+        assert.equal(await card.locator('.info-panel').count(),0,'information must start hidden');
+        await card.getByRole('tab',{name:'说明',exact:true}).click();
+        await card.locator('.description-panel').waitFor();
+        assert.ok((await card.locator('.description-panel p').count())>=2,'show short and detailed descriptions');
+        await card.getByRole('tab',{name:'说明',exact:true}).click();
+        assert.equal(await card.locator('.info-panel').count(),0,'click selected tab to hide information');
+        await card.getByRole('tab',{name:'命令',exact:true}).click();
+        await card.locator('.command-table').waitFor();
+        assert.equal(await card.locator('.result').count(),1);
         if(name.trim()==='服务浏览')
-          assert.equal((await card.locator('.command-output').innerText()).trim(),'systemctl list-units --type=service --all --no-pager --no-legend --plain');
+          assert.equal(await card.getByRole('textbox',{name:'命令 units',exact:true}).inputValue(),'systemctl list-units --type=service --all --no-pager --no-legend --plain');
         else {
-          const implementation=await card.locator('.command-output').innerText();
-          for(const call of ['os.hostname()','os.platform()','os.release()','os.arch()','os.availableParallelism()','os.totalmem()','os.freemem()','os.uptime()','process.version'])
-            assert.ok(implementation.includes(call),'missing concrete system.info call '+call);
-          assert.equal(await card.locator('.action-explanation').count(),1);
-          assert.equal(await card.getByRole('button',{name:'查看执行内容',exact:true}).count(),0);
-          assert.ok(!await card.locator('.action-explanation').innerText().then(text=>text.includes('等 Node.js')));
+          assert.equal(await card.locator('.command-table tbody tr').count(),9);
+          const hostname=card.getByRole('textbox',{name:'命令 hostname',exact:true});
+          assert.equal(await hostname.inputValue(),'hostname');
+          if(width===1280){
+            await hostname.fill('printf panel-command-test');
+            let saved=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/commands') && r.request().method()==='PUT');
+            await card.getByRole('button',{name:'保存',exact:true}).click();
+            assert.equal((await saved).status(),200);
+            let executed=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/execute') && r.request().method()==='POST');
+            await card.getByRole('button',{name:'刷新数据',exact:true}).click();
+            assert.equal((await (await executed).json()).result.hostname,'panel-command-test','saved command must really drive execution');
+            await hostname.fill('hostname');
+            saved=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/commands') && r.request().method()==='PUT');
+            await card.getByRole('button',{name:'保存',exact:true}).click();
+            assert.equal((await saved).status(),200);
+            executed=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/execute') && r.request().method()==='POST');
+            await card.getByRole('button',{name:'刷新数据',exact:true}).click();
+            await executed;
+          }
         }
+        const controls=await card.locator('.result-controls').evaluate(node=>{
+          const refresh=node.querySelector('.action-refresh').getBoundingClientRect();
+          const visual=node.querySelector('.view-switch').getBoundingClientRect();
+          return refresh.top<visual.top || refresh.left<visual.left;
+        });
+        assert.equal(controls,true,'refresh must precede visual/JSON controls in result section');
       }
       // All module containers must fit; tables/nav may scroll internally.
       const outside=await page.locator('.module-content, .action-card, .settings-section, .sidebar-brand, .module-nav, .sidebar-settings')
