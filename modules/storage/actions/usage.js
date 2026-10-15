@@ -23,6 +23,10 @@ export function summarizeStatfs(stats, mountpoint = '/') {
   };
 }
 
+async function readDiskUsage() {
+  return summarizeStatfs(await statfs('/', { bigint: true }));
+}
+
 export default {
   id: 'storage.usage',
   title: '根文件系统磁盘占用',
@@ -41,6 +45,6 @@ export default {
     additionalProperties: false
   },
   explain: 'fs.statfs("/") 获取文件系统的块数量与可用块。已用量根据总块和空闲块计算，available 可能少于 free（保留块）。APFS 等文件系统统计口径可能与 Finder 略有差异。',
-  createPlan: async () => [{ type: 'node-api', description: '调用 fs.promises.statfs("/", { bigint: true })；不执行 Shell 命令' }],
-  execute: async () => summarizeStatfs(await statfs('/', { bigint: true }))
+  createPlan: async () => [{ type: 'node-api', code: readDiskUsage.toString() }],
+  execute: readDiskUsage
 };
