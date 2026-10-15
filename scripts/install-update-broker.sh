@@ -306,6 +306,35 @@ if [[ "$MODE" == apply ]];then
  install -o root -g root -m 0644 "$ROOT/deployment/systemd/linux-panel-update-guard.conf" "$GUARD_UNIT"
  chown -R linuxpanel-updater:linuxpanel "$ROOT"
  chmod -R g+rX,g-w,o-w "$ROOT"
+ # Git writes HEAD's loose branch ref under the updater UID with inherited
+ # Broker umask 077. Ordinary Git defaults may silently replace refs/heads/main
+ # with mode 0600 / primary group linuxpanel-updater, making Web's read-only
+ # `git rev-parse HEAD` fail after an otherwise successful update.
+ #
+ # Git's octal sharedRepository=0640 OVERRIDES the umask on newly created
+ # metadata, without ever giving the Web group write permission. Setgid on
+ # these Git metadata parents makes replacements inherit group linuxpanel.
+ # This is scoped to the trusted local checkout: no global Git config.
+ # Existing refs can be packed; do not require a loose main file.
+ runuser -u linuxpanel-updater -- git -C "$ROOT" config --local core.sharedRepository 0640
+ for d in "$ROOT/.git" "$ROOT/.git/refs" "$ROOT/.git/refs/heads" "$ROOT/.git/objects";do
+  [[ -d "$d" && ! -L "$d" ]] ||
+    die 'Unsafe or missing Git metadata directory'
+  chgrp -- linuxpanel "$d"
+  chmod -- g+rx,g+s,g-w,o-w "$d"
+ done
+ for f in "$ROOT/.git/HEAD" "$ROOT/.git/refs/heads/main" "$ROOT/.git/packed-refs";do
+  [[ -e "$f" ]] || continue
+  [[ -f "$f" && ! -L "$f" ]] || die 'Unsafe Git reference file'
+  chgrp -- linuxpanel "$f"
+  chmod -- g+r,g-w,o-w "$f"
+ done
+ web_head="$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" -C "$ROOT" rev-parse HEAD)" ||
+    die 'Web cannot resolve Git HEAD after broker installation'
+ updater_head="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD)" ||
+    die 'Updater cannot resolve Git HEAD after broker installation'
+ [[ "$web_head" == "$updater_head" ]] ||
+    die 'Web and updater Git HEAD differ after broker installation'
  sync_installed_paths \
   "file:$BACKUP_DIR/panel-state.before-broker.json" \
   "file:$BACKUP_DIR/panel.env.before-broker" \
