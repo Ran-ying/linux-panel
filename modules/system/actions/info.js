@@ -17,7 +17,7 @@ async function readSystemInfo() {
 export default {
   id: 'system.info',
   title: '读取系统基本信息',
-  description: '使用 Node.js 标准库读取当前主机信息（Mac 本地运行时不是 VPS）。',
+  description: '读取主机名、系统版本、架构、内存与运行时间。',
   kind: 'read',
   permission: 'system:read',
   exposure: { web: true, mcp: true },
@@ -33,7 +33,22 @@ export default {
     },
     additionalProperties: false
   },
-  explain: 'os 模块读取当前 Node.js 进程所在主机。availableParallelism 是进程可使用的并行度，不等同于物理 CPU 核心数。',
+  explain: 'Linux 通过可编辑的终端命令读取；CPU 数量由 nproc 返回，是当前进程可用处理器数量。其他平台使用 Node.js 标准库。',
+  terminal:{
+    fields:{
+    "hostname": "hostname",
+    "platform": "uname -s | tr '[:upper:]' '[:lower:]'",
+    "release": "uname -r",
+    "arch": "uname -m",
+    "cpuCount": "nproc",
+    "totalMemoryBytes": "awk '/^MemTotal:/ {printf \"%.0f\\n\", $2 * 1024}' /proc/meminfo",
+    "freeMemoryBytes": "awk '/^MemFree:/ {printf \"%.0f\\n\", $2 * 1024}' /proc/meminfo",
+    "uptimeSeconds": "cut -d ' ' -f 1 /proc/uptime",
+    "nodeVersion": "node --version"
+},
+    decode: values => Object.fromEntries(Object.entries(values).map(([key,value]) =>
+      [key,['cpuCount','totalMemoryBytes','freeMemoryBytes','uptimeSeconds'].includes(key)?Number(value):value]))
+  },
   createPlan: async () => [{ type: 'node-api', code: readSystemInfo.toString() }],
   execute: readSystemInfo
 };

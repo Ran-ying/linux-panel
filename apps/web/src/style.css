@@ -482,3 +482,24 @@ table{min-width:500px}
 
 /* One disclosure owns the implementation, without nested explanatory frames. */
 .action-explanation .execution-plan{margin:10px 0 0;padding:0;border:0;border-radius:0;background:transparent}
+
+/* Each Action has optional information tabs, then result controls. */
+.information-heading,.result-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.action-info-tabs{display:flex;gap:4px;padding:3px;border:1px solid var(--border-panel);border-radius:10px;background:var(--nav-bg)}
+.action-info-tabs button{min-height:36px;padding:6px 16px;border:1px solid transparent;border-radius:7px;
+  background:transparent;color:var(--text-secondary);cursor:pointer}
+.action-info-tabs button[aria-selected="true"]{border-color:var(--focus-ring);background:var(--panel-bg);color:var(--text-primary)}
+.info-panel{margin-top:12px;padding:12px;border:1px solid var(--border-panel);border-radius:10px;background:var(--panel-alt-bg);min-width:0}
+.description-panel p{margin:6px 0;overflow-wrap:anywhere}
+.command-table{width:100%;min-width:0;table-layout:fixed;margin:10px 0}
+.command-table th:first-child,.command-table td:first-child{width:27%;overflow-wrap:anywhere}
+.command-table th,.command-table td{padding:8px;vertical-align:top}
+.command-table textarea{width:100%;min-height:68px;padding:8px;resize:vertical}
+.action-refresh,.command-save{min-height:40px;padding:8px 12px;border:1px solid var(--accent-bg);border-radius:8px;
+  background:var(--accent-bg);color:var(--button-primary-text);cursor:pointer}
+.action-card>.result{margin-top:16px}
+@media(max-width:730px){
+  .action-info-tabs button{min-height:44px}
+  .result-controls{gap:8px}
+  .command-table th,.command-table td{padding:6px}
+}

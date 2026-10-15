@@ -2,190 +2,172 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import ResultRenderer from './ResultRenderer.vue';
 
-const props = defineProps({
-  action: { type: Object, required: true },
-  presentation: { type: Object, default: null },
-  csrf: { type: String, required: true }
+const props=defineProps({
+  action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
+const emit=defineEmits(['unauthorized']);
+const inputText=ref('{}'),response=ref(null),error=ref(''),busy=ref(false);
+const view=ref('visual'),autoRefresh=ref(false),infoTab=ref(null);
+const fields=ref([]),commandsLoaded=ref(false),commandsEditable=ref(false);
+const commandBusy=ref(false),commandError=ref(''),commandMessage=ref('');
+const refreshSeconds=computed(()=>(props.presentation?.refreshIntervalMs ?? 0)/1000);
+const hasInputFields=computed(()=>Object.keys(props.action.inputSchema?.properties ?? {}).length>0);
+let refreshTimer,controller,commandController;
+let generation=0,disposed=false;
 
-const emit = defineEmits(['unauthorized']);
-const inputText = ref('{}');
-const response = ref(null);
-const executionPlan = ref(null);
-const planBusy = ref(false);
-const planError = ref('');
-const error = ref('');
-const busy = ref(false);
-const view = ref('visual');
-const autoRefresh = ref(false);
-const refreshSeconds = computed(() => (props.presentation?.refreshIntervalMs ?? 0) / 1000);
-const hasInputFields = computed(() => Object.keys(props.action.inputSchema?.properties ?? {}).length > 0);
-
-let refreshTimer;
-let controller;
-let planController;
-let generation = 0;
-let disposed = false;
-
-async function run(operation, refresh = false) {
-  // Each ActionCard owns its own execution state; unrelated cards stay usable.
-  if (busy.value || disposed) return;
-  const requestId = ++generation;
-  busy.value = true;
-  error.value = '';
-  controller = new AbortController();
-  try {
-    const input = JSON.parse(inputText.value);
-    const apiResponse = await fetch(
-      `/api/actions/${encodeURIComponent(props.action.id)}/${operation}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Panel-CSRF': props.csrf },
-        body: JSON.stringify({ input }),
-        signal: controller.signal
-      }
-    );
-    const payload = await apiResponse.json();
-    if (apiResponse.status === 401) emit('unauthorized');
-    if (!apiResponse.ok) throw new Error(payload.error || `HTTP ${apiResponse.status}`);
-    if (disposed || generation !== requestId) return;
-    response.value = { operation, content: payload };
-    if (!refresh) view.value = 'visual';
-  } catch (cause) {
-    if (disposed || generation !== requestId || cause.name === 'AbortError') return;
-    error.value = `操作失败：${cause.message}`;
-    if (refresh) autoRefresh.value = false;
-  } finally {
-    if (!disposed && generation === requestId) {
-      busy.value = false;
-      controller = undefined;
-    }
-  }
+async function commandRequest(method='GET') {
+  commandController=new AbortController();
+  const reply=await fetch('/api/actions/'+encodeURIComponent(props.action.id)+'/commands',{
+    method,signal:commandController.signal,
+    headers:method==='PUT'?{'Content-Type':'application/json','X-Panel-CSRF':props.csrf}:{},
+    ...(method==='PUT'?{body:JSON.stringify({commands:Object.fromEntries(fields.value.map(field=>[field.key,field.value]))})}:{})
+  });
+  const payload=await reply.json();
+  if(reply.status===401)emit('unauthorized');
+  if(!reply.ok)throw new Error(payload.error || 'HTTP '+reply.status);
+  return payload;
 }
-
-async function showExecution(event) {
-  if (!event.target.open || executionPlan.value || planBusy.value) return;
-  planBusy.value = true;
-  planError.value = '';
-  planController = new AbortController();
+async function selectInfo(tab) {
+  infoTab.value=infoTab.value===tab?null:tab;
+  if(infoTab.value!=='commands' || commandsLoaded.value || commandBusy.value)return;
+  commandBusy.value=true;commandError.value='';
   try {
-    const reply = await fetch('/api/actions/' + encodeURIComponent(props.action.id) + '/preview', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
-      body:JSON.stringify({input:JSON.parse(inputText.value)}),
-      signal:planController.signal
+    const config=await commandRequest();
+    if(disposed)return;
+    fields.value=config.fields;commandsEditable.value=config.editable;commandsLoaded.value=true;
+  } catch(cause) {
+    if(!disposed && cause.name!=='AbortError')commandError.value=cause.message;
+  } finally {if(!disposed)commandBusy.value=false;}
+}
+async function saveCommands() {
+  if(commandBusy.value)return;
+  commandBusy.value=true;commandError.value='';commandMessage.value='';
+  try {
+    const config=await commandRequest('PUT');
+    if(!disposed){fields.value=config.fields;commandMessage.value='已保存，刷新数据后生效';}
+  } catch(cause) {
+    if(!disposed && cause.name!=='AbortError')commandError.value=cause.message;
+  } finally {if(!disposed)commandBusy.value=false;}
+}
+async function run(operation,refresh=false) {
+  if(busy.value || disposed)return;
+  const requestId=++generation;
+  busy.value=true;error.value='';
+  controller=new AbortController();
+  try {
+    const reply=await fetch('/api/actions/'+encodeURIComponent(props.action.id)+'/'+operation,{
+      method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
+      body:JSON.stringify({input:JSON.parse(inputText.value)}),signal:controller.signal
     });
-    const payload = await reply.json();
-    if (reply.status === 401) emit('unauthorized');
-    if (!reply.ok) throw new Error(payload.error || 'HTTP ' + reply.status);
-    if (!disposed) executionPlan.value = payload;
-  } catch (cause) {
-    if (!disposed && cause.name !== 'AbortError') planError.value = cause.message;
+    const payload=await reply.json();
+    if(reply.status===401)emit('unauthorized');
+    if(!reply.ok)throw new Error(payload.error || 'HTTP '+reply.status);
+    if(disposed || generation!==requestId)return;
+    response.value={operation,content:payload};
+    if(!refresh)view.value='visual';
+  } catch(cause) {
+    if(disposed || generation!==requestId || cause.name==='AbortError')return;
+    error.value='操作失败：'+cause.message;
+    if(refresh)autoRefresh.value=false;
   } finally {
-    if (!disposed) planBusy.value = false;
+    if(!disposed && generation===requestId){busy.value=false;controller=undefined;}
   }
 }
-
-watch(inputText, () => { executionPlan.value = null; });
-
-function commandLine(step) {
-  return [step.command, ...(step.args ?? [])].map(part => {
-    const value = String(part);
-    return /^[A-Za-z0-9_./:=,@%+-]+$/.test(value) ? value :
-      "'" + value.split("'").join("'\"'\"'") + "'";
-  }).join(' ');
-}
-
-function stepLabel(type) {
-  return ({execFile:'系统命令', 'file-read':'文件读取（无 Shell 命令）', 'node-api':'Node.js API（无 Shell 命令）', mock:'演示数据'})[type] ?? '操作步骤';
-}
-
-// These are Web-only invocation preferences, not part of Action or MCP.
-watch([autoRefresh, refreshSeconds], () => {
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = undefined;
-  const interval = props.presentation?.refreshIntervalMs ?? 0;
-  if (!autoRefresh.value || interval < 3000) return;
-  refreshTimer = setInterval(() => {
-    if (document.visibilityState === 'visible' && !busy.value &&
-        response.value?.operation === 'execute') void run('execute', true);
-  }, interval);
+watch([autoRefresh,refreshSeconds],()=>{
+  if(refreshTimer)clearInterval(refreshTimer);
+  refreshTimer=undefined;
+  const interval=props.presentation?.refreshIntervalMs ?? 0;
+  if(!autoRefresh.value || interval<3000)return;
+  refreshTimer=setInterval(()=>{
+    if(document.visibilityState==='visible' && !busy.value && response.value?.operation==='execute')
+      void run('execute',true);
+  },interval);
 });
-
-onMounted(() => {
-  // Only explicitly configured, parameter-free read Actions may auto-load.
-  if (props.action.kind === 'read' && props.presentation?.loadOnEnter === true &&
-      !(props.action.inputSchema?.required?.length) &&
-      document.visibilityState === 'visible') {
+onMounted(()=>{
+  if(props.action.kind==='read' && props.presentation?.loadOnEnter===true &&
+    !props.action.inputSchema?.required?.length && document.visibilityState==='visible')
     void run('execute');
-  }
 });
-
-onUnmounted(() => {
-  disposed = true;
-  generation++;
-  if (refreshTimer) clearInterval(refreshTimer);
-  controller?.abort();
-  planController?.abort();
+onUnmounted(()=>{
+  disposed=true;generation++;
+  if(refreshTimer)clearInterval(refreshTimer);
+  controller?.abort();commandController?.abort();
 });
 </script>
 
 <template>
   <section class="action-card" :aria-label="action.title">
     <div class="card-heading">
-      <div>
-        <h3>{{ action.title }}</h3>
-      </div>
-      <span class="read-pill">{{ action.kind === 'read' ? '只读' : '需授权' }}</span>
+      <h3>{{ action.title }}</h3>
+      <span class="read-pill">{{ action.kind === 'read' ? '数据读取' : '需授权' }}</span>
     </div>
-
-    <p v-if="action.kind === 'write'" class="notice">{{ action.explain || action.description }}</p>
-
-    <label v-if="hasInputFields" :for="'input-' + action.id">JSON 参数</label>
-    <textarea v-if="hasInputFields" :id="'input-' + action.id" v-model="inputText"
-      spellcheck="false" rows="3" />
-
-    <div class="toolbar">
-      <button type="button" class="primary" :disabled="busy" @click="run('execute')">
-        {{ busy ? '处理中…' : action.kind === 'write' ? '申请更新' : '刷新数据' }}
-      </button>
-    </div>
-
-    <details class="action-explanation" @toggle="showExecution">
-      <summary>执行内容</summary>
-      <p v-if="planBusy" class="muted small">正在读取…</p>
-      <p v-if="planError" role="alert" class="error">{{ planError }}</p>
-      <div v-if="executionPlan" class="execution-plan">
-        <div v-for="(step,index) in executionPlan.steps" :key="index">
-          <strong>{{ stepLabel(step.type) }}</strong>
-          <pre v-if="step.command" class="raw-output command-output">{{ commandLine(step) }}</pre>
-          <pre v-else-if="step.code" class="raw-output command-output">{{ step.code }}</pre>
-          <template v-else>
-            <p v-if="step.path">文件：<code>{{ step.path }}</code></p>
-            <p v-if="step.description">{{ step.description }}</p>
-          </template>
+    <div class="action-information">
+      <div class="information-heading">
+        <strong>信息</strong>
+        <div class="action-info-tabs" role="tablist" :aria-label="action.title + '信息'">
+          <button type="button" role="tab" :id="'description-tab-'+action.id"
+            :aria-selected="infoTab==='description'" :aria-controls="'description-'+action.id"
+            @click="selectInfo('description')">说明</button>
+          <button type="button" role="tab" :id="'commands-tab-'+action.id"
+            :aria-selected="infoTab==='commands'" :aria-controls="'commands-'+action.id"
+            @click="selectInfo('commands')">命令</button>
         </div>
       </div>
-    </details>
-    <div v-if="error" role="alert" class="error">{{ error }}</div>
-    <div v-if="response" class="result">
+      <div v-if="infoTab==='description'" class="info-panel description-panel" role="tabpanel"
+        :id="'description-'+action.id" :aria-labelledby="'description-tab-'+action.id">
+        <p>{{ action.description }}</p>
+        <p v-if="action.explain">{{ action.explain }}</p>
+      </div>
+      <div v-if="infoTab==='commands'" class="info-panel commands-panel" role="tabpanel"
+        :id="'commands-'+action.id" :aria-labelledby="'commands-tab-'+action.id">
+        <p v-if="commandBusy && !commandsLoaded" class="muted small">正在加载命令…</p>
+        <p v-if="commandError" class="error" role="alert">{{ commandError }}</p>
+        <template v-if="commandsLoaded">
+          <form v-if="commandsEditable" @submit.prevent="saveCommands">
+            <p class="muted small">命令以面板普通用户执行；保存后由后续刷新使用。</p>
+            <table class="command-table">
+              <thead><tr><th>key</th><th>value（终端命令）</th></tr></thead>
+              <tbody><tr v-for="field in fields" :key="field.key">
+                <td><code>{{ field.key }}</code></td>
+                <td><textarea v-model="field.value" :aria-label="'命令 '+field.key"
+                  required maxlength="2048" rows="2" spellcheck="false" :disabled="commandBusy" /></td>
+              </tr></tbody>
+            </table>
+            <button type="submit" class="command-save primary form-button" :disabled="commandBusy">保存</button>
+            <p v-if="commandMessage" class="notice success-notice" role="status">{{ commandMessage }}</p>
+          </form>
+          <p v-else class="muted small">此操作没有可编辑的 Linux 终端命令。</p>
+        </template>
+      </div>
+    </div>
+
+    <label v-if="hasInputFields" :for="'input-'+action.id">JSON 参数</label>
+    <textarea v-if="hasInputFields" :id="'input-'+action.id" v-model="inputText" rows="3" spellcheck="false" />
+
+    <div class="result">
       <div class="result-header">
         <strong>操作结果</strong>
-        <div v-if="response.operation === 'execute'" class="view-switch" aria-label="结果查看模式">
-          <button type="button" :class="{ active: view === 'visual' }" @click="view='visual'">可视化</button>
-          <button type="button" :class="{ active: view === 'json' }" @click="view='json'">原始 JSON</button>
+        <div class="result-controls">
+          <button type="button" class="action-refresh primary" :disabled="busy || commandBusy" @click="run('execute')">
+            {{ busy ? '处理中…' : action.kind === 'write' ? '申请更新' : '刷新数据' }}
+          </button>
+          <div v-if="response" class="view-switch" aria-label="结果查看模式">
+            <button type="button" :class="{active:view==='visual'}" @click="view='visual'">可视化</button>
+            <button type="button" :class="{active:view==='json'}" @click="view='json'">原始 JSON</button>
+          </div>
         </div>
       </div>
-      <label v-if="response.operation === 'execute' && refreshSeconds > 0" class="refresh-choice">
-        <input type="checkbox" v-model="autoRefresh" />
-        每 {{ refreshSeconds }} 秒自动刷新
+      <div v-if="error" class="error" role="alert">{{ error }}</div>
+      <label v-if="response && refreshSeconds>0" class="refresh-choice">
+        <input type="checkbox" v-model="autoRefresh" />每 {{ refreshSeconds }} 秒自动刷新
         <span class="muted">（默认关闭）</span>
       </label>
-      <ResultRenderer v-if="response.operation === 'execute' && view === 'visual'"
-        :data="response.content.result" :presentation="presentation" />
-      <pre v-else class="raw-output">{{ JSON.stringify(response.content, null, 2) }}</pre>
+      <template v-if="response">
+        <ResultRenderer v-if="view==='visual'" :data="response.content.result" :presentation="presentation" />
+        <pre v-else class="raw-output">{{ JSON.stringify(response.content,null,2) }}</pre>
+      </template>
+      <p v-else-if="busy && !error" class="empty-state" role="status">正在读取实时数据…</p>
+      <p v-else-if="!error" class="empty-state">{{ action.kind === 'write' ? '此操作只生成待批准的更新申请，不会立即部署。' : '尚未读取数据，可点击“刷新数据”。' }}</p>
     </div>
-    <p v-else-if="busy && !error" class="empty-state" role="status">正在读取实时数据…</p>
-    <p v-else-if="!error" class="empty-state">{{ action.kind === 'write' ? '此操作只生成待批准的更新申请，不会立即部署。' : '尚未读取数据，可点击“刷新数据”。' }}</p>
   </section>
 </template>

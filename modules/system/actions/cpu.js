@@ -47,7 +47,24 @@ export default {
     },
     additionalProperties: false
   },
-  explain: '对 os.cpus() 两次快照取差值。它是主机整体 CPU 忙碌比例的短时间近似值，不是当前 Node.js 进程 CPU 占用，也不是 load average。',
+  explain: 'Linux 通过两次 /proc/stat 计数器快照估算整体 CPU 忙碌比例，默认间隔约 250 ms；它不是当前进程占用或 load average。',
+  terminal:{
+    fields:{
+      sample:'head -n 1 /proc/stat; sleep 0.25; head -n 1 /proc/stat',
+      logicalCpus:'getconf _NPROCESSORS_ONLN',
+      model:"awk -F ': ' '/^model name/ {print $2; exit}' /proc/cpuinfo"
+    },
+    decode: (values,{durations}) => {
+      const samples=values.sample.split('\n').filter(Boolean).map(line=>{
+        const numbers=line.trim().split(/\s+/).slice(1,9).map(Number);
+        if (numbers.length!==8 || numbers.some(value=>!Number.isFinite(value))) throw new Error('Invalid CPU counters');
+        return {total:numbers.reduce((sum,value)=>sum+value,0),idle:numbers[3]+numbers[4]};
+      });
+      if (samples.length!==2) throw new Error('Expected two CPU snapshots');
+      return {usagePercent:cpuUsageBetween(samples[0],samples[1]),logicalCpus:Number(values.logicalCpus),
+        sampleWindowMs:Math.max(1,Math.round(durations.sample)),model:values.model || 'Unknown',source:'proc-stat-command'};
+    }
+  },
   createPlan: async () => [{ type: 'node-api', code: readCpuUsage.toString() }],
   execute: readCpuUsage
 };

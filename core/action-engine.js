@@ -5,7 +5,8 @@ import Ajv from 'ajv';
  * explicit execution policy and trusted adapter context; UI metadata never grants permission.
  */
 export class ActionEngine {
-  constructor(registry) {
+  constructor(registry, {commands} = {}) {
+    this.commands = commands;
     this.registry = registry;
     this.ajv = new Ajv({ allErrors: true, strict: false });
     this.inputValidators = new Map();
@@ -50,7 +51,7 @@ export class ActionEngine {
     const action = this.#resolve(id, channel, input, context);
     return {
       action: id, kind: action.kind,
-      steps: typeof action.createPlan === 'function'
+      steps: this.commands?.supports(action) ? await this.commands.preview(action) : typeof action.createPlan === 'function'
         ? await action.createPlan(input)
         : [{ description: 'No preview available' }],
       note: 'Preview is informational and never triggers an update or other side effect.'
@@ -59,7 +60,9 @@ export class ActionEngine {
 
   async run(id, input = {}, channel = 'web', context = {}) {
     const action = this.#resolve(id, channel, input, context);
-    const result = await action.execute(input, context);
+    const result = this.commands?.supports(action)
+      ? await this.commands.execute(action)
+      : await action.execute(input, context);
     if (action.outputSchema) {
       let validate = this.outputValidators.get(action);
       if (!validate) {
