@@ -5,6 +5,10 @@ on:
     paths:
       - "scripts/update-worker.sh"
       - "platform/state-store.js"
+      - "platform/update-controller.js"
+      - "platform/update-actions.js"
+      - "extensions/mcp/index.js"
+      - "tests/update-controller.test.js"
       - "scripts/install-update-broker.sh"
       - "scripts/upgrade-update-broker.sh"
       - "deployment/systemd/linux-panel-update.service"
