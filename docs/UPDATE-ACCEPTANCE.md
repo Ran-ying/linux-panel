@@ -122,6 +122,23 @@ that lies about durable writes. Snapshot-based abrupt VM shutdown, mount-level
 failure injection and resource exhaustion remain explicit Issue #35 gates.
 Never claim production hard-power-loss acceptance solely from these barriers.
 
+## Partial I/O and ENOSPC semantics
+
+The immutable Broker's fixed-format root journal and result file writes now
+check the **initial printf**, chmod, chown and file fsync separately before an
+atomic rename. A short/failed write cannot be made durable merely because a
+later chmod or fsync succeeds. If a marker, result, or processing directory
+cannot be synchronized, the root journal is retained rather than claiming
+completed cleanup.
+
+Rootless fault-injection tests intercept the Bash printf builtin in an
+**isolated copy** of the worker: they write a partial journal/result before
+returning ENOSPC (exit 28). The journal scenario must not stop Web or
+publish a truncated root transaction; the result scenario must not expose
+malformed JSON as a completed result. These checks are stronger than
+preflight df tests, but are **not** a real full-disk systemd run, which
+remains a separate acceptance requirement.
+
 ## Deliberate cgroup OOM recovery (disposable staging)
 
 The real Ubuntu 24.04 systemd acceptance temporarily applies
