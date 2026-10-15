@@ -202,6 +202,48 @@ fi
 
 [[ "${LP_QEMU_SCENARIO:-file}" == broker ]] ||
   fail 'Unsupported isolated QEMU scenario'
+# On missing boot-verifier evidence, inspect the GUEST DISK OFFLINE,
+# read-only, after stopping the disposable QEMU process. Never inspect
+# or expose private state JSON contents in CI logs (digest only).
+offline_guest_diagnostics(){
+  note 'Collecting offline guest-disk evidence in throwaway runner'
+  if [[ -n "$vm_pid" ]];then hard_cut;fi
+  qemu-img convert -f qcow2 -O raw -S 4096 "$work/guest.qcow2" "$work/offline.raw" ||
+    { note 'Offline image conversion unavailable';return 1; }
+  local loop='' part='' mp="$work/offline-mount"
+  mkdir -p "$mp"
+  loop="$(sudo losetup -fP --show "$work/offline.raw")" ||
+    { note 'Guest disk loop interface unavailable';return 1; }
+  sudo lsblk -o NAME,FSTYPE,SIZE,MOUNTPOINT "$loop" || true
+  part="${loop}p1"
+  if ! sudo mount -o ro,noload "$part" "$mp";then
+    note 'Unable to mount guest ext4 root read-only'
+    sudo losetup -d "$loop" || true
+    return 1
+  fi
+  note 'Trusted recovery and verification unit file metadata:'
+  for p in \
+   etc/systemd/system/linux-panel-update-recover.service \
+   etc/systemd/system/lp-qemu-boot-verify.service \
+   etc/systemd/system/multi-user.target.wants/linux-panel-update-recover.service \
+   etc/systemd/system/multi-user.target.wants/lp-qemu-boot-verify.service \
+   var/lib/linux-panel-update-root/active-transaction \
+   var/lib/linux-panel/update-processing \
+   var/lib/linux-panel-update-status/result.json;do
+    sudo stat -c '%F %U:%G %a %n' "$mp/$p" || true
+  done
+  note 'Guest last update result (no secrets):'
+  sudo cat "$mp/var/lib/linux-panel-update-status/result.json" 2>/dev/null || true
+  note 'Guest transaction journal (identities only):'
+  sudo cat "$mp/var/lib/linux-panel-update-root/active-transaction" 2>/dev/null || true
+  note 'Expected and actual guest Git HEAD:'
+  sudo cat "$mp/home/stage/lp-old-sha" || true
+  sudo git --git-dir="$mp/opt/linux-panel/.git" rev-parse HEAD 2>/dev/null || true
+  note 'Private state sha256 only:'
+  sudo sha256sum "$mp/var/lib/linux-panel/panel-state.json" || true
+  sudo umount "$mp" || true
+  sudo losetup -d "$loop" || true
+}
 note 'Power-cut C: stage actual immutable root worker on disposable QEMU systemd'
 for pair in \
  "scripts/update-worker.sh:lp-worker-under-test.sh" \
@@ -214,6 +256,9 @@ for pair in \
  scp_run "$GITHUB_WORKSPACE/$srcfile" "/home/stage/$dstfile"
 done
 ssh_run 'sudo env LP_QEMU_EPHEMERAL=yes bash /home/stage/lp-guest-live-worker.sh'
+grep -Fq 'LP_QEMU_PRECUT_SERIAL_READY' "$work/console.log" ||
+  fail 'Real systemd TTY output was not visible in QEMU host serial log BEFORE cut'
+note 'Proved systemd guest-to-host serial evidence channel before hard power cut'
 worker_reached=0
 for i in $(seq 1 150);do
  if ssh_run 'sudo test -f /var/lib/linux-panel-updater/lp-reached-npm' >/dev/null 2>&1;then
@@ -249,6 +294,7 @@ for attempt in $(seq 1 650);do
 done
 if ((verified==0));then
   tail -n 120 "$work/console.log" >&2
+  offline_guest_diagnostics || note 'Offline disk diagnostics unavailable'
   fail 'In-guest root Broker recovery did not publish serial proof'
 fi
 note 'PASS C: real root systemd worker/old Git+state/HTTP recovered after VM-wide hard power cut'
