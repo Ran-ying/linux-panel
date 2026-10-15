@@ -1,3 +1,11 @@
+# Centered compact panel shell — 2026-10-15
+
+Owner refinement of PR #80: center sidebar and Action content together inside one 1200px maximum-width shell (including 16px outer padding), rather than capping only the right side. With the 230px sidebar and shared 24px gap, desktop content now stops at 914px. The same 24px gap separates module titles and successive Actions; mobile keeps 16px outer gutters and stacks sidebar/content with the same 24px gap. Rounded frames, sidebar viewport bounds/independent scrolling, grouping and loading behavior remain intact.
+
+Browser acceptance now verifies whole-shell horizontal centering, the narrower content bound and 24px measured gaps across all modules at 320/390/730/1280/1920px, while retaining existing theme/auth/offline/crowded-sidebar checks. CI, screenshot review and deployment are pending at this snapshot.
+
+Last observed main/deployment: `fdbd690840c531af05078564e1ba907f68d39ea6`, PR #80; main CI 38785563399 passed. MCP transaction `0a7ca0da8ac755d3401077fb2489b119` persisted success at 2026-10-15T18:28:07Z, with the panel service active/running. Issue #54 records the final merge, validation and deployment result for this refinement. Module review remains the next separate task.
+
 # Bounded rounded Action cards — 2026-10-15
 
 Owner follow-up: cap main content at 1100px, keep it aligned beside the sidebar, frame every Action and the module title (including System Overview) with the same 14px rounded rectangle and full border as the sidebar. The shared 16px spacing now separates sidebar/content, title/cards and successive cards. Narrow screens retain equal 16px side gutters and the same vertical rhythm. Existing sidebar grouping, bounded height, module scrolling and loading-screen behavior are preserved.
