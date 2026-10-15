@@ -34,8 +34,21 @@ test('Web Git revision check accepts only configured foreign-owned checkout',asy
       foreignOwner=true;
     } catch { /* Local development without passwordless sudo still tests parsing. */ }
   }
+  // Some hosted CI runners configure system-wide safe.directory='*'.
+  // Isolate system/global Git configuration so the fixture exercises the
+  // real check rather than accidentally passing via runner-wide trust.
+  const oldSystem=process.env.GIT_CONFIG_SYSTEM;
+  const oldGlobal=process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_SYSTEM='/dev/null';
+  process.env.GIT_CONFIG_GLOBAL='/dev/null';
+  t.after(()=>{
+    if(oldSystem===undefined) delete process.env.GIT_CONFIG_SYSTEM;
+    else process.env.GIT_CONFIG_SYSTEM=oldSystem;
+    if(oldGlobal===undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL=oldGlobal;
+  });
   if(foreignOwner) {
-    await assert.rejects(execFile('git',['-C',root,'rev-parse','HEAD'],
+    await assert.rejects(execFile('git',['-c','safe.directory=','-C',root,'rev-parse','HEAD'],
       {env:{...process.env,GIT_TERMINAL_PROMPT:'0'}}),/dubious ownership/i,
       'Web user must reproduce Git different-owner failure without exception');
   } else {
