@@ -46,7 +46,34 @@ finish_transaction(){
   durable_sync dir "$ROOT_BACKUP"
 }
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
-as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
+# npm ci recreates dependency trees. Keep the npm user distinct from Web but
+# create group-readable files for the linuxpanel Web service on EVERY update
+# and rollback. The root worker's private umask 077 remains unchanged.
+as_updater(){
+  (
+    umask 027
+    /usr/bin/setpriv --reuid="$USER" --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"
+  )
+}
+as_web(){ /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- "$@"; }
+# Normalize ONLY npm-produced dependency trees and public compiled Web assets.
+# Never chmod the root-only private state, journal, credentials or Git metadata.
+# Verifying as the actual Web user catches regressions before a false success.
+ensure_web_access(){
+  local dir
+  for dir in "$ROOT/node_modules" "$ROOT/apps/web/dist" "$ROOT/extensions/mcp/node_modules";do
+    if [[ ! -e "$dir" && "$dir" == "$ROOT/extensions/mcp/node_modules" ]];then continue;fi
+    [[ -d "$dir" && ! -L "$dir" ]] || { log 'Required dependency/build directory missing or unsafe'; return 1; }
+    as_updater chgrp -R linuxpanel "$dir" || return 1
+    as_updater chmod -R g+rX,g-w,o-w "$dir" || return 1
+  done
+  as_web test -r "$ROOT/node_modules/fastify/package.json" || {
+    log 'Web account cannot read Fastify package metadata after npm ci'; return 1;
+  }
+  as_web test -r "$ROOT/apps/web/dist/index.html" || {
+    log 'Web account cannot read compiled Web assets'; return 1;
+  }
+}
 record(){
   local status="$1" tmp result_dir
   result_dir="${RESULT%/*}"
@@ -206,7 +233,7 @@ recover(){
         "$(stat -c %u:%a "$backup")" == 0:600 ]];then
     (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
      as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
-     as_updater npm run build:web) || restored=0
+     as_updater npm run build:web && ensure_web_access) || restored=0
     local restore_tmp=''
     restore_tmp="$(mktemp "$STATE/.restore-state.XXXXXXXX")" || restored=0
     if [[ -n "$restore_tmp" ]];then
@@ -366,7 +393,7 @@ build(){
     as_updater npm run build:web)
 }
 rollback(){ recover; }
-if ! build;then rollback;exit 1;fi
+if ! build || ! ensure_web_access;then rollback;exit 1;fi
 if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then
   rollback
   exit 1

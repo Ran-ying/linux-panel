@@ -371,6 +371,12 @@ STAGE_PASSWORD="$STAGE_PASSWORD" STAGE_POSITIVE_PATH="$STAGE_POSITIVE_PATH" \
  STAGE_OLD_SHA="$OLD" STAGE_TARGET_SHA="$TARGET" \
  /opt/node24/bin/node "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
 [[ "$(head_now)" == "$TARGET" ]] || fail 'Positive HTTP update did not reach target SHA'
+runuser -u linuxpanel -- test -r "$ROOT/node_modules/fastify/package.json" ||
+ fail 'Web user cannot read Fastify package config after real npm ci'
+runuser -u linuxpanel -- test -r "$ROOT/apps/web/dist/index.html" ||
+ fail 'Web user cannot read compiled assets after real npm build'
+! runuser -u linuxpanel -- test -w "$ROOT/node_modules/fastify/package.json" ||
+ fail 'Web user has write access to updater-produced package metadata'
 grep -Fq '"status":"success"' "$RESULT" || fail 'Root Broker did not report success'
 touch "$peak_file.stop"
 wait "$resource_sampler_pid" || fail 'Cgroup resource sampler unexpectedly failed'
