@@ -2,6 +2,17 @@ import { mkdir, readFile, open, rename, stat, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
+// Persist the directory entry created by rename(), not only the temp file
+// contents. File fsync alone cannot guarantee the new name survives a sudden
+// guest shutdown. The persistent store is Linux-first; Windows does not support
+// opening directory handles for fsync in the same manner.
+async function syncParentDirectory(folder) {
+  if (process.platform === 'win32') return;
+  const handle = await open(folder, 'r');
+  try { await handle.sync(); }
+  finally { await handle.close(); }
+}
+
 export const DEFAULT_SETTINGS = Object.freeze({ panelName: 'Linux Panel', language: 'zh-CN', theme: 'dark' });
 const emptyState = () => ({
   version: 1, users: [], sessions: [], settings: { ...DEFAULT_SETTINGS }, audit: []
@@ -53,6 +64,9 @@ export class StateStore {
         await handle.close();
         handle = undefined;
         await rename(temp, this.filePath);
+        // This must be awaited before reporting the mutation successful.
+        // A sync error is propagated: the caller cannot claim durability.
+        await syncParentDirectory(folder);
       } finally {
         await handle?.close();
         await unlink(temp).catch(e => { if (e.code !== 'ENOENT') throw e; });

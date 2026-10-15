@@ -52,6 +52,21 @@ negative authorization and Broker migration tests. This does **not** prove
 physical power loss, low-resource exhaustion, shared-production behavior,
 or a user's actual ChatGPT connector session.
 
+## Private-state persistence boundary
+
+The non-root Node.js `StateStore.mutate()` already fsyncs a new 0600 JSON
+temporary file, then atomically renames it into place. Linux now explicitly
+fsyncs the containing directory **after** rename, before reporting mutation
+success. This covers Web login, OAuth grants, approval/audit changes and other
+panel state mutations that occur *before* the root updater makes a separate
+durable snapshot. A directory-sync failure propagates to the caller rather
+than being reported as a committed success.
+
+The new state-store durability unit tests reopen the committed state and
+verify permissions, serial mutations, and the absence of leftover temp files.
+These tests do not simulate a guest hard shutdown, a write-cache lie, or
+filesystem corruption. The full VM power-cut release gate remains open.
+
 ## Transaction disk barriers (partial power-loss hardening)
 
 The immutable root Broker now writes the journal and status result through
