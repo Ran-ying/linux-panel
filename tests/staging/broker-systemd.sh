@@ -381,7 +381,7 @@ code_after_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
  fail "Kernel cgroup-v2 memory.peak was never sampled for the real npm transaction: $peak_bytes"
 resource_elapsed_seconds="$((SECONDS-resource_start_seconds))"
 note "Measured actual peak cgroup-v2 memory.peak=${peak_bytes} bytes; MemoryMax=805306368 CPUQuota=100%; total positive HTTP update ${resource_elapsed_seconds}s; code before=${code_before_kib}KiB after=${code_after_kib}KiB"
-systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity CPUQuota=infinity
+systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity 'CPUQuota='
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
