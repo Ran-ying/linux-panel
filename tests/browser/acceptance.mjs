@@ -80,6 +80,10 @@ try {
       if(width<=730) await page.waitForFunction(()=>{
         const header=document.querySelector('.module-sidebar').getBoundingClientRect();
         return Math.abs(document.querySelector('.module-content').getBoundingClientRect().top-header.bottom-24)<1;
+      }).catch(async cause=>{
+        console.log('HEADER GAP',width,name,await page.evaluate(()=>({scrollY,side:document.querySelector('.module-sidebar').getBoundingClientRect().toJSON(),content:document.querySelector('.module-content').getBoundingClientRect().toJSON(),slot:document.querySelector('.sidebar-slot').getBoundingClientRect().toJSON()})));
+        await page.screenshot({path:join(output,'header-gap-failure.png'),fullPage:true});
+        throw cause;
       });
       const frames=await page.locator('.module-content').evaluate(content=>{
         const sidebar=document.querySelector('.module-sidebar');
