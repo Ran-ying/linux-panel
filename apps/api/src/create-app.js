@@ -136,14 +136,28 @@ export async function createApp({
   app.post('/api/auth/login', async (request, reply) => {
     const { username, password, secondFactor } = request.body ?? {};
     const loggedIn = await auth.login(username, password, request.ip, secondFactor);
-    reply.header('Set-Cookie', sessionCookie(loggedIn.token, { secure }));
+    reply.header('Set-Cookie', sessionCookie(loggedIn.token, { secure, maxAge: (Date.parse(loggedIn.expiresAt) - Date.now()) / 1000 }));
     return { user: loggedIn.user, csrf: loggedIn.csrf, expiresAt: loggedIn.expiresAt };
   });
-  app.get('/api/auth/session', async request => ({
-    user: request.panelIdentity.user,
-    csrf: request.panelIdentity.session.csrf,
-    expiresAt: request.panelIdentity.session.expiresAt
-  }));
+  app.get('/api/auth/session', async (request, reply) => {
+    const session = await auth.sessionInfo(request.panelIdentity);
+    reply.header('Set-Cookie', sessionCookie(readSessionCookie(request.headers.cookie), {
+      secure, maxAge: (Date.parse(session.expiresAt) - Date.now()) / 1000
+    }));
+    return { user: request.panelIdentity.user, csrf: session.csrf, expiresAt: session.expiresAt };
+  });
+  app.get('/api/auth/session-policy', async () => auth.sessionPolicy());
+  app.put('/api/auth/session-policy', async (request, reply) => {
+    const body = request.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).length !== 1 || !Object.hasOwn(body, 'days'))
+      throw badRequest('Invalid session policy');
+    const result = await auth.setSessionPolicy(request.panelIdentity, body.days);
+    reply.header('Set-Cookie', sessionCookie(readSessionCookie(request.headers.cookie), {
+      secure, maxAge: (Date.parse(result.expiresAt) - Date.now()) / 1000
+    }));
+    return result;
+  });
   app.post('/api/auth/logout', async (request, reply) => {
     await auth.logout(request.panelIdentity);
     reply.header('Set-Cookie', clearSessionCookie({ secure }));
