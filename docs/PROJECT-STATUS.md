@@ -1,3 +1,11 @@
+# Fixed phone header and tabbed overlay navigation — 2026-10-16
+
+Owner-requested mobile UI: keep panel name/version at left and appearance controls at right, replace the two visible navigation sections with business/panel tabs, and place an always-reachable collapse control below the selected list. The phone header is fixed inside viewport gutters. Only the collapsed header's measured height reserves document space; expanding overlays content without pushing it down. The selected list scrolls vertically when the header reaches the viewport's bottom gutter. Selecting a module collapses navigation and returns content to the top. Desktop keeps its existing sidebar layout.
+
+Header reservation follows the brand/tab/control dimensions via ResizeObserver, so theme/font/viewport changes do not leave a fixed guessed gap. Browser coverage adapts navigation across five widths and checks overflow, tab access, fixed positioning, theme placement, unchanged content position, and reachable collapse control with 45 disposable modules at 390×600 and 390×280. Vue build passed locally; CI/screenshot review and deployment pending.
+
+Base main and last confirmed test deployment: `4a5f03e29b58d10ce90cd1f2ab0fcd8a3d02420d`, PR #87; durable MCP transaction `839c62ac1cd181d459ba6e3d4748a1ba`, success at 2026-10-15T21:15:06Z, panel active/running. Issue #54 records final merge/CI/deployment evidence for this change. No backend/session/MCP privileges change.
+
 # Disk usage inside System Overview — 2026-10-16
 
 Owner requested consolidating disk usage into System Overview. Web navigation now shows storage.usage after the system information, memory and CPU Actions and removes the separate disk sidebar item when both system/storage modules are loaded. Standalone storage remains reachable if the system module is absent. Backend module ownership, Action ID, collector, presentation, permissions and MCP storage_usage remain unchanged.
