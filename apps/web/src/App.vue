@@ -30,8 +30,11 @@ watch([sidebarBrand, sidebarTabs, sidebarToggle], nodes => {
   headerObserver?.disconnect();
   if (!nodes.every(Boolean)) return;
   const measure = () => {
-    mobileHeaderHeight.value = Math.ceil(nodes.reduce((height, node) =>
-      height + node.getBoundingClientRect().height, 2));
+    mobileHeaderHeight.value = Math.ceil(nodes.reduce((height, node) => {
+      const style = getComputedStyle(node);
+      return height + node.getBoundingClientRect().height +
+        (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
+    }, 2));
   };
   headerObserver = new ResizeObserver(measure);
   nodes.forEach(node => headerObserver.observe(node));

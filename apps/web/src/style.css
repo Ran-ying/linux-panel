@@ -453,3 +453,20 @@ table{min-width:500px}
     border-top:1px solid var(--border-panel);border-radius:0;background:var(--panel-bg);
     color:var(--text-secondary);cursor:pointer}
 }
+
+/* Three explicit preferences: light, automatic/system, dark. */
+.theme-capsule .theme-auto{font-size:.72rem;font-weight:650;letter-spacing:-.02em}
+
+@media(max-width:730px){
+  .sidebar-tabs{margin:8px 12px 12px;padding:3px;gap:4px;border:1px solid var(--border-panel);
+    border-radius:10px;background:var(--nav-bg)}
+  .sidebar-tabs button{border-radius:7px}
+}
+
+@media(max-width:730px){
+  .sidebar-navigation{padding:0 12px 12px}
+  .sidebar-modules{scrollbar-gutter:auto}
+  .module-nav,.platform-nav{gap:8px}
+  .module-sidebar .module-toggle{border:1px solid var(--border-panel);border-radius:8px}
+  .sidebar-settings>.module-toggle{margin-top:8px}
+}
