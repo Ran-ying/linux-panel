@@ -52,6 +52,32 @@ negative authorization and Broker migration tests. This does **not** prove
 physical power loss, low-resource exhaustion, shared-production behavior,
 or a user's actual ChatGPT connector session.
 
+## QEMU hard power cut of a live root Broker (staged Git/npm fixture)
+
+The QEMU hard-power acceptance additionally provisions the actual fixed
+root worker and the repository's real sandboxed `linux-panel-update.service`,
+`linux-panel-update-recover.service`, and Web startup guard in an isolated
+Ubuntu 24.04 guest. It uses genuine `git clone`/`merge --ff-only` against
+the pinned official GitHub remote and a minimal real systemd Web readiness
+service. **Only npm commands are test substitutes**: a non-root stub pauses
+during `npm ci`, and performs no package installation/build/test. The
+worker's privileged transaction, state backup, systemd stop/start,
+FF Git update, boot recovery and atomic result code stay unchanged.
+
+The host waits until the guest's real worker has a durable root journal
+and has reached the npm-ci pause, then sends SIGKILL to the entire QEMU
+VM process. On restart, the *guest systemd* enables its independent
+recovery unit, restores the original HEAD/state and healthy Web, records
+an exact `rolled_back`, and removes both markers. An unavailable or
+unhealthy Web listener, missing rollback result, incorrect Git HEAD,
+changed state digest or lingering root journal fails the test.
+
+This proves **actual VM-wide hard reset while the root Broker is active**,
+but does NOT prove successful npm reinstall/build/test after an abrupt
+power loss, nor every critical instruction boundary, nor a production
+service restart under realistic package/cgroup resource constraints.
+Those gates remain open.
+
 ## QEMU guest hard-power smoke (separate, deliberately partial gate)
 
 The disposable `qemu-powercut.yml` workflow boots a real Ubuntu 24.04
