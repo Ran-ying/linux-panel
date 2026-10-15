@@ -170,12 +170,20 @@ root Broker has provisioned an ephemeral permission marker inside its own
 
 The root updater sets that marker only for its normal, controlled
 `systemctl start linux-panel.service` operations while a transaction exists.
-The marker is removed at process exit or SIGKILL/unit teardown. Boot recovery
-instead queues a nonblocking restart and clears the durable journal before
-systemd evaluates the queued Web start condition, avoiding the previous
-Before= ordering deadlock.
+The marker is removed at process exit or SIGKILL/unit teardown. The boot recovery service no longer orders itself `Before=` the Web
+unit: that dependency previously forced asynchronous start and could
+report `rolled_back` **before** Web HTTP health was known. Both ordinary
+rollback and boot recovery now start Web synchronously using the live root
+permit, wait for the configured HTTP listener, and clear the journal only
+after readiness is verified. If the service is active but unreachable,
+recovery stops it, reports `failed` and retains the transaction for
+explicit operator review/retry. Normal boot may initially skip Web while
+the journal exists; the successful root recovery starts it itself.
 
-The disposable Ubuntu acceptance tests a root journal with a **missing
+The disposable Ubuntu acceptance also injects a temporary service
+that is `active` but never serves HTTP, checks a `failed` result, retained
+root journal and unchanged private-state digest, then removes the injected
+unit and retries successfully. It also tests a root journal with a **missing
 state backup** while the installed Git HEAD differs from the desired old
 SHA. Recovery must record `failed`, retain the journal, and a separate
 `systemctl start linux-panel.service` must **not** result in an active

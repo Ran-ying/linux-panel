@@ -2,7 +2,10 @@
 Description=Recover interrupted Linux Panel Broker transaction before Web boot
 After=network-online.target
 Wants=network-online.target
-Before=linux-panel.service
+# Deliberately no Before=linux-panel.service ordering: a synchronous Web
+# startup and health probe inside this oneshot would otherwise deadlock.
+# The Web startup guard rejects boot before recovery unless this live root
+# worker issues its ephemeral permit after restoring the state.
 
 [Service]
 Type=oneshot

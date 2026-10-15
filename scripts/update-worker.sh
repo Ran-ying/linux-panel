@@ -44,6 +44,50 @@ start_panel(){
   fi
   systemctl start linux-panel.service
 }
+# Reusable health gate for normal deployments AND interrupted-boot recovery.
+# A systemctl start or active PID alone never proves Fastify is serving.
+panel_healthy(){
+  local PANEL_ENV DEFAULT_PORT OVERRIDE_PORT PROBE_PORT ORIGIN HOST ready attempt
+  # Probe the configured listener, not a hard-coded 4188.
+  # The state is untrusted for executable purposes; only validated numeric port
+  # and exact configured HTTP Host are ever used with curl.
+  PANEL_ENV=/etc/linux-panel/panel.env
+  DEFAULT_PORT="$(sed -n 's/^PANEL_LISTEN_PORT=//p' "$PANEL_ENV" | tail -n 1)"
+  [[ "$DEFAULT_PORT" =~ ^[0-9]{4,5}$ ]] || DEFAULT_PORT=4188
+  # StateStore serializes top-level listener with the host and port on adjacent
+  # pretty-printed JSON lines. Refuse malformed overrides rather than using them.
+  OVERRIDE_PORT="$(awk '
+    /^[[:space:]]*"listener":[[:space:]]*\{/ { in_listener=1; next }
+    in_listener && /^[[:space:]]*\}/ { exit }
+    in_listener && /^[[:space:]]*"port":[[:space:]]*[0-9]+[,[:space:]]*$/ {
+      gsub(/[^0-9]/,"",$2); print $2; exit
+    }
+  ' "$STATE/panel-state.json")"
+  PROBE_PORT="${OVERRIDE_PORT:-$DEFAULT_PORT}"
+  [[ "$PROBE_PORT" =~ ^[0-9]{4,5}$ ]] && ((PROBE_PORT>=1024 && PROBE_PORT<=65535)) ||
+    return 1
+  ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' "$PANEL_ENV" | tail -n 1)"
+  [[ -n "$ORIGIN" ]] || ORIGIN="http://127.0.0.1:$PROBE_PORT"
+  HOST="${ORIGIN#http://}"
+  HOST="${HOST#https://}"
+  if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]];then
+    return 1
+  fi
+  # systemctl start only means the process was spawned, not that Fastify
+  # finished binding its listener. Give the application a bounded readiness
+  # window before declaring an otherwise successful deployment broken.
+  ready=0
+  for attempt in $(seq 1 20);do
+    if curl --silent --show-error --fail --max-time 4 -H "Host: $HOST" \
+        "http://127.0.0.1:$PROBE_PORT/api/auth/status" >/dev/null;then
+      ready=1
+      break
+    fi
+    sleep 1
+  done
+  if ((ready==0));then return 1;fi
+  return 0
+}
 journal(){
   local tmp
   [[ ! -e "$TXN" && ! -L "$TXN" ]] || return 1
@@ -88,9 +132,19 @@ recover(){
      grep -Fq "\"sha\":\"$TARGET\"" "$RESULT" &&
      grep -Fq '"status":"success"' "$RESULT" &&
      [[ "$current" == "$TARGET" ]];then
-    rm -f -- "$TXN" "$PROCESSING"
-    log "Previously committed deployment $ID cleaned up"
-    return 0
+    # A durable success result is not proof Web can start after reboot.
+    # The recovery unit has no Before=Web ordering; the journal guard blocks
+    # untrusted starts, and only this root worker grants a temporary permit.
+    if start_panel && systemctl is-active --quiet linux-panel.service &&
+       panel_healthy;then
+      rm -f -- "$TXN" "$PROCESSING"
+      log "Previously committed healthy deployment $ID cleaned up"
+      return 0
+    fi
+    systemctl stop linux-panel.service || true
+    record failed
+    log "Committed update $ID is unhealthy after restart; preserving journal"
+    return 1
   fi
   log "Recovering unfinished Broker transaction $ID"
   if [[ "$current" != "$OLD" && ! -f "$backup" ]];then
@@ -119,12 +173,13 @@ recover(){
   # Never request a start if Git, dependencies or private state failed
   # recovery: serving a partially restored app would hide a failed rollback.
   if ((restored==1));then
-    if [[ "$MODE" == recover ]];then
-      # Boot oneshot is Before=linux-panel.service; blocking start deadlocks.
-      systemctl start --no-block linux-panel.service || restored=0
-    else
-      start_panel || restored=0
-      systemctl is-active --quiet linux-panel.service || restored=0
+    # No ordering edge to Web: the root journal ConditionPathExists guard
+    # denies ordinary boot and this worker alone grants the volatile permit.
+    # Both normal rollback and boot recovery must observe HTTP readiness.
+    if ! start_panel || ! systemctl is-active --quiet linux-panel.service ||
+       ! panel_healthy;then
+      systemctl stop linux-panel.service || true
+      restored=0
     fi
   fi
   if ((restored==1));then
@@ -244,45 +299,7 @@ if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then
   rollback
   exit 1
 fi
-# Probe the configured listener, not a hard-coded 4188.
-# The state is untrusted for executable purposes; only validated numeric port
-# and exact configured HTTP Host are ever used with curl.
-PANEL_ENV=/etc/linux-panel/panel.env
-DEFAULT_PORT="$(sed -n 's/^PANEL_LISTEN_PORT=//p' "$PANEL_ENV" | tail -n 1)"
-[[ "$DEFAULT_PORT" =~ ^[0-9]{4,5}$ ]] || DEFAULT_PORT=4188
-# StateStore serializes top-level listener with the host and port on adjacent
-# pretty-printed JSON lines. Refuse malformed overrides rather than using them.
-OVERRIDE_PORT="$(awk '
-  /^[[:space:]]*"listener":[[:space:]]*\{/ { in_listener=1; next }
-  in_listener && /^[[:space:]]*\}/ { exit }
-  in_listener && /^[[:space:]]*"port":[[:space:]]*[0-9]+[,[:space:]]*$/ {
-    gsub(/[^0-9]/,"",$2); print $2; exit
-  }
-' "$STATE/panel-state.json")"
-PROBE_PORT="${OVERRIDE_PORT:-$DEFAULT_PORT}"
-[[ "$PROBE_PORT" =~ ^[0-9]{4,5}$ ]] && ((PROBE_PORT>=1024 && PROBE_PORT<=65535)) ||
-  { rollback; exit 1; }
-ORIGIN="$(sed -n 's/^PANEL_PUBLIC_ORIGIN=//p' "$PANEL_ENV" | tail -n 1)"
-[[ -n "$ORIGIN" ]] || ORIGIN="http://127.0.0.1:$PROBE_PORT"
-HOST="${ORIGIN#http://}"
-HOST="${HOST#https://}"
-if [[ -z "$HOST" || "$HOST" == "$ORIGIN" ]];then
-  rollback
-  exit 1
-fi
-# systemctl start only means the process was spawned, not that Fastify
-# finished binding its listener. Give the application a bounded readiness
-# window before declaring an otherwise successful deployment broken.
-ready=0
-for attempt in $(seq 1 20);do
-  if curl --silent --show-error --fail --max-time 4 -H "Host: $HOST" \
-      "http://127.0.0.1:$PROBE_PORT/api/auth/status" >/dev/null;then
-    ready=1
-    break
-  fi
-  sleep 1
-done
-if ((ready==0));then
+if ! panel_healthy;then
   rollback
   exit 1
 fi

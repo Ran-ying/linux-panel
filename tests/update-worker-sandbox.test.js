@@ -43,7 +43,7 @@ function prepare(){
  writeFileSync(pin,remote+'\n');
  const fake=(name,text)=>writeFileSync(join(bin,name),'#!/bin/sh\n'+text+'\n',{mode:0o755});
  fake('systemctl','printf "systemctl:%s\n" "$1" >> "$TEST_LOG"\nexit 0');
- fake('curl','[ "$FAIL_HEALTH" != 1 ]');
+ fake('curl','if [ "$FAIL_HEALTH_ALL" = 1 ]; then exit 22; fi\nif [ "$FAIL_HEALTH" = 1 ] && [ "$(git -C "$TEST_ROOT" rev-parse HEAD)" = "$TEST_TARGET" ]; then exit 22; fi\nexit 0');
  fake('sleep','exit 0');
  fake('chown','exit 0');
  fake('df','printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 5000000 0 %s 0%% /\\n" "${TEST_FREE_KIB:-4000000}"');
@@ -79,12 +79,13 @@ function prepare(){
  exec('bash',['-n',script]);
  return {base,root,state,status,script,log,old,target,meminfo,
   cleanup(){rmSync(base,{recursive:true,force:true})},
-  run({sha=target,build=false,health=false,rollback=false,lowDisk=false}={}){
+  run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false}={}){
    const id=(++sequence).toString(16).padStart(32,'0');
    writeFileSync(join(state,'update-trigger'),'id='+id+'\nsha='+sha+'\n');
    const process=spawnSync('bash',[script],{encoding:'utf8',timeout:20000,env:{
     ...globalThis.process.env,TEST_LOG:log,FAIL_BUILD:build?'1':'0',
-    FAIL_HEALTH:health?'1':'0',FAIL_ROLLBACK:rollback?'1':'0',
+    FAIL_HEALTH:health?'1':'0',FAIL_HEALTH_ALL:healthEverywhere?'1':'0',
+     TEST_ROOT:root,TEST_TARGET:target,FAIL_ROLLBACK:rollback?'1':'0',
     TEST_FREE_KIB:lowDisk?'900000':'4000000'
    }});
    const result=JSON.parse(readFileSync(join(status,'result.json'),'utf8'));
@@ -98,6 +99,7 @@ for(const scenario of [
  {name:'incorrect origin/main SHA',options:{sha:'a'.repeat(40)},expected:'failed',updated:false},
  {name:'build failure rollback',options:{build:true},expected:'rolled_back',updated:false},
  {name:'HTTP health failure rollback',options:{health:true},expected:'rolled_back',updated:false},
+ {name:'old Web also unhealthy preserves root recovery journal',options:{healthEverywhere:true},expected:'failed',updated:false},
  {name:'rollback build failure reports failure',options:{build:true,rollback:true},expected:'failed',updated:false}
 ]){
  test('isolated updater worker: '+scenario.name,()=>{
@@ -107,7 +109,7 @@ for(const scenario of [
    assert.equal(out.result.status,scenario.expected,JSON.stringify(out.process));
    assert.equal(out.head,scenario.updated?f.target:f.old);
    assert.equal(out.state,'{"original":true}\n');
-   if(scenario.options.rollback){
+   if(scenario.options.rollback || scenario.options.healthEverywhere){
      assert.equal(existsSync(join(f.base,'backup','active-transaction')),true,
        'A failed rollback must retain a root transaction journal for retry');
    }
