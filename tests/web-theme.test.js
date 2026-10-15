@@ -71,8 +71,10 @@ test('both palettes and shared accessible theme controls exist before and after 
  const main=readFileSync(new URL('../apps/web/src/main.js',import.meta.url),'utf8');
  assert.match(css,/:root\[data-theme="dark"\]/);
  assert.match(css,/--focus-ring/);
- assert.match(control,/type="checkbox"/);
- assert.match(control,/<fieldset[^>]*:disabled="preference === 'system'"/);
+ assert.doesNotMatch(control,/type="checkbox"/);
+ assert.doesNotMatch(control,/:disabled/);
+ assert.match(control,/aria-label="自动"/);
+ assert.match(control,/>Auto<\/button>/);
  assert.match(control,/aria-label="深色"/);
  assert.match(control,/aria-label="浅色"/);
  assert.match(app,/class="login-appearance"><ThemeControl/);
