@@ -191,7 +191,7 @@ onMounted(async () => {
           <div class="sidebar-group-label">面板功能</div>
           <nav class="platform-nav" aria-label="面板功能">
             <button v-for="module in panelGroups" :key="module.id" type="button" class="module-toggle"
-              :class="{ active: activePage === module.id }" @click="activePage=module.id">{{ module.name }}</button>
+              :class="{ active: activePage === module.id }" @click="selectPage(module.id)">{{ module.name }}</button>
           </nav>
           <button type="button" class="module-toggle" :class="{ active: activePage === 'settings' }"
             @click="selectPage('settings')" :disabled="checking">面板设置</button>
