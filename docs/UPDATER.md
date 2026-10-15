@@ -71,6 +71,68 @@ a client revokes its grant and tokens.
   client is trusted for that capability. This mode is opt-in at the global
   policy level, not a mechanism for shared third-party tenant access.
 
+## Git Web-read regression after a successful update (2026-10-15)
+
+If direct MCP execution returns `Unable to inspect Git revision` while
+`git ls-remote origin refs/heads/main` works as `linuxpanel`, do not
+disable Git ownership checks or run the root Broker directly. The
+unprivileged Web process needs read access to the **local** Git branch ref
+named by `.git/HEAD`. The root worker deliberately uses `umask 077`
+when running Git as `linuxpanel-updater`; after fast-forward, a replaced
+`.git/refs/heads/main` may be `0600` or have group
+`linuxpanel-updater`, which the distinct Web account cannot read.
+
+Read-only diagnosis:
+
+```bash
+sudo runuser -u linuxpanel-updater -- git -C /opt/linux-panel symbolic-ref HEAD
+sudo namei -l /opt/linux-panel/.git/refs/heads/main
+sudo ls -l /opt/linux-panel/.git/packed-refs 2>/dev/null || true
+sudo runuser -u linuxpanel -- git -c safe.directory=/opt/linux-panel -C /opt/linux-panel rev-parse HEAD
+```
+
+**One-time, operator-reviewed repair** for an otherwise clean and healthy
+existing Broker installation (no pending transaction/markers): set
+`core.sharedRepository=0640` in the **local** checkout, and give only
+the Git reference files group **read** plus setgid on reference parents
+so future refs inherit group `linuxpanel`. This does **not** grant Web
+write access and is not a root worker replacement. Do not use the
+shorthand `core.sharedRepository=group`: that grants group write and
+would let the Web identity modify Git metadata.
+
+```bash
+ROOT=/opt/linux-panel
+sudo test ! -e /var/lib/linux-panel-update-root/active-transaction
+sudo test ! -e /var/lib/linux-panel/update-trigger
+sudo test ! -e /var/lib/linux-panel/update-processing
+sudo runuser -u linuxpanel-updater -- git -C "$ROOT" status --porcelain
+# The above output MUST be empty before continuing.
+sudo runuser -u linuxpanel-updater -- git -C "$ROOT" config --local core.sharedRepository 0640
+for d in "$ROOT/.git" "$ROOT/.git/refs" "$ROOT/.git/refs/heads"; do
+  sudo test -d "$d" && sudo test ! -L "$d" || exit 1
+  sudo chgrp -- linuxpanel "$d"
+  sudo runuser -u linuxpanel-updater -- chmod g+rx,g+s,g-w,o-w "$d"
+done
+for f in "$ROOT/.git/HEAD" "$ROOT/.git/refs/heads/main" "$ROOT/.git/packed-refs"; do
+  if sudo test -e "$f"; then
+    sudo test -f "$f" && sudo test ! -L "$f" || exit 1
+    sudo chgrp -- linuxpanel "$f"
+    sudo runuser -u linuxpanel-updater -- chmod g+r,g-w,o-w "$f"
+  fi
+done
+sudo runuser -u linuxpanel -- git -c safe.directory=/opt/linux-panel -C "$ROOT" rev-parse HEAD
+```
+
+Before future commits, consider also setting setgid on
+`$ROOT/.git/objects` if a read-only Git use case needs object traversal.
+Existing installs require the above **one-time** repair; new installations
+using the current `install-update-broker.sh --apply` configure
+read-only Git sharing automatically after their initial ownership handover.
+Never run the fresh installer `--apply` again on an already installed
+Broker host. Always review the target `main` and the CI result before
+retrying `panel_update_execute`; queue success does not imply deployment
+success.
+
 ## Independent operator-owned Broker installation: check → apply → verify → activate
 
 Linux Panel is **independent of Nginx, domains and TLS**. Its ordinary
