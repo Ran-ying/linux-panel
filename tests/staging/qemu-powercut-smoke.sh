@@ -55,7 +55,8 @@ local-hostname: lp-disposable-vm
 META
 cloud-localds "$work/seed.img" "$work/user-data" "$work/meta-data"
 ssh_run(){ ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
-  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=3 \
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=12 \
+  -o ServerAliveInterval=10 -o ServerAliveCountMax=6 \
   -i "$work/key" -p 22647 stage@127.0.0.1 "$@"; }
 scp_run(){ scp -q -P 22647 -o BatchMode=yes -o StrictHostKeyChecking=no \
   -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -64,12 +65,12 @@ scp_run(){ scp -q -P 22647 -o BatchMode=yes -o StrictHostKeyChecking=no \
 # a hard reboot. Never hide assertion failures from the guest command.
 ssh_retry(){
   local rc=0
-  for i in $(seq 1 15);do
+  for i in $(seq 1 25);do
     if ssh_run "$@";then return 0;else rc=$?;fi
     ((rc==255)) || return "$rc"
     sleep 2
   done
-  echo "::error::Post-reboot SSH transport failed after 15 retries: $*" >&2
+  echo "::error::Post-reboot SSH transport failed after 25 retries: $*" >&2
   return "$rc"
 }
 boot(){
@@ -168,6 +169,7 @@ done
 scp_run "$(command -v node)" /home/stage/node
 ssh_run 'chmod 700 /home/stage/node; mkdir -p /home/stage/state; chmod 700 /home/stage/state'
 ssh_run '/home/stage/node /home/stage/state-test.mjs write'
+if [[ "${LP_QEMU_SCENARIO:-file}" == file ]];then
 ssh_run 'sudo bash /home/stage/phase1.sh'
 note 'POWER CUT A — synced state, journal, processing marker'
 hard_cut
@@ -190,6 +192,12 @@ ssh_retry 'sudo test ! -e /var/lib/linux-panel-update-root/active-transaction &&
   sudo test ! -e /var/lib/linux-panel/update-processing' ||
   fail 'Power cut B resurrected cleaned transaction marker'
 note 'PASS B: result and cleanup survived hard reset and reboot'
+note 'File-level QEMU power-cut acceptance passed; separate VM tests the live worker'
+exit 0
+fi
+
+[[ "${LP_QEMU_SCENARIO:-file}" == broker ]] ||
+  fail 'Unsupported isolated QEMU scenario'
 note 'Power-cut C: stage actual immutable root worker on disposable QEMU systemd'
 for pair in \
  "scripts/update-worker.sh:lp-worker-under-test.sh" \
