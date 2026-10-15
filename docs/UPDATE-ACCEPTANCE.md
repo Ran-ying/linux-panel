@@ -44,6 +44,33 @@ negative authorization and Broker migration tests. This does **not** prove
 physical power loss, low-resource exhaustion, shared-production behavior,
 or a user's actual ChatGPT connector session.
 
+## Transaction disk barriers (partial power-loss hardening)
+
+The immutable root Broker now writes the journal and status result through
+same-filesystem temporary files, followed by file `fsync`, atomic rename and
+parent-directory `fsync`. The result file no longer moves across potentially
+different backup/result filesystems, which would break atomic-replace semantics.
+
+The private-state snapshot is constructed and synced under a temporary backup
+name before publication; an interrupted copy is **not** accepted as a finished
+backup. The restore path similarly fsyncs a complete state file before swapping
+it into place. An update records a durable final result, then deletes/syncs
+the processing marker **before** removing/syncing the root transaction journal:
+a reboot cannot reasonably reinterpret an already-committed success as an
+abandoned in-flight marker. All critical barriers fail closed on I/O errors.
+
+The fixed root worker uses isolated `/usr/bin/python3 -I` only for operating
+system `fsync` calls on fixed paths; the explicit installer/migration preflight
+requires that trusted binary. It does not execute Python from the writable Git
+checkout and does not accept a path from the OAuth/MCP client.
+
+**Limitations:** File and directory fsync improve ordering on supported Linux
+filesystems but are not a measured hard-power-off result. They do not make the
+whole npm/Git/build tree transactional, and cannot correct storage firmware
+that lies about durable writes. Snapshot-based abrupt VM shutdown, mount-level
+failure injection and resource exhaustion remain explicit Issue #35 gates.
+Never claim production hard-power-loss acceptance solely from these barriers.
+
 ## Resource gate — conservative minimums, not a 3 GiB block
 
 The root worker refuses in-place npm deployment **before stopping Web** only

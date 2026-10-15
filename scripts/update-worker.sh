@@ -16,15 +16,48 @@ TXN="$ROOT_BACKUP/active-transaction"
 ALLOW_START=/run/linux-panel-root-updater/allow-panel-start
 USER=linuxpanel-updater
 log(){ printf '[lp-update] %s\n' "$*"; }
+# Explicit fsync for both file contents and directory metadata. Python runs
+# isolated from PYTHONPATH/user site packages and loads no checkout modules.
+# This helper is part of the immutable root worker, not a user-supplied script.
+durable_sync(){
+  local kind="$1" path="$2"
+  [[ "$kind" == file || "$kind" == dir ]] || return 1
+  /usr/bin/python3 -I -c '
+import os, sys
+flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+if sys.argv[1] == "dir":
+    flags |= os.O_DIRECTORY
+fd = os.open(sys.argv[2], flags)
+try:
+    os.fsync(fd)
+finally:
+    os.close(fd)
+' "$kind" "$path"
+}
+# Clear the in-flight marker durably BEFORE removing the journal: after a crash
+# a leftover processing marker without journal could otherwise overwrite an
+# already-committed success result with a spurious failed recovery.
+finish_transaction(){
+  rm -f -- "$PROCESSING"
+  durable_sync dir "$STATE"
+  rm -f -- "$TXN"
+  durable_sync dir "$ROOT_BACKUP"
+}
 ## Prefer root-owned isolated Node24 if installed; preserve fallback for other supported hosts.
 as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }
 record(){
-  local status="$1" tmp
-  tmp="$(mktemp "$ROOT_BACKUP/.update-result.XXXXXXXX")"
+  local status="$1" tmp result_dir
+  result_dir="${RESULT%/*}"
+  [[ -d "$result_dir" && ! -L "$result_dir" ]] || return 1
+  # mktemp IN the result filesystem: mv across mounts is copy+delete, not
+  # atomic. Flush the newly created file and the final parent directory.
+  tmp="$(mktemp "$result_dir/.update-result.XXXXXXXX")" || return 1
   printf '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\n' "$ID" "$TARGET" "$status" "$(date -u +%FT%TZ)" > "$tmp"
   chmod 0640 "$tmp"
   chown root:linuxpanel "$tmp"
-  mv -fT -- "$tmp" "$RESULT"
+  durable_sync file "$tmp" || { rm -f -- "$tmp"; return 1; }
+  mv -fT -- "$tmp" "$RESULT" || return 1
+  durable_sync dir "$result_dir"
 }
 MODE=normal
 if [[ "$#" -eq 1 && "$1" == --recover-only ]];then MODE=recover
@@ -95,7 +128,9 @@ journal(){
   printf 'id=%s\nsha=%s\nold=%s\n' "$ID" "$TARGET" "$OLD" > "$tmp"
   chmod 0600 "$tmp"
   chown root:root "$tmp"
+  durable_sync file "$tmp" || { rm -f -- "$tmp"; return 1; }
   mv -nT -- "$tmp" "$TXN" || { rm -f -- "$tmp"; return 1; }
+  durable_sync dir "$ROOT_BACKUP"
 }
 recover(){
   local idline shaline oldline current='' backup='' restored=1
@@ -108,6 +143,7 @@ recover(){
             "$ID" =~ ^[a-f0-9]{32}$ && "$TARGET" =~ ^[a-f0-9]{40}$ ]];then
         record failed
         rm -f -- "$PROCESSING"
+        durable_sync dir "$STATE"
       else
         log 'Invalid abandoned processing marker; manual review required'
         return 1
@@ -137,7 +173,7 @@ recover(){
     # untrusted starts, and only this root worker grants a temporary permit.
     if start_panel && systemctl is-active --quiet linux-panel.service &&
        panel_healthy;then
-      rm -f -- "$TXN" "$PROCESSING"
+      finish_transaction
       log "Previously committed healthy deployment $ID cleaned up"
       return 0
     fi
@@ -162,10 +198,16 @@ recover(){
     local restore_tmp=''
     restore_tmp="$(mktemp "$STATE/.restore-state.XXXXXXXX")" || restored=0
     if [[ -n "$restore_tmp" ]];then
-      cp -- "$backup" "$restore_tmp" || restored=0
-      chmod 0600 "$restore_tmp" || restored=0
-      chown linuxpanel:linuxpanel "$restore_tmp" || restored=0
-      mv -fT -- "$restore_tmp" "$STATE/panel-state.json" || restored=0
+      # Never publish a truncated or partially copied private-state snapshot.
+      if ! cp -- "$backup" "$restore_tmp" ||
+         ! chmod 0600 "$restore_tmp" ||
+         ! chown linuxpanel:linuxpanel "$restore_tmp" ||
+         ! durable_sync file "$restore_tmp" ||
+         ! mv -fT -- "$restore_tmp" "$STATE/panel-state.json" ||
+         ! durable_sync dir "$STATE";then
+        restored=0
+        rm -f -- "$restore_tmp"
+      fi
     fi
   elif [[ "$current" != "$OLD" ]];then
     restored=0
@@ -184,7 +226,7 @@ recover(){
   fi
   if ((restored==1));then
     record rolled_back
-    rm -f -- "$TXN" "$PROCESSING"
+    finish_transaction
     log "Recovered $ID and restored old version"
     return 0
   fi
@@ -203,6 +245,10 @@ fi
 [[ -f "$MARKER" && ! -L "$MARKER" ]] || exit 0
 mv -T -- "$MARKER" "$PROCESSING"
 [[ -f "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 2
+# The approval marker was written by the Web process, not fsync'd by root.
+# Commit its processing identity before entering a potentially destructive job.
+durable_sync file "$PROCESSING"
+durable_sync dir "$STATE"
 # The marker is untrusted input. Read only a small fixed format; reject
 # oversized, symlinked, or non-regular files instead of parsing arbitrary data.
 [[ "$(stat -c %s "$PROCESSING")" -le 1024 ]] || exit 2
@@ -225,7 +271,12 @@ log "Fetch pinned origin/main commit $TARGET"
 as_updater git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
 REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 [[ "$REMOTE" == "$TARGET" ]] || { record failed; exit 2; }
-if [[ "$OLD" == "$TARGET" ]];then record no_change;exit 0;fi
+if [[ "$OLD" == "$TARGET" ]];then
+  record no_change
+  rm -f -- "$PROCESSING"
+  durable_sync dir "$STATE"
+  exit 0
+fi
 as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record failed; exit 2; }
 # Stop BEFORE service interruption if the shared VPS cannot safely build.
 # These are fixed, root-owned safety thresholds, not MCP-controlled parameters.
@@ -280,8 +331,17 @@ fi
 # Do not preserve the Web user's owner/mode with cp -a: the root Broker
 # deliberately lacks CAP_FOWNER and cannot chmod a linuxpanel-owned copy.
 # Create a new root-owned 0600 snapshot instead.
-if ! install -o root -g root -m 0600 -- "$STATE/panel-state.json" "$BACKUP";then
-  systemctl start linux-panel.service || true
+# Build the backup under a temporary name; it becomes visible to recover()
+# only once complete and fsync'd on its own filesystem. The root journal is
+# already durable, so an interrupted snapshot cannot become a trusted backup.
+backup_tmp=''
+if ! backup_tmp="$(mktemp "$ROOT_BACKUP/.state-snapshot.XXXXXXXX")" ||
+   ! install -o root -g root -m 0600 -- "$STATE/panel-state.json" "$backup_tmp" ||
+   ! durable_sync file "$backup_tmp" ||
+   ! mv -nT -- "$backup_tmp" "$BACKUP" ||
+   ! durable_sync dir "$ROOT_BACKUP";then
+  [[ -z "$backup_tmp" ]] || rm -f -- "$backup_tmp"
+  start_panel || true
   record failed
   exit 2
 fi
@@ -304,5 +364,5 @@ if ! panel_healthy;then
   exit 1
 fi
 record success
-rm -f -- "$TXN"
+finish_transaction
 log "Updated to $TARGET"
