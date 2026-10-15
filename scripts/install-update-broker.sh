@@ -66,12 +66,14 @@ git_checked(){
 commands(){
  local x
  for x in systemctl systemd-analyze git runuser setpriv id getent awk sed grep stat df \
-  flock curl cmp install cp chmod chown useradd mktemp mv find;do
+  flock curl cmp install cp chmod chown useradd mktemp mv find python3;do
   if command -v "$x" >/dev/null 2>&1;then pass "Program: $x"
   else block "Missing program: $x";fi
  done
 }
 base_checks(){
+ if [[ -x /usr/bin/python3 ]];then pass 'Root worker fsync helper: /usr/bin/python3'
+ else block 'Missing /usr/bin/python3 for durable journal barriers';fi
  local os=''
  if [[ -r /etc/os-release ]];then
   # shellcheck disable=SC1091
