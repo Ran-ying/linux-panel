@@ -84,6 +84,9 @@ start_panel(){
   fi
   systemctl start linux-panel.service
 }
+web_can_read(){
+  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$1"
+}
 # Git checkout/reset also run under umask 077. Any changed tracked source,
 # including ROOT/package.json and apps/api/src/*.js, may be replaced as 0600.
 # Re-grant read/traverse to the different Web UID AFTER both forward checkout
@@ -142,11 +145,9 @@ ensure_tracked_web_read_access(){
   chgrp -- linuxpanel "$ROOT" "${dirs[@]}" "${files[@]}" || return 1
   as_updater chmod -- g+rX,g-w,o-rwx "$ROOT" "${dirs[@]}" "${files[@]}" || return 1
   # Verify the actual Web UID, not root's ability to read its own checkout.
-  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups \\
-    --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$ROOT/package.json" ||
+  web_can_read "$ROOT/package.json" ||
     { log 'Web account cannot read root package.json'; return 1; }
-  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups \\
-    --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$ROOT/apps/api/src/server.js" ||
+  web_can_read "$ROOT/apps/api/src/server.js" ||
     { log 'Web account cannot read API entrypoint'; return 1; }
 }
 # npm ci and Vite run as linuxpanel-updater under umask 077. Freshly
