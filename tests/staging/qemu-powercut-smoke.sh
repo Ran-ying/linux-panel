@@ -196,7 +196,7 @@ done
 ssh_run 'sudo env LP_QEMU_EPHEMERAL=yes bash /home/stage/lp-guest-live-worker.sh'
 worker_reached=0
 for i in $(seq 1 150);do
- if ssh_run 'sudo test -f /run/lp-reached-npm' >/dev/null 2>&1;then
+ if ssh_run 'sudo test -f /var/lib/linux-panel-updater/lp-reached-npm' >/dev/null 2>&1;then
   worker_reached=1
   break
  fi
