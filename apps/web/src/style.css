@@ -276,7 +276,7 @@ table{min-width:500px}
   .account-area button,.settings-section button,.form-button{min-height:44px}
   .settings-section{padding:16px}
   .settings-section form{max-width:100%}
-  .settings-section input,.auth-card input,textarea,select{font-size:16px}
+  .settings-section input,.auth-card input,.module-content input:not([type="checkbox"]),textarea,select{font-size:16px}
   .settings-section label{overflow-wrap:anywhere}
   .session-row,.module-summary,.audit-row{align-items:flex-start}
   .session-row>*,.section-heading>*{min-width:0}
@@ -296,3 +296,6 @@ table{min-width:500px}
   .module-sidebar{gap:6px}
   .module-sidebar .module-toggle{padding:10px}
 }
+
+/* Standard buttons remain legible in light mode. */
+.form-button:not(.primary){color:var(--button-text)}
