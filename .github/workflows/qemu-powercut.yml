@@ -1,0 +1,36 @@
+name: Disposable QEMU hard power-cut smoke
+
+on:
+  pull_request:
+    paths:
+      - "tests/staging/qemu-powercut-smoke.sh"
+      - ".github/workflows/qemu-powercut.yml"
+      - "platform/state-store.js"
+      - "scripts/update-worker.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qemu-guest-power-cut:
+    name: Two real guest power cuts / disk persistence only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Refuse shared/self-hosted runner and verify syntax
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = Linux
+          bash -n tests/staging/qemu-powercut-smoke.sh
+      - name: Install ephemeral QEMU host tools
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y -qq --no-install-recommends \
+            qemu-system-x86 qemu-utils cloud-image-utils
+      - name: Hard kill guest, reboot same disk, verify journal and state
+        run: bash tests/staging/qemu-powercut-smoke.sh
