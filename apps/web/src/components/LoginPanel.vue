@@ -35,7 +35,6 @@ async function signIn() {
 <template>
   <div class="auth-shell">
     <section class="auth-card">
-      <div class="eyebrow">LINUX PANEL / V0.5</div>
       <h1>登录 Linux Panel</h1>
       <p v-if="!initialized" class="notice">
         尚未初始化管理员账号。请在服务器本地终端运行
@@ -56,7 +55,6 @@ async function signIn() {
           {{ busy ? '验证中…' : '登录' }}
         </button>
       </form>
-      <p class="muted small">会话只存放在受 HttpOnly 保护的 Cookie 中；不提供默认密码；如已启用双因素认证，登录时必须提供动态验证码或一次性恢复码。</p>
     </section>
   </div>
 </template>
