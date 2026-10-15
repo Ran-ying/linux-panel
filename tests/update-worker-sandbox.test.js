@@ -98,7 +98,8 @@ for(const scenario of [
  {name:'successful fast-forward',options:{},expected:'success',updated:true},
  {name:'incorrect origin/main SHA',options:{sha:'a'.repeat(40)},expected:'failed',updated:false},
  {name:'build failure rollback',options:{build:true},expected:'rolled_back',updated:false},
- {name:'HTTP health failure rollback',options:{health:true},expected:'rolled_back',updated:false},\n {name:'old Web also unhealthy preserves root recovery journal',options:{healthEverywhere:true},expected:'failed',updated:false},
+ {name:'HTTP health failure rollback',options:{health:true},expected:'rolled_back',updated:false},
+ {name:'old Web also unhealthy preserves root recovery journal',options:{healthEverywhere:true},expected:'failed',updated:false},
  {name:'rollback build failure reports failure',options:{build:true,rollback:true},expected:'failed',updated:false}
 ]){
  test('isolated updater worker: '+scenario.name,()=>{
