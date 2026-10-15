@@ -1,3 +1,9 @@
+## Test VPS workflow preference — 2026-10-16
+
+- The owner explicitly states this Linux Panel host is a **test VPS**, not a production host; prefer direct minimal operations and avoid repetitive snapshot/hash/defensive-script demands. Record that as an enduring instruction in `AGENTS.md` and the fast path in `docs/UPDATER.md`. Continue protecting tokens and preserving rollback journals on actual errors.
+- Operator reports running a direct Git-blob-to-root-worker atomic replacement command and seeing `BROKER_UPDATED`. This is operator-reported success for replacement only, **not yet** independent verification of the installed root binary or application deployment. The application was still last observed at `eaa5ba0`, updater watcher and recovery disabled and Web gate off. Next: reactivate the already installed Broker using its existing activation mode; initiate **one** normal exact-SHA MCP/Web update, then read the durable update status and live Web health.
+- GitHub `main` at this entry: `8851a660cb363f4800969a9b4a8919c3ff4bea5f`; no new application version or live deployed state is claimed by this documentation-only change.
+
 # Configurable sessions and immediate dashboard shell — 2026-10-15
 
 Owner requested extending the fixed 12-hour Web login to one month with custom duration. Default becomes 30 fixed days; Settings → Login sessions supports 1–365 integer days. Saving updates the persisted policy, current device expiry and Cookie together; later logins use the new policy, other devices retain existing expiries. Still-valid legacy sessions upgrade once on session load from their original creation time; expired/revoked sessions are never revived, and regular refresh does not slide server expiry.
