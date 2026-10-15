@@ -143,6 +143,15 @@ fi
 chmod 0600 /etc/linux-panel/panel.env
 chown -R root:linuxpanel /opt/linux-panel
 chmod -R g+rX,g-w,o-w /opt/linux-panel
+# Validate the view of the actual unprivileged service identity, not root/npm.
+# This catches install-time umask/mode regressions before initializing an
+# administrator or writing a production systemd service.
+runuser -u linuxpanel -- test -r /opt/linux-panel/node_modules/fastify/package.json ||
+  die 'Web account cannot read Fastify runtime dependencies after install'
+runuser -u linuxpanel -- test -r /opt/linux-panel/apps/web/dist/index.html ||
+  die 'Web account cannot read built frontend assets after install'
+runuser -u linuxpanel -- "$NODE_BIN" --input-type=module -e "await import('fastify'); await import('@fastify/static');" ||
+  die 'Web account cannot import production Node dependencies after install'
 log 'Initialize admin credentials interactively (only once)'
 runuser -u linuxpanel -- env PANEL_DATA_DIR=/var/lib/linux-panel "$NODE_BIN" /opt/linux-panel/scripts/admin-init.js admin
 sed "s|ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" \
