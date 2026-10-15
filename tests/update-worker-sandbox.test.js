@@ -26,6 +26,7 @@ function prepare(){
  exec('git',['-C',root,'config','user.name','Test']);
  exec('git',['-C',root,'config','user.email','test@example.invalid']);
  writeFileSync(join(root,'version'),'1\n');
+ writeFileSync(join(root,'.gitignore'),'node_modules/\napps/web/dist/\n');
  exec('git',['-C',root,'add','.']);
  exec('git',['-C',root,'commit','-qm','first']);
  const old=exec('git',['-C',root,'rev-parse','HEAD']);
@@ -171,7 +172,7 @@ test('recovery-only cannot consume an unapproved new trigger',()=>{
  try{
   writeFileSync(join(f.state,'update-trigger'),'id='+'b'.repeat(32)+'\nsha='+f.target+'\n');
   const r=spawnSync('bash',[f.script,'--recover-only'],{
-    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log}
+    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log,TEST_ROOT:f.root}
   });
   assert.equal(r.status,0,r.stderr);
   assert.equal(readFileSync(join(f.state,'update-trigger'),'utf8').split('\n')[0],
@@ -247,7 +248,7 @@ test('partial backup ENOSPC preserves original state, journal and retryable reco
   assert.ok(!entries.some(x=>x.startsWith('panel-state.json.before-')),
     'Truncated snapshot must never be published as a trusted backup');
   const restored=spawnSync('bash',[f.script,'--recover-only'],{
-    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log}
+    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log,TEST_ROOT:f.root}
   });
   assert.equal(restored.status,0,JSON.stringify(restored));
   const final=JSON.parse(readFileSync(join(f.status,'result.json'),'utf8'));
