@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "tests/staging/qemu-powercut-smoke.sh"
+      - "tests/staging/qemu-guest-live-worker.sh"
       - ".github/workflows/qemu-powercut.yml"
       - "platform/state-store.js"
       - "scripts/update-worker.sh"
@@ -14,9 +15,17 @@ permissions:
 
 jobs:
   qemu-guest-power-cut:
-    name: Two real guest power cuts / disk persistence only
+    name: "Isolated QEMU guest / ${{ matrix.scenario }}"
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # The original two-cut file-level smoke already passed in PR #44
+        # (run 38662016872). It remains runnable through the same local
+        # script with LP_QEMU_SCENARIO=file, but should not force a repeated
+        # software-TCG guest reboot on every root-worker acceptance attempt.
+        scenario: [broker]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,10 +36,13 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test "$RUNNER_OS" = Linux
           bash -n tests/staging/qemu-powercut-smoke.sh
+          bash -n tests/staging/qemu-guest-live-worker.sh
       - name: Install ephemeral QEMU host tools
         run: |
           sudo apt-get -qq update
           sudo apt-get install -y -qq --no-install-recommends \
             qemu-system-x86 qemu-utils cloud-image-utils
-      - name: Hard kill guest, reboot same disk, verify journal and state
+      - name: Hard kill fresh isolated guest and verify scenario
+        env:
+          LP_QEMU_SCENARIO: ${{ matrix.scenario }}
         run: bash tests/staging/qemu-powercut-smoke.sh
