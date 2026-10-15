@@ -171,4 +171,58 @@ ssh_run 'sudo test ! -e /var/lib/linux-panel-update-root/active-transaction &&
   sudo test ! -e /var/lib/linux-panel/update-processing' ||
   fail 'Power cut B resurrected cleaned transaction marker'
 note 'PASS B: result and cleanup survived hard reset and reboot'
-note 'PARTIAL gate only — not full Git/npm/systemd Broker transaction power-loss acceptance'
+note 'Power-cut C: stage actual immutable root worker on disposable QEMU systemd'
+for pair in \
+ "scripts/update-worker.sh:lp-worker-under-test.sh" \
+ "deployment/systemd/linux-panel-update.service:lp-update.service" \
+ "deployment/systemd/linux-panel-update-recover.service:lp-recover.service" \
+ "deployment/systemd/linux-panel-update-guard.conf:lp-guard.conf" \
+ "tests/staging/qemu-guest-live-worker.sh:lp-guest-live-worker.sh";do
+ srcfile="${pair%%:*}"
+ dstfile="${pair#*:}"
+ scp_run "$GITHUB_WORKSPACE/$srcfile" "/home/stage/$dstfile"
+done
+ssh_run 'sudo env LP_QEMU_EPHEMERAL=yes bash /home/stage/lp-guest-live-worker.sh'
+worker_reached=0
+for i in $(seq 1 150);do
+ if ssh_run 'sudo test -f /run/lp-reached-npm' >/dev/null 2>&1;then
+  worker_reached=1
+  break
+ fi
+ sleep 2
+done
+((worker_reached)) || fail 'Real guest worker never reached npm checkpoint'
+ssh_run 'sudo test -f /var/lib/linux-panel-update-root/active-transaction &&
+ sudo test -f /var/lib/linux-panel/update-processing' ||
+ fail 'Root journal or processing marker missing before real guest power cut'
+note 'POWER CUT C — actual systemd root worker inside npm ci; journal durable'
+hard_cut
+boot
+note 'Guest rebooted; checking independent enabled recovery unit'
+recovered=0
+for i in $(seq 1 120);do
+ if ssh_run "sudo /usr/bin/python3 -c 'import json; p=\"/var/lib/linux-panel-update-status/result.json\"; d=json.load(open(p)); assert d[\"id\"]==\"cccccccccccccccccccccccccccccccc\" and d[\"status\"]==\"rolled_back\"'" \
+    >/dev/null 2>&1;then
+  recovered=1
+  break
+ fi
+ sleep 2
+done
+if ((recovered==0));then
+ ssh_run 'sudo systemctl status linux-panel-update-recover.service --no-pager --lines=30' || true
+ ssh_run 'sudo journalctl -u linux-panel-update-recover.service --no-pager -n 60' || true
+ fail 'Hard-cut root worker did not recover after reboot'
+fi
+old_head="$(ssh_run 'cat /home/stage/lp-old-sha')"
+restored_head="$(ssh_run 'sudo runuser -u linuxpanel-updater -- git -C /opt/linux-panel rev-parse HEAD')"
+[[ "$old_head" == "$restored_head" ]] || fail 'Wrong Git HEAD after guest reboot'
+original_private="$(ssh_run 'cat /home/stage/lp-private-digest')"
+restored_private="$(ssh_run 'sudo sha256sum /var/lib/linux-panel/panel-state.json' | awk '{print $1}')"
+[[ "$original_private" == "$restored_private" ]] || fail 'Private state corrupted by cut'
+ssh_run 'sudo test ! -e /var/lib/linux-panel-update-root/active-transaction &&
+ sudo test ! -e /var/lib/linux-panel/update-processing &&
+ curl -fsS --max-time 5 http://127.0.0.1:4188/api/auth/status >/dev/null' ||
+ fail 'Recovered guest has stale transaction or unavailable Web'
+note 'PASS C: real systemd root worker + Git rollback restored after VM-wide hard power cut'
+note 'LIMIT: npm/build replaced with isolated no-op/hang fixture, not full production dependency build'
+
