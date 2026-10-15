@@ -192,6 +192,9 @@ try {
     await page.locator('#login-pass').fill(password);
     await page.locator('button[type="submit"]').click();
     await page.locator('.module-nav button').last().waitFor({state:'attached'});
+    if(viewport.width<=730) await page.waitForFunction(()=>
+      Math.abs(document.querySelector('.sidebar-slot').getBoundingClientRect().height-
+        document.querySelector('.module-sidebar').getBoundingClientRect().height)<1);
     const contentTop=(await page.locator('.module-content').boundingBox()).y;
     if(viewport.width<=730){
       await page.getByRole('tab',{name:'功能模块',exact:true}).click();
