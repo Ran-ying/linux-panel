@@ -93,15 +93,15 @@ onUnmounted(() => {
   <section class="action-card" :aria-label="action.title">
     <div class="card-heading">
       <div>
-        <div class="label">{{ action.id }}</div>
         <h3>{{ action.title }}</h3>
       </div>
       <span class="read-pill">{{ action.kind === 'read' ? '只读' : '需授权' }}</span>
     </div>
-    <p class="card-description">{{ action.description }}</p>
 
     <details class="action-explanation">
-      <summary>查看底层原理</summary>
+      <summary>操作详情</summary>
+      <code>{{ action.id }}</code>
+      <p>{{ action.description }}</p>
       <p>{{ action.explain }}</p>
     </details>
 
