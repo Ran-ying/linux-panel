@@ -45,6 +45,13 @@ export default {
     additionalProperties: false
   },
   explain: 'systemctl list-units --type=service --all 读取已加载的 systemd Units；它不是全部已安装服务文件。macOS 不使用 systemd，示例数据不能代表 VPS。',
+  terminal:{
+    fields:{units:'systemctl list-units --type=service --all --no-pager --no-legend --plain'},
+    decode: values => {
+      const result=parseSystemctlLines(values.units);
+      return {source:'systemd',...result,count:result.services.length};
+    }
+  },
   createPlan: async () => process.platform === 'linux'
     ? [{ type: 'execFile', command: 'systemctl', args: ['list-units', '--type=service', '--all', '--no-pager', '--no-legend', '--plain'] }]
     : [{ type: 'mock', description: 'macOS 没有 systemd；返回明确标记的模拟数据' }],
