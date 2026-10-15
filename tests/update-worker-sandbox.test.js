@@ -38,6 +38,10 @@ function prepare(){
  const target=exec('git',['-C',root,'rev-parse','HEAD']);
  exec('git',['-C',root,'push','-q','origin','main']);
  exec('git',['-C',root,'reset','--hard',old]);
+ // The original installed service already has runtime dependencies available
+ // even when backup fails before the update reaches npm ci.
+ mkdirSync(join(root,'node_modules','fastify'),{recursive:true});
+ writeFileSync(join(root,'node_modules','fastify','package.json'),'{"name":"fastify"}\n');
  writeFileSync(join(state,'panel-state.json'),'{"original":true}\n');
  const env=join(base,'panel.env'),pin=join(base,'pin');
  writeFileSync(env,'PANEL_LISTEN_PORT=4188\nPANEL_PUBLIC_ORIGIN=http://127.0.0.1:4188\n');
