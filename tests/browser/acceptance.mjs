@@ -206,9 +206,15 @@ try {
         const theme=sidebar.querySelector('.appearance-control').getBoundingClientRect();
         const name=sidebar.querySelector('.sidebar-heading').getBoundingClientRect();
         const toggle=sidebar.querySelector('.sidebar-collapse').getBoundingClientRect();
-        return {themeLeft:theme.left,nameRight:name.right,toggleBottom:toggle.bottom,position:getComputedStyle(sidebar).position};
+        const tabs=sidebar.querySelector('.sidebar-tabs').getBoundingClientRect();
+        const brand=sidebar.querySelector('.sidebar-brand').getBoundingClientRect();
+        const frame=sidebar.getBoundingClientRect();
+        return {tabRadius:parseFloat(getComputedStyle(sidebar.querySelector('.sidebar-tabs')).borderTopLeftRadius),
+          tabLeft:tabs.left-frame.left,tabRight:frame.right-tabs.right,tabTop:tabs.top-brand.bottom,
+          themeLeft:theme.left,nameRight:name.right,toggleBottom:toggle.bottom,position:getComputedStyle(sidebar).position};
       });
       assert.equal(placement.position,'fixed');
+      assert.ok(placement.tabRadius>0 && placement.tabLeft>=12 && placement.tabRight>=12 && placement.tabTop>=8,'phone tabs need an inset rounded frame');
       assert.ok(placement.themeLeft>=placement.nameRight,'theme control must sit right of the panel name');
       assert.ok(placement.toggleBottom<=viewport.height-16,'collapse button must stay within bottom gutter');
     }
