@@ -47,6 +47,18 @@ export default {
     additionalProperties: false
   },
   explain: 'Linux 读取 /proc/meminfo：MemAvailable 估计不发生交换时可使用的内存。macOS os.freemem() 不等于系统活动监视器的内存压力。',
+  terminal:{
+    fields:{meminfo:'cat /proc/meminfo'},
+    decode: values => {
+      const info=parseMeminfo(values.meminfo);
+      const totalBytes=info.get('MemTotal'), freeBytes=info.get('MemFree');
+      if (!Number.isFinite(totalBytes) || !Number.isFinite(freeBytes)) throw new Error('Invalid meminfo');
+      const availableBytes=Math.max(0,Math.min(totalBytes,info.get('MemAvailable') ?? freeBytes));
+      const usedBytes=totalBytes-availableBytes;
+      return {totalBytes,freeBytes,availableBytes,usedBytes,
+        usagePercent:totalBytes>0?Number((usedBytes/totalBytes*100).toFixed(1)):0,source:'proc-meminfo'};
+    }
+  },
   createPlan: async () => [{ type: process.platform === 'linux' ? 'file-read' : 'node-api', code: readMemoryUsage.toString() }],
   execute: readMemoryUsage
 };
