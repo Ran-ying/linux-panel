@@ -1,3 +1,5 @@
+> **历史文档（v0.4 原始设计）**：以下 per-client Scope / per-tool allowlist 说明反映 v0.4 的旧权限模型，已被个人可信客户端模式取代。当前实现参见 [v0.5 更新与 MCP 策略](UPDATER.md) 和 [项目状态](PROJECT-STATUS.md)：OAuth 验证客户端登录；工具是否暴露由 Action 注册和全局 MCP 策略决定，已有客户端可自动使用后来开启的 Action；整体撤销客户端仍有效。
+
 # Linux Panel v0.4 — MCP 与 OAuth 实现
 
 ## 用户接入目标
