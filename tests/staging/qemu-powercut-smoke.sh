@@ -83,6 +83,10 @@ boot(){
     -serial "file:$work/console.log" \
     -daemonize -pidfile "$work/vm.pid" || fail 'QEMU did not start'
   vm_pid="$(cat "$work/vm.pid")"
+  if [[ "${1:-}" == serial-only ]];then
+    note 'Rebooted isolated QEMU: awaiting in-guest serial recovery proof'
+    return
+  fi
   for i in $(seq 1 180);do
     # One successful SSH connect is insufficient: cloud-init may still
     # restart sshd. Require the complete remote readiness command.
@@ -224,36 +228,29 @@ ssh_run 'sudo test -f /var/lib/linux-panel-update-root/active-transaction &&
  fail 'Root journal or processing marker missing before real guest power cut'
 note 'POWER CUT C — actual systemd root worker inside npm ci; journal durable'
 hard_cut
-boot
-note 'Guest rebooted; checking independent enabled recovery unit'
-recovered=0
-for i in $(seq 1 120);do
- if ssh_run "sudo /usr/bin/python3 -c 'import json; p=\"/var/lib/linux-panel-update-status/result.json\"; d=json.load(open(p)); assert d[\"id\"]==\"cccccccccccccccccccccccccccccccc\" and d[\"status\"]==\"rolled_back\"'" \
-    >/dev/null 2>&1;then
-  recovered=1
-  break
- fi
- sleep 2
+# The guest itself verifies root recovery and prints a fixed signed-off
+# milestone to the host-owned QEMU serial log. SSH can be unavailable after
+# abrupt cut even with healthy Linux systemd; do not conflate that with a
+# failed rollback or give SSH output authority over the rollback outcome.
+boot serial-only
+verified=0
+for attempt in $(seq 1 650);do
+  if grep -Fq 'LP_QEMU_LIVE_BROKER_RECOVERED' "$work/console.log";then
+    verified=1
+    break
+  fi
+  if grep -Fq 'LP_QEMU_BOOT_VERIFIER_FAIL' "$work/console.log";then
+    tail -n 120 "$work/console.log" >&2
+    fail 'In-guest root Broker recovery proof rejected state'
+  fi
+  kill -0 "$vm_pid" 2>/dev/null ||
+    fail 'QEMU guest stopped before publishing root recovery evidence'
+  sleep 1
 done
-if ((recovered==0));then
- note 'Recovery did not complete; inspect guest immutable artifacts before cleanup'
- ssh_retry 'sudo systemctl status linux-panel-update-recover.service --no-pager --lines=30' || true
- ssh_retry 'sudo systemctl is-enabled linux-panel-update-recover.service' || true
- ssh_retry 'sudo ls -l /etc/systemd/system/linux-panel-update-recover.service /etc/systemd/system/multi-user.target.wants/linux-panel-update-recover.service' || true
- ssh_retry 'sudo stat -c "%n size=%s mode=%a" /etc/systemd/system/linux-panel-update-recover.service /usr/local/libexec/linux-panel-update-worker' || true
- ssh_retry 'sudo journalctl -u linux-panel-update-recover.service --no-pager -n 60' || true
- fail 'Hard-cut root worker did not recover after reboot'
+if ((verified==0));then
+  tail -n 120 "$work/console.log" >&2
+  fail 'In-guest root Broker recovery did not publish serial proof'
 fi
-old_head="$(ssh_run 'cat /home/stage/lp-old-sha')"
-restored_head="$(ssh_run 'sudo runuser -u linuxpanel-updater -- git -C /opt/linux-panel rev-parse HEAD')"
-[[ "$old_head" == "$restored_head" ]] || fail 'Wrong Git HEAD after guest reboot'
-original_private="$(ssh_run 'cat /home/stage/lp-private-digest')"
-restored_private="$(ssh_run 'sudo sha256sum /var/lib/linux-panel/panel-state.json' | awk '{print $1}')"
-[[ "$original_private" == "$restored_private" ]] || fail 'Private state corrupted by cut'
-ssh_run 'sudo test ! -e /var/lib/linux-panel-update-root/active-transaction &&
- sudo test ! -e /var/lib/linux-panel/update-processing &&
- curl -fsS --max-time 5 http://127.0.0.1:4188/api/auth/status >/dev/null' ||
- fail 'Recovered guest has stale transaction or unavailable Web'
-note 'PASS C: real systemd root worker + Git rollback restored after VM-wide hard power cut'
-note 'LIMIT: npm/build replaced with isolated no-op/hang fixture, not full production dependency build'
+note 'PASS C: real root systemd worker/old Git+state/HTTP recovered after VM-wide hard power cut'
+note 'LIMIT: npm/build is an isolated no-op/hang fixture, not full production dependency build'
 
