@@ -87,6 +87,12 @@ chmod 0600 /etc/linux-panel/panel.env
 chown -R root:linuxpanel "$ROOT"
 chmod -R g+rX,g-w,o-w "$ROOT"
 assert_web_runtime(){
+  runuser -u linuxpanel -- test -r "$ROOT/package.json" ||
+    fail 'Web account cannot read root package.json'
+  runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/create-app.js" ||
+    fail 'Web account cannot read Git-tracked API source'
+  runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/server.js" ||
+    fail 'Web account cannot read API entrypoint'
   runuser -u linuxpanel -- test -r "$ROOT/node_modules/fastify/package.json" ||
     fail 'Web user cannot read installed Fastify manifest'
   runuser -u linuxpanel -- test -r "$ROOT/apps/web/dist/index.html" ||
@@ -152,6 +158,17 @@ assert_web_git_acl "$TARGET"
 # for the actual Broker fast-forward without touching installed root artifacts.
 runuser -u linuxpanel-updater -- git -C "$ROOT" reset --hard "$OLD"
 assert_web_git_acl "$OLD"
+# Reproduce the exact live outage from 2026-10-15. A restrictive Git
+# checkout leaves the package manifest / API source unreadable by the Web UID.
+# The root Broker must repair this BEFORE it restarts the panel, on normal
+# deployments, rollback after failed npm test, and interrupted boot recovery.
+runuser -u linuxpanel-updater -- chmod 0600 \
+  "$ROOT/package.json" "$ROOT/apps/api/src/create-app.js"
+! runuser -u linuxpanel -- test -r "$ROOT/package.json" ||
+  fail 'Fault injection did not deny Web reading package.json'
+! runuser -u linuxpanel -- test -r "$ROOT/apps/api/src/create-app.js" ||
+  fail 'Fault injection did not deny Web reading create-app.js'
+note 'Injected real cross-UID 0600 package and source regression before Broker update'
 ! systemctl is-enabled --quiet linux-panel-update.path || fail 'Premature Broker activation'
 ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
  fail 'Web update gate unexpectedly enabled'

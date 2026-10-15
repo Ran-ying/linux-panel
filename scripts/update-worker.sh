@@ -84,6 +84,72 @@ start_panel(){
   fi
   systemctl start linux-panel.service
 }
+web_can_read(){
+  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$1"
+}
+# Git checkout/reset also run under umask 077. Any changed tracked source,
+# including ROOT/package.json and apps/api/src/*.js, may be replaced as 0600.
+# Re-grant read/traverse to the different Web UID AFTER both forward checkout
+# and rollback. Only the Git index's tracked public files and their ancestors
+# are eligible: never recursively alter .git, private panel state, or untracked
+# user-controlled files. The immutable worker performs every permission change;
+# it does not execute an updater-controlled helper script as root.
+ensure_tracked_web_read_access(){
+  local manifest rel path parent
+  local -a files=() dirs=()
+  local -A seen=()
+  [[ -d "$ROOT" && ! -L "$ROOT" && "$(stat -c %U "$ROOT")" == "$USER" ]] || {
+    log 'Unexpected checkout root while restoring Web source permissions'
+    return 1
+  }
+  manifest="$(mktemp "${ALLOW_START%/*}/.tracked-web.XXXXXXXX")" || return 1
+  if ! as_updater git -C "$ROOT" ls-files --cached -z > "$manifest";then
+    rm -f -- "$manifest"
+    log 'Could not list tracked checkout files'
+    return 1
+  fi
+  while IFS= read -r -d '' rel;do
+    # Refuse paths that could escape the pinned checkout, including .git.
+    if [[ -z "$rel" || "$rel" == /* || "$rel" == .. ||
+          "$rel" == ../* || "$rel" == */../* || "$rel" == */.. ||
+          "$rel" == .git || "$rel" == .git/* ]];then
+      log 'Unsafe tracked checkout path; refusing Web permission change'
+      rm -f -- "$manifest"
+      return 1
+    fi
+    path="$ROOT/$rel"
+    if [[ ! -f "$path" || -L "$path" || "$(stat -c %U "$path")" != "$USER" ]];then
+      log 'Unexpected tracked checkout file type/owner'
+      rm -f -- "$manifest"
+      return 1
+    fi
+    files+=("$path")
+    parent="${path%/*}"
+    while [[ "$parent" != "$ROOT" ]];do
+      if [[ ! -d "$parent" || -L "$parent" ||
+            "$(stat -c %U "$parent")" != "$USER" ]];then
+        log 'Unexpected tracked checkout parent type/owner'
+        rm -f -- "$manifest"
+        return 1
+      fi
+      if [[ -z "${seen[$parent]+x}" ]];then
+        seen["$parent"]=1
+        dirs+=("$parent")
+      fi
+      parent="${parent%/*}"
+    done
+  done < "$manifest"
+  rm -f -- "$manifest"
+  (("${#files[@]}" > 0)) || { log 'Empty Git tracked checkout'; return 1; }
+  # Root Broker holds CAP_CHOWN; owner updater performs chmod with its own UID.
+  chgrp -- linuxpanel "$ROOT" "${dirs[@]}" "${files[@]}" || return 1
+  as_updater chmod -- g+rX,g-w,o-rwx "$ROOT" "${dirs[@]}" "${files[@]}" || return 1
+  # Verify the actual Web UID, not root's ability to read its own checkout.
+  web_can_read "$ROOT/package.json" ||
+    { log 'Web account cannot read root package.json'; return 1; }
+  web_can_read "$ROOT/apps/api/src/server.js" ||
+    { log 'Web account cannot read API entrypoint'; return 1; }
+}
 # npm ci and Vite run as linuxpanel-updater under umask 077. Freshly
 # regenerated runtime trees can therefore be updater-only (0700/0600),
 # even though the Web service uses a different UID (linuxpanel).
@@ -107,6 +173,7 @@ ensure_web_read_access(){
     log 'Required Fastify runtime manifest not found after build'
     return 1
   fi
+  ensure_tracked_web_read_access
 }
 # Reusable health gate for normal deployments AND interrupted-boot recovery.
 # A systemctl start or active PID alone never proves Fastify is serving.
