@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
+import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { addAudit } from './state-store.js';
@@ -32,7 +33,12 @@ export function createUpdateController({store,root,auth,enabled=process.env.PANE
     // Git rejects even read-only operations from that different UID unless
     // this exact, service-configured repository is marked safe. Scope the
     // exception to each invocation; never alter system/global git config.
-    const gitArgs=(...args)=>['-c',`safe.directory=${root}`,'-C',root,...args];
+    // Server root is resolved from a directory URL, commonly yielding a
+    // trailing slash (/opt/linux-panel/). Git's safe.directory comparison
+    // does not treat that as identical to /opt/linux-panel. Normalize the
+    // exact path while keeping the exception local to this invocation.
+    const safeCheckout=resolve(root);
+    const gitArgs=(...args)=>['-c',`safe.directory=${safeCheckout}`,'-C',safeCheckout,...args];
     let from,target;
     try {
       from=(await execFile('git',gitArgs('rev-parse','HEAD'),opts)).stdout.trim();
