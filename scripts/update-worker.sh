@@ -143,6 +143,7 @@ recover(){
             "$ID" =~ ^[a-f0-9]{32}$ && "$TARGET" =~ ^[a-f0-9]{40}$ ]];then
         record failed
         rm -f -- "$PROCESSING"
+        durable_sync dir "$STATE"
       else
         log 'Invalid abandoned processing marker; manual review required'
         return 1
@@ -172,7 +173,7 @@ recover(){
     # untrusted starts, and only this root worker grants a temporary permit.
     if start_panel && systemctl is-active --quiet linux-panel.service &&
        panel_healthy;then
-      rm -f -- "$TXN" "$PROCESSING"
+      finish_transaction
       log "Previously committed healthy deployment $ID cleaned up"
       return 0
     fi
@@ -219,7 +220,7 @@ recover(){
   fi
   if ((restored==1));then
     record rolled_back
-    rm -f -- "$TXN" "$PROCESSING"
+    finish_transaction
     log "Recovered $ID and restored old version"
     return 0
   fi
@@ -238,6 +239,10 @@ fi
 [[ -f "$MARKER" && ! -L "$MARKER" ]] || exit 0
 mv -T -- "$MARKER" "$PROCESSING"
 [[ -f "$PROCESSING" && ! -L "$PROCESSING" ]] || exit 2
+# The approval marker was written by the Web process, not fsync'd by root.
+# Commit its processing identity before entering a potentially destructive job.
+durable_sync file "$PROCESSING"
+durable_sync dir "$STATE"
 # The marker is untrusted input. Read only a small fixed format; reject
 # oversized, symlinked, or non-regular files instead of parsing arbitrary data.
 [[ "$(stat -c %s "$PROCESSING")" -le 1024 ]] || exit 2
@@ -260,7 +265,12 @@ log "Fetch pinned origin/main commit $TARGET"
 as_updater git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
 REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 [[ "$REMOTE" == "$TARGET" ]] || { record failed; exit 2; }
-if [[ "$OLD" == "$TARGET" ]];then record no_change;exit 0;fi
+if [[ "$OLD" == "$TARGET" ]];then
+  record no_change
+  rm -f -- "$PROCESSING"
+  durable_sync dir "$STATE"
+  exit 0
+fi
 as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record failed; exit 2; }
 # Stop BEFORE service interruption if the shared VPS cannot safely build.
 # These are fixed, root-owned safety thresholds, not MCP-controlled parameters.
@@ -339,5 +349,5 @@ if ! panel_healthy;then
   exit 1
 fi
 record success
-rm -f -- "$TXN"
+finish_transaction
 log "Updated to $TARGET"
