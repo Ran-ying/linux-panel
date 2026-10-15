@@ -37,8 +37,8 @@ test('MCP settings are session and CSRF protected; /mcp remains fail-closed', as
   assert.equal((await app.inject({method:'PUT',url:target,headers:{cookie,'x-panel-csrf':csrf},
     payload:policy})).statusCode,200);
   const enabled=await app.inject({url:target,headers:{cookie}});
-  assert.equal(enabled.json().policy.tools['system.info'],true);
-  assert.equal(enabled.json().policy.tools['system.cpu'],false);
+  assert.deepEqual(enabled.json().policy.tools,{},
+    'legacy per-action selections are discarded');
   const unauthenticated=await app.inject({method:'POST',url:'/mcp',
     headers:{'content-type':'application/json','accept':'application/json, text/event-stream'},
     payload:{jsonrpc:'2.0',id:1,method:'tools/list'}});
@@ -49,5 +49,5 @@ test('MCP settings are session and CSRF protected; /mcp remains fail-closed', as
   t.after(()=>restarted.close());
   assert.equal((await restarted.inject({method:'POST',url:'/mcp',headers:{'content-type':'application/json'},
     payload:{jsonrpc:'2.0',id:1,method:'tools/list'}})).statusCode,401);
-  assert.equal((await restarted.inject({url:target,headers:{cookie}})).json().policy.tools['system.info'],true);
+  assert.deepEqual((await restarted.inject({url:target,headers:{cookie}})).json().policy.tools,{});
 });
