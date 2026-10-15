@@ -1,6 +1,8 @@
 # v0.5 Updater — Acceptance and Release Gate
 
-**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. SIGKILL recovery and both Web/MCP valid-SHA deployment paths have now passed in isolated runners. Literal hard-power-loss integrity, concurrent approvals, and resource-starvation scenarios remain unverified.
+**Status: PARTIAL REAL-SYSTEMD ACCEPTANCE PASSED; NOT PRODUCTION RELEASE-READY.** On a disposable GitHub-hosted Ubuntu 24.04 runner, the actual privileged service, restricted account, Git and npm completed invalid SHA rejection, an injected test failure with rollback, and successful retry. SIGKILL recovery and both Web/MCP valid-SHA deployment paths have now passed in isolated runners. Literal hard-power-loss integrity, physical power-loss and resource-starvation scenarios remain unverified; basic
+parallel Web/MCP enqueue rejection is verified but revocation during execution
+and more exhaustive multi-client races remain open.
 
 ## Real Web, PKCE OAuth and MCP-to-Broker integration (staging only)
 
@@ -33,6 +35,12 @@ the isolated test VM and keeps the real systemd Broker watcher active. It tests:
   completed result after redeployment.
 - Turning off `allowDirectUpdates` hides the execution tool for an old
   bearer; revoking its grant makes the same token unauthorized (401).
+- Two simultaneous Web password-step-up approvals for one request yield exactly
+  one queued update and one HTTP 409; one result arrives from the actual
+  systemd Broker. Two distinct OAuth clients with independently consented
+  `panel:update:execute` grants race for the same candidate SHA; exactly one
+  is queued, while the second tool call is rejected. No duplicate root job
+  or false successful deployment is accepted.
 - Web update gate is returned to **disabled** before staging migration ends.
 
 The invalid SHA cases still prove refusal and result feedback, while the

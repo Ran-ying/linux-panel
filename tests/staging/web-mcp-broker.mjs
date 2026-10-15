@@ -121,10 +121,19 @@ assert.equal(blockedCsrf.status,403);
 const wrong=await write('/api/panel/update/approve',
  {id,currentPassword:'incorrect-staging-password'});
 assert.equal(wrong.status,403);
-const queued=ok(await write('/api/panel/update/approve',{id,currentPassword:password}));
-assert.equal(queued.json.status,'queued');
-assert.equal(queued.json.id,id);
+
+note('Concurrent Web step-up approvals must enqueue exactly once');
+const webRace=await Promise.all([
+  write('/api/panel/update/approve',{id,currentPassword:password}),
+  write('/api/panel/update/approve',{id,currentPassword:password})
+]);
+const webQueued=webRace.filter(r=>r.status===200 && r.json?.status==='queued');
+const webDenied=webRace.filter(r=>r.status===409);
+assert.equal(webQueued.length,1,JSON.stringify(webRace.map(r=>({status:r.status,body:r.text}))));
+assert.equal(webDenied.length,1,JSON.stringify(webRace.map(r=>({status:r.status,body:r.text}))));
+assert.equal(webQueued[0].json.id,id);
 await waitResult(id,'failed');  // Real root Broker rejects target not origin/main.
+note('PASS: parallel Web approvals produced one Broker request');
 note('Web → systemd Broker rejected invalid target and reported failed, no false success');
 
 note('Real OAuth dynamic registration + user consent + PKCE S256 token');
@@ -157,6 +166,26 @@ assert.equal(readStatus.status,200);
 assert.equal(readStatus.json.result?.structuredContent?.lastResult?.id,receipt.id);
 assert.equal(readStatus.json.result?.structuredContent?.lastResult?.status,'failed');
 note('MCP OAuth scope → direct enqueue → systemd rejection → scoped status succeeded');
+
+note('Concurrent OAuth clients must not double-enqueue one Broker target');
+const reg2=ok(await req('/oauth/register',{method:'POST',
+ body:{client_name:'Second isolated staging OAuth client',redirect_uris:[callback]}}),201);
+const direct2=await consent(reg2.json.client_id,'panel:update:execute');
+const duplicateTarget='c'.repeat(40);
+const mcpRace=await Promise.all([
+ rpc(direct,'tools/call',{name:'panel.update.execute',arguments:{targetSha:duplicateTarget}}),
+ rpc(direct2,'tools/call',{name:'panel.update.execute',arguments:{targetSha:duplicateTarget}})
+]);
+const mcpQueued=mcpRace.filter(r=>r.status===200 &&
+ r.json.result?.structuredContent?.status==='queued' &&
+ r.json.result?.isError!==true);
+const mcpDenied=mcpRace.filter(r=>r.json.error || r.json.result?.isError===true);
+assert.equal(mcpQueued.length,1,JSON.stringify(mcpRace));
+assert.equal(mcpDenied.length,1,JSON.stringify(mcpRace));
+const raceId=mcpQueued[0].json.result.structuredContent.id;
+assert.match(raceId,/^[a-f0-9]{32}$/);
+await waitResult(raceId,'failed');
+note('PASS: two independent OAuth clients produced one fixed Broker enqueue');
 
 note('Positive '+positivePath+' path: valid SHA reaches root Broker');
 const initialCheck=ok(await write('/api/actions/panel.update.check/execute',
