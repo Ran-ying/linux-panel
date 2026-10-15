@@ -1,0 +1,36 @@
+name: Prepare v0.5 release draft
+on:
+  push:
+    branches: [main]
+    paths: ['docs/RELEASE-V0.5.md', '.github/workflows/release-draft.yml']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund
+      - run: npm audit --omit=dev
+      - run: npm audit --prefix extensions/mcp --omit=dev
+      - run: npm test
+      - run: npm run check
+      - run: npm run build:web
+  draft:
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create a draft, never publish or modify an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.5.0 --draft --target "$GITHUB_SHA" \
+            --title "Linux Panel v0.5.0 — acceptance draft" \
+            --notes-file docs/RELEASE-V0.5.md
