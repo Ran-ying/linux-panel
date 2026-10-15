@@ -140,7 +140,7 @@ onMounted(reload);
       <form @submit.prevent="saveSettings">
         <label for="panel-name">面板名称</label>
         <input id="panel-name" v-model="settings.panelName" required maxlength="60" />
-        <p class="muted small">当前语言和主题设置已保存在后端；完整多语言和外观切换留待后续 Web UI 阶段。</p>
+        <p class="muted small">界面外观可在页面顶部选择跟随系统、浅色或深色，偏好保存在当前浏览器；完整多语言界面尚未提供。</p>
         <button class="primary form-button" :disabled="busy" type="submit">保存设置</button>
       </form>
     </section>

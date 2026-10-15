@@ -170,6 +170,6 @@ onMounted(async () => {
         <section v-else-if="activeGroup.id !== 'panel'" class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>
       </div>
     </div>
-    <footer>v0.5：TOTP 可选，MCP 和更新权限默认关闭；更新 Action 必须额外获得 Web 批准。</footer>
+    <footer>v0.5：TOTP 可选，MCP 和更新权限默认关闭；启用可信客户端直接更新后，无需每次 Web 审批。</footer>
   </main>
 </template>
