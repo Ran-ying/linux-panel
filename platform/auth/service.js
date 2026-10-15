@@ -3,7 +3,9 @@ import { addAudit } from '../state-store.js';
 import { hashPassword, validPassword, verifyPassword } from './password.js';
 import { newTotpSecret, verifyTotp, newRecoveryCodes, recoveryDigest } from './totp.js';
 
-const SESSION_MS = 12 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_SESSION_DAYS = 30;
+const sessionDays = state => state.authPolicy?.sessionDays ?? DEFAULT_SESSION_DAYS;
 const LOGIN_WINDOW = 10 * 60 * 1000;
 const MAX_FAILURES = 5;
 const MAX_FAILURE_KEYS = 4096;
@@ -90,7 +92,7 @@ export class AuthService {
     const token = randomBytes(32).toString('base64url');
     const csrf = randomBytes(32).toString('base64url');
     const sessionId = randomUUID();
-    const expiresAt = new Date(now + SESSION_MS).toISOString();
+    let expiresAt;
     await this.store.mutate(current => {
       if (!current.users.some(u => u.id === user.id && u.passwordHash === user.passwordHash))
         throw unauthorized();
@@ -107,9 +109,11 @@ export class AuthService {
           currentUser.totp.lastCounter = acceptedCounter;
         }
       }
+      const durationDays = sessionDays(current);
+      expiresAt = new Date(now + durationDays * DAY_MS).toISOString();
       current.sessions.push({
         id: sessionId, tokenHash: digest(token), csrf, userId: user.id,
-        createdAt: new Date(now).toISOString(), expiresAt
+        createdAt: new Date(now).toISOString(), expiresAt, durationDays
       });
       addAudit(current, 'auth.login', user.id);
     });
@@ -250,6 +254,41 @@ export class AuthService {
       user.credentialEpoch=(user.credentialEpoch??0)+1;
       state.sessions=state.sessions.filter(s=>s.id===identity.session.id);
       addAudit(state,'auth.totp.disabled',identity.user.id);
+    });
+  }
+
+
+  async sessionPolicy() {
+    return { days: sessionDays(await this.store.snapshot()) };
+  }
+
+  // Upgrade an unexpired legacy 12-hour session once, without sliding expiry.
+  async sessionInfo(identity) {
+    if (Number.isInteger(identity.session.durationDays)) return identity.session;
+    return this.store.mutate(state => {
+      const session = state.sessions.find(s => s.id === identity.session.id && s.userId === identity.user.id);
+      if (!session || Date.parse(session.expiresAt) <= Date.now()) throw unauthorized();
+      if (!Number.isInteger(session.durationDays)) {
+        session.durationDays = sessionDays(state);
+        session.expiresAt = new Date(Date.parse(session.createdAt) + session.durationDays * DAY_MS).toISOString();
+        addAudit(state, 'auth.session.upgraded', identity.user.id);
+      }
+      return { ...session };
+    });
+  }
+
+  async setSessionPolicy(identity, days) {
+    this.requirePermission(identity, 'account:write');
+    if (!Number.isInteger(days) || days < 1 || days > 365)
+      throw Object.assign(new Error('Session duration must be an integer from 1 to 365 days'), { statusCode: 400 });
+    return this.store.mutate(state => {
+      const session = state.sessions.find(s => s.id === identity.session.id && s.userId === identity.user.id);
+      if (!session || Date.parse(session.expiresAt) <= Date.now()) throw unauthorized();
+      state.authPolicy = { ...state.authPolicy, sessionDays: days };
+      session.durationDays = days;
+      session.expiresAt = new Date(Date.now() + days * DAY_MS).toISOString();
+      addAudit(state, 'auth.session.policy.updated', identity.user.id, days + ' days');
+      return { days, expiresAt: session.expiresAt };
     });
   }
 
