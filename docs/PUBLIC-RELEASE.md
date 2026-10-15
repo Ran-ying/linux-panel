@@ -1,20 +1,26 @@
-# 公开仓库前审查
+# v0.5 public release checklist
 
-此仓库目前是 Private。**Private → Public 会暴露现有代码、历史提交、PR 和可见的 CI 日志**。因此只能在完整历史审查之后进行，而不能只扫描 main 当前版本。
+The repository is already public. Visibility does not establish release readiness. Private deployment information must never be added to new commits, issues, artifacts or CI logs. `package.json private: true` only prevents npm publishing.
 
-## 公开前核查
+## Verified evidence (2026-10-15)
 
-- [ ] 使用 Gitleaks 或 TruffleHog 对 **所有分支、历史提交** 扫描凭据。
-- [ ] 检查旧提交、PR、Actions 日志、附件是否涉及真实 IP、OAuth、SSH 密钥、Token、Cookie、账号数据等。
-- [ ] 对曾泄露的凭据进行轮换和吊销；删除代码里的字符串并不能让已泄露凭据失效。
-- [ ] 区分公开示例 `panel.example.com` 与私人部署；不要将私人状态文件、环境文件或备份提交。
-- [ ] 审核依赖许可证、本项目 [LICENSE](../LICENSE) 和外部代码来源。
-- [ ] 使用一台新的受支持 Ubuntu/Debian 机器验证 [INSTALL.md](INSTALL.md) 和 `scripts/install.sh`。
-- [ ] 验证 Nginx 的登录/OAuth 限流、HTTPS、默认关闭的 MCP 与 Action 白名单。
-- [ ] 标注尚未提供：多管理员 RBAC、2FA、特权操作、独立安全审计。
+- [x] PR #73: Chromium 320/390/730/1280px, all modules, theme persistence, login/logout and public-only Service Worker cache/offline/reconnect. Exact merged-main CI 38762271116 passed.
+- [x] PR #74: guided installation and bounded password stdin. Disposable Ubuntu 24.04 full installation, actual systemd service/password login, repeat-install refusal and private configuration permissions passed (38762742885 and 38762905226).
+- [x] Production dependency audit: app 96 production dependencies and optional MCP extension 16 production dependencies, 0 reported vulnerabilities at audit time. This is a point-in-time advisory check.
+- [x] Gitleaks 8.30.1 checksum verified; local all-fetched-ref scan: 360 commits inspected, 0 findings. Full-history CI scans all fetched branch/tag refs; neither result proves credentials can never exist.
+- [x] Main production license inventory: MIT 75, BSD-3-Clause 6, BSD-2-Clause 1, ISC 6, BlueOak-1.0.0 5; the Vue workspace is covered by the repository MIT license. Retain dependency notices when distributing.
+- [x] Current checked-out tracked files contain no private deployment hostname; a separate metadata-only history check found historical private-host identity in seven unique old blobs. No values are reproduced here.
+- [ ] Owner decision on retaining historical private-host metadata. Do not rewrite live deployed Git history as an automatic cleanup: the Broker requires compatible trusted main ancestry. Any history migration needs a separate operator plan.
+- [ ] Real iPhone and Android home-screen installation, keyboard/safe areas and launch UX.
+- [ ] Full Debian 12 installation; Ubuntu evidence does not establish Debian parity.
+- [ ] Operator snapshot restoration/console recovery acceptance. Disposable systemd and QEMU fault tests do not prove the owner's host snapshot restores.
+- [ ] Independent security review and issue triage (#14/#22/#23/#35).
+- [ ] Exact release-candidate CI/build, release notes, supported-platform/known-limitation review and final release decision.
 
-README 曾包含私人测试实例域名，相关历史提交仍可能保留。公开前必须接受这一点，或从审查后的干净源代码创建**新的公开仓库**，不带私人开发历史。
+## Release control
 
-无需公开也可以部署：对私有仓库使用逐机只读 Deploy Key，或向受授权的用户分发构建包。公开只是降低陌生用户获取代码的门槛。
+Follow [V0.5-RELEASE-PLAN.md](V0.5-RELEASE-PLAN.md), [PROJECT-STATUS.md](PROJECT-STATUS.md), [UPDATER.md](UPDATER.md) and [PRODUCTION-DEPLOYMENT-GATE.md](PRODUCTION-DEPLOYMENT-GATE.md). Source merged, CI passed, successful test-server deployment, physical-device acceptance and public release are separate states.
 
-注意：`package.json` 中的 `"private": true` 表示禁止发布到 npm，并不控制 GitHub 的 Public/Private 可见性。
+Release notes may be prepared while gates remain open. A draft is reviewable preparation; do not label it a stable release with all acceptance complete. No root worker changes, forced Git history replacement, service disruption or snapshot experiments belong in a public-release documentation task.
+
+MCP uses the owner-approved trusted-client model: OAuth authorizes whole-client login, explicitly exposed read tools and globally enabled update Actions; whole-client revocation and independent Broker checks remain. TOTP is optional and already implemented. Reverse proxies/TLS/firewalls are operator-managed, outside the installer.
