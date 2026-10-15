@@ -30,16 +30,29 @@ try {
     page.on('pageerror',e=>errors.push(e.message));
     let releaseAuth;
     const authGate=new Promise(resolve=>releaseAuth=resolve);
-    await page.route('**/api/auth/status',async route=>{await authGate;await route.continue();});
+    await page.route('**/api/auth/session',async route=>{await authGate;await route.continue();});
     const navigation=page.goto(origin);
-    await page.locator('.loading-indicator').waitFor();
-    assert.equal(await page.locator('.panel-version,.appearance-control').count(),0,'loading must not show version/theme controls');
+    await page.locator('.layout .dashboard-placeholder').waitFor();
+    assert.equal(await page.locator('.module-sidebar').count(),1,'main shell must render before session response');
+    assert.equal(await page.locator('.auth-shell').count(),0,'no blocking auth-check screen');
+    assert.equal(await page.locator('#login-pass').count(),0,'do not flash login while checking in background');
+    assert.equal(await page.locator('.sidebar-account').count(),0,'pending shell must not display private account data');
     releaseAuth();
     await navigation;
     await page.unroute('**/api/auth/status');
     await page.locator('#login-pass').fill(password);
     await page.locator('button[type="submit"]').click();
     await page.locator('.module-nav button').first().waitFor();
+    // A returning valid session also renders the shell while validation is delayed.
+    let releaseExisting;
+    const existingGate=new Promise(resolve=>releaseExisting=resolve);
+    await page.route('**/api/auth/session',async route=>{await existingGate;await route.continue();});
+    await page.reload();
+    await page.locator('.dashboard-placeholder').waitFor();
+    assert.equal(await page.locator('#login-pass,.sidebar-account').count(),0);
+    releaseExisting();
+    await page.locator('.module-nav button').first().waitFor();
+    await page.unroute('**/api/auth/session');
     const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
     for(const name of [...names,'面板设置']){
       await page.getByRole('button',{name:name.trim(),exact:true}).click();
@@ -70,6 +83,19 @@ try {
         width+' '+name+' cards must match the rounded sidebar frame');
       assert.ok(frames.gaps.every(g=>Math.abs(g-24)<1),width+' '+name+' card gaps must match sidebar gap');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
+    }
+    if(width===1280){
+      await page.locator('#session-days').fill('7');
+      await page.getByRole('button',{name:'保存登录有效期',exact:true}).click();
+      await page.getByRole('status').filter({hasText:'当前设备的到期时间已更新'}).waitFor();
+      await page.reload();
+      await page.getByRole('button',{name:'面板设置',exact:true}).click();
+      await page.waitForFunction(()=>document.querySelector('#session-days')?.value==='7');
+      const cookie=(await context.cookies()).find(c=>c.name==='lp_session');
+      assert.ok(Math.abs(cookie.expires-Date.now()/1000-7*86400)<10,'browser cookie must use saved duration');
+      await page.locator('#session-days').fill('30');
+      await page.getByRole('button',{name:'保存登录有效期',exact:true}).click();
+      await page.getByRole('status').filter({hasText:'当前设备的到期时间已更新'}).waitFor();
     }
     // Sidebar grouping, account placement and appearance controls remain intact.
     assert.equal(await page.locator('.sidebar-settings .sidebar-account').count(),1);
