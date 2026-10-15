@@ -9,7 +9,7 @@ import ThemeControl from './components/ThemeControl.vue';
 import {version as panelVersion} from '../../../package.json';
 import { buildModuleNavigation } from './module-navigation.js';
 
-const initialized = ref(false);
+const initialized = ref(true);
 const checking = ref(true);
 const session = ref(null);
 const moduleDefinitions = ref([]);
@@ -52,6 +52,8 @@ function signOutLocally() {
   session.value = null;
   moduleDefinitions.value = [];
   actions.value = [];
+  presentations.value = {};
+  settings.value = { panelName: 'Linux Panel' };
   activePage.value = 'settings';
 }
 
@@ -93,23 +95,22 @@ async function logout() {
 
 onMounted(async () => {
   try {
-    const status = await getJSON('/api/auth/status');
-    initialized.value = status.initialized;
-    if (initialized.value) {
-      try { session.value = await getJSON('/api/auth/session'); }
-      catch (cause) { if (cause.status !== 401) throw cause; }
-      if (session.value && !authRedirect()) await loadDashboard();
-    }
-  } catch (cause) { error.value = cause.message; }
-  finally { checking.value = false; }
+    session.value = await getJSON('/api/auth/session');
+    if (!authRedirect()) await loadDashboard();
+  } catch (cause) {
+    if (cause.status === 401) {
+      signOutLocally();
+      try { initialized.value = (await getJSON('/api/auth/status')).initialized; }
+      catch (statusError) { error.value = statusError.message; }
+    } else error.value = cause.message;
+  } finally { checking.value = false; }
 });
 </script>
 
 <template>
   <div v-if="!checking && !session" class="login-appearance"><ThemeControl /></div>
-  <div v-if="checking" class="auth-shell" aria-busy="true"><span class="loading-indicator" role="status" aria-label="正在加载"></span></div>
-  <LoginPanel v-else-if="!session" :initialized="initialized" @signed-in="signIn" />
-  <main v-else class="layout">
+  <LoginPanel v-if="!checking && !session" :initialized="initialized" @signed-in="signIn" />
+  <main v-else class="layout" :aria-busy="checking">
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <div class="columns">
       <aside class="module-sidebar">
@@ -124,7 +125,8 @@ onMounted(async () => {
             :class="{ active: activePage === module.id }" @click="activePage=module.id">
             {{ module.name }}
           </button>
-          <p v-if="!businessGroups.length" class="muted small">尚无业务模块</p>
+          <div v-if="checking" class="sidebar-placeholder" aria-hidden="true"><span v-for="n in 3" :key="n" class="skeleton-line"></span></div>
+          <p v-else-if="!businessGroups.length" class="muted small">尚无业务模块</p>
         </nav>
         </div>
         <div class="sidebar-settings">
@@ -134,14 +136,22 @@ onMounted(async () => {
               :class="{ active: activePage === module.id }" @click="activePage=module.id">{{ module.name }}</button>
           </nav>
           <button type="button" class="module-toggle" :class="{ active: activePage === 'settings' }"
-            @click="activePage='settings'">面板设置</button>
-          <div class="sidebar-account">
+            @click="activePage='settings'" :disabled="checking">面板设置</button>
+          <div v-if="session && !checking" class="sidebar-account">
             <span>{{ session.user.username }}</span>
             <button type="button" @click="logout">退出登录</button>
           </div>
         </div>
       </aside>
-      <SettingsPanel v-if="activePage === 'settings'" :key="'settings'"
+      <div v-if="checking" class="module-content dashboard-placeholder" aria-label="主界面加载中">
+        <div class="module-intro"><h2>系统概览</h2></div>
+        <section v-for="n in 3" :key="n" class="action-card" aria-hidden="true">
+          <span class="skeleton-line skeleton-title"></span>
+          <span class="skeleton-line"></span>
+          <span class="skeleton-line skeleton-short"></span>
+        </section>
+      </div>
+      <SettingsPanel v-else-if="session && activePage === 'settings'" :key="'settings'"
         :csrf="session.csrf" :user="session.user" :modules="moduleDefinitions"
         @signed-out="signOutLocally" @settings-changed="value=>settings=value" />
       <div v-else-if="activeGroup" :key="activeGroup.id" class="module-content">
