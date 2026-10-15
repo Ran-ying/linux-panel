@@ -72,6 +72,6 @@ test('host preparation rejects excessive swap allocation', () => {
 
 test('updater non-root build path supports isolated Node 24', () => {
   const text = readFileSync(worker,'utf8');
-  assert.match(text, /as_updater\(\).*PATH=\/opt\/node24\/bin:/);
+  assert.match(text, /as_updater\(\)\s*\{[\s\S]*?PATH=\/opt\/node24\/bin:/);
   assert.match(text, /export PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin/);
 });
