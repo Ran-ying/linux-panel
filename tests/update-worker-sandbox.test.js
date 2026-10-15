@@ -72,6 +72,22 @@ function prepare(){
  const securityLine=worker.split('\n').find(x=>x.includes('[[ "$EXPECTED" =~ ^('));
  assert.ok(securityLine,'production must validate pinned remote');
  worker=swap(worker,securityLine,'[[ "$EXPECTED" == '+JSON.stringify(remote)+' ]] || { record failed; exit 2; }');
+ // Test-only Bash builtin fault injection: emulate a kernel returning ENOSPC
+ // AFTER writing partial bytes (a much harder case than preflight low df).
+ worker=swap(worker,'record(){',`printf(){
+  if [[ "\${TEST_PARTIAL_JOURNAL:-0}" == 1 &&
+        "$1" == 'id=%s\\nsha=%s\\nold=%s\\n' ]];then
+    builtin printf 'id=partial\\n'
+    return 28
+  fi
+  if [[ "\${TEST_PARTIAL_RESULT:-0}" == 1 &&
+        "$1" == '{"id":"%s","sha":"%s","status":"%s","at":"%s"}\\n' ]];then
+    builtin printf '{"id":"partial"'
+    return 28
+  fi
+  builtin printf "$@"
+}
+record(){`);
  const script=join(base,'worker.sh'),log=join(base,'events.log');
  let sequence=0;
  writeFileSync(log,'');
@@ -79,16 +95,19 @@ function prepare(){
  exec('bash',['-n',script]);
  return {base,root,state,status,script,log,old,target,meminfo,
   cleanup(){rmSync(base,{recursive:true,force:true})},
-  run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false}={}){
+  run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false,partialJournal=false,partialResult=false}={}){
    const id=(++sequence).toString(16).padStart(32,'0');
    writeFileSync(join(state,'update-trigger'),'id='+id+'\nsha='+sha+'\n');
    const process=spawnSync('bash',[script],{encoding:'utf8',timeout:20000,env:{
     ...globalThis.process.env,TEST_LOG:log,FAIL_BUILD:build?'1':'0',
     FAIL_HEALTH:health?'1':'0',FAIL_HEALTH_ALL:healthEverywhere?'1':'0',
      TEST_ROOT:root,TEST_TARGET:target,FAIL_ROLLBACK:rollback?'1':'0',
-    TEST_FREE_KIB:lowDisk?'900000':'4000000'
+    TEST_FREE_KIB:lowDisk?'900000':'4000000',
+    TEST_PARTIAL_JOURNAL:partialJournal?'1':'0',
+    TEST_PARTIAL_RESULT:partialResult?'1':'0'
    }});
-   const result=JSON.parse(readFileSync(join(status,'result.json'),'utf8'));
+   const result=existsSync(join(status,'result.json'))?
+    JSON.parse(readFileSync(join(status,'result.json'),'utf8')):null;
    return {process,result,head:exec('git',['-C',root,'rev-parse','HEAD']),
     state:readFileSync(join(state,'panel-state.json'),'utf8')};
   }
@@ -162,5 +181,30 @@ test('low memory + swap refuses before touching panel and high memory allows upd
   assert.equal(blocked.head,f.old);
   assert.doesNotMatch(readFileSync(f.log,'utf8'),/systemctl:stop/);
   assert.match(blocked.process.stdout,/Memory \+ swap below 768 MiB/);
+ }finally{f.cleanup();}
+});
+
+test('partial ENOSPC journal write never publishes root journal or stops Web',()=>{
+ const f=prepare();
+ try {
+  const out=f.run({partialJournal:true});
+  assert.notEqual(out.process.status,0,'Journal failure must reject the job');
+  assert.equal(out.result?.status,'failed','Reject transaction before stopping service');
+  assert.equal(out.head,f.old);
+  assert.equal(out.state,'{"original":true}\n');
+  assert.equal(existsSync(join(f.base,'backup','active-transaction')),false);
+  assert.doesNotMatch(readFileSync(f.log,'utf8'),/systemctl:stop/);
+ }finally{f.cleanup();}
+});
+
+test('partial ENOSPC status write never exposes malformed JSON as result',()=>{
+ const f=prepare();
+ try {
+  const out=f.run({sha:'a'.repeat(40),partialResult:true});
+  assert.notEqual(out.process.status,0);
+  assert.equal(out.result,null,'Failed atomic status must leave no result');
+  assert.equal(out.head,f.old);
+  assert.equal(existsSync(join(f.base,'status','result.json')),false);
+  assert.equal(existsSync(join(f.base,'backup','active-transaction')),false);
  }finally{f.cleanup();}
 });
