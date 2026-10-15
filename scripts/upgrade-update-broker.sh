@@ -64,9 +64,11 @@ need(){ command -v "$1" >/dev/null 2>&1 || block "Command missing: $1"; }
 # Fail closed on any preexisting marker, including symlinks/dangling symlinks.
 preflight(){
   BLOCK=0; WARN=0
+  [[ -x /usr/bin/python3 ]] && pass 'Root worker fsync helper available' ||
+    block 'Missing /usr/bin/python3 for durable journal barriers'
   local cmd
   for cmd in systemctl systemd-analyze git runuser grep stat cmp sha256sum \
-    install mktemp mv flock date timeout awk cut cat chmod rm;do need "$cmd";done
+    install mktemp mv flock date timeout awk cut cat chmod rm python3;do need "$cmd";done
   [[ "$( . /etc/os-release; printf '%s %s' "$ID" "$VERSION_ID" )" =~ ^(ubuntu\ (24|25|26)\.|debian\ (1[2-9]|[2-9][0-9])) ]] &&
     pass 'Supported Ubuntu/Debian version' || block 'Unsupported OS'
   local systemd_ver=''
