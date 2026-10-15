@@ -205,6 +205,11 @@ sudo sh -c 'set -C; umask 077; printf "PANEL_LISTEN_HOST=127.0.0.1\nPANEL_LISTEN
 sudo chmod 0600 /etc/linux-panel/panel.env
 sudo chown -R root:linuxpanel /opt/linux-panel
 sudo chmod -R g+rX,g-w,o-w /opt/linux-panel
+# 安装/重建后的权限验收必须以 Web 服务账户为准，而不是以 root/npm 为准。
+sudo runuser -u linuxpanel -- test -r /opt/linux-panel/node_modules/fastify/package.json
+sudo runuser -u linuxpanel -- test -r /opt/linux-panel/apps/web/dist/index.html
+(cd /opt/linux-panel && sudo runuser -u linuxpanel -- /opt/node24/bin/node \
+  --input-type=module -e "await import('fastify'); await import('@fastify/static')")
 
 sudo runuser -u linuxpanel -- env PANEL_DATA_DIR=/var/lib/linux-panel \
   /opt/node24/bin/node /opt/linux-panel/scripts/admin-init.js admin
