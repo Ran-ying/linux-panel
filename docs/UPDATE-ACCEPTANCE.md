@@ -159,10 +159,14 @@ Those release gates remain separate and open.
 On the disposable Ubuntu 24.04 Web/MCP positive-update matrix, the entire
 fixed root Broker's **actual** `npm ci`, MCP dependencies, `npm run check`,
 `npm test`, `npm run build:web`, Git and Web restart are now run with
-`MemoryMax=768M` on that worker's systemd cgroup. The harness requires the
+`MemoryMax=768M` and `CPUQuota=100%` (single-vCPU equivalent) on the
+worker's systemd cgroup. The harness requires the
 real Git SHA transition, healthy HTTP, durable `success`, and reports the
-worker's `MemoryPeak` and code-volume free space before/after the build.
-The memory cap is removed immediately after the positive transaction.
+worker's live cgroup-v2 `memory.peak`, total positive-update wall time,
+and code-volume free space before/after the build.
+The memory and CPU caps are removed immediately after the positive
+transaction. The rest of the disposable runner still has more resources
+than the production VPS; this specifically constrains the updater cgroup.
 
 **Measured evidence (disposable Ubuntu 24.04, 2026-10-15):**
 [GitHub Actions 38697686455](https://github.com/Ran-ying/linux-panel/actions/runs/38697686455)
