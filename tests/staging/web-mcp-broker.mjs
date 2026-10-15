@@ -80,7 +80,7 @@ async function consent(clientId,scope){
  if(scope?.includes('panel:update:execute'))
     assert.match(page.text,/panel:update:execute/);
  if(scope===undefined)
-    assert.doesNotMatch(page.text,/<code>panel:update:execute<\/code>/);
+    assert.match(page.text,/<code>panel:update:execute<\/code>/);
  const post=ok(await req('/oauth/authorize',{method:'POST',
   body:{...query,csrf,decision:'approve'},form:true,headers:{origin}}),302);
  const returnUrl=new URL(post.headers.get('location'));
@@ -143,14 +143,14 @@ const clientId=reg.json.client_id;
 const defaultToken=await consent(clientId);
 const defaultTools=await rpc(defaultToken,'tools/list');
 assert.equal(defaultTools.status,200);
-assert.ok(!defaultTools.json.result.tools.some(t=>t.name==='panel.update.execute'));
-const defaultCall=await rpc(defaultToken,'tools/call',
- {name:'panel.update.execute',arguments:{targetSha:'b'.repeat(40)}});
-assert.ok(defaultCall.json.error || defaultCall.json.result?.isError);
+assert.ok(defaultTools.json.result.tools.some(t=>t.name==='panel.update.execute'),
+ 'Trusted client without explicit update Scope receives globally enabled Action');
 const reader=await consent(clientId,'panel:read');
 const direct=await consent(clientId,'panel:update:execute');
 const directList=await rpc(direct,'tools/list');
-assert.deepEqual(directList.json.result.tools.map(t=>t.name),['panel.update.execute']);
+assert.ok(directList.json.result.tools.some(t=>t.name==='panel.update.execute'));
+assert.deepEqual(directList.json.result.tools.map(t=>t.name),
+ defaultTools.json.result.tools.map(t=>t.name));
 const directResult=await rpc(direct,'tools/call',
  {name:'panel.update.execute',arguments:{targetSha:'b'.repeat(40)}});
 assert.equal(directResult.status,200);
@@ -165,7 +165,7 @@ const readStatus=await rpc(reader,'tools/call',
 assert.equal(readStatus.status,200);
 assert.equal(readStatus.json.result?.structuredContent?.lastResult?.id,receipt.id);
 assert.equal(readStatus.json.result?.structuredContent?.lastResult?.status,'failed');
-note('MCP OAuth scope → direct enqueue → systemd rejection → scoped status succeeded');
+note('Trusted MCP OAuth → globally permitted direct enqueue → systemd rejection → status succeeded');
 
 note('Concurrent OAuth clients must not double-enqueue one Broker target');
 const reg2=ok(await req('/oauth/register',{method:'POST',
@@ -233,9 +233,10 @@ ok(await req('/api/extensions/mcp/settings',{method:'PUT',body:{
  ...current,allowDirectUpdates:false
  },headers:{origin,'x-panel-csrf':csrf}}));
 const noTool=await rpc(direct,'tools/list');
-assert.deepEqual(noTool.json.result.tools,[]);
+assert.equal(noTool.json.result.tools.some(t=>t.name==='panel.update.execute'),false);
+assert.equal(noTool.json.result.tools.some(t=>t.name==='panel.update.status'),true);
 const grantList=ok(await req('/api/extensions/mcp/grants')).json.grants;
-const directGrant=grantList.find(g=>g.scopes.includes('panel:update:execute'));
+const directGrant=grantList.filter(g=>g.clientId===clientId).at(-1);
 assert.ok(directGrant);
 ok(await req('/api/extensions/mcp/grants/'+directGrant.id,{method:'DELETE',
  headers:{origin,'x-panel-csrf':csrf}}));
