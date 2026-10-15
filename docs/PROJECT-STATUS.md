@@ -1,3 +1,13 @@
+# Disk usage inside System Overview — 2026-10-16
+
+Owner requested consolidating disk usage into System Overview. Web navigation now shows storage.usage after the system information, memory and CPU Actions and removes the separate disk sidebar item when both system/storage modules are loaded. Standalone storage remains reachable if the system module is absent. Backend module ownership, Action ID, collector, presentation, permissions and MCP storage_usage remain unchanged.
+
+Navigation checks cover ordering, no duplicate item, unchanged input metadata and missing-system fallback. Browser acceptance checks the disk heading appears under System Overview and no standalone disk navigation remains, alongside existing five-width layout checks. CI and deployment pending at this snapshot.
+
+Current observed source/test deployment: `664f805325ffc6f2efc279f8f64e7c47f2b3b013`, durable MCP transaction `c358cbb04164d933e3e5cb429a38ccd4`, success at 2026-10-15T21:07:29Z, broker enabled and pending null, independently re-read this turn after owner reported the update. This supersedes earlier pending PR #82 deployment notes. Issue #54 records the final merge/CI/deploy outcome for this UI consolidation.
+
+Next module review: improve the System Overview's metric arrangement and refresh controls, then service browsing/search/filtering, then simplify maintenance/settings grouping. Keep routine test-VPS iteration minimal per AGENTS.md.
+
 ## Test VPS workflow preference — 2026-10-16
 
 - The owner explicitly states this Linux Panel host is a **test VPS**, not a production host; prefer direct minimal operations and avoid repetitive snapshot/hash/defensive-script demands. Record that as an enduring instruction in `AGENTS.md` and the fast path in `docs/UPDATER.md`. Continue protecting tokens and preserving rollback journals on actual errors.
