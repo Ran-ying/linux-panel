@@ -146,7 +146,7 @@ try {
       'private route found in browser cache');
     await context.setOffline(true);
     await page.reload();
-    assert.equal(await page.locator('#login-pass').count(),0,'offline page cannot retain live login/dashboard');
+    assert.equal(await page.locator('#login-pass').count(),0,'offline page cannot retain live login/dashboard: '+await page.locator('body').innerText());
     assert.ok((await page.locator('body').innerText()).length>20,'offline explanation missing');
     await context.setOffline(false);
     await page.reload();
