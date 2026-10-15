@@ -95,6 +95,25 @@ verify permissions, serial mutations, and the absence of leftover temp files.
 These tests do not simulate a guest hard shutdown, a write-cache lie, or
 filesystem corruption. The full VM power-cut release gate remains open.
 
+## Durable privileged Broker installation/migration boundary
+
+The operator-only fresh installer explicitly fsyncs the root-owned worker,
+Git remote source pin, update path/service, boot recovery service, fail-closed
+Web guard, preserved state/env backups and their containing directories
+*before* reporting installation success. The existing-Broker migration
+fsyncs independent root-only rollback copies before swapping any files,
+then fsyncs the new fixed worker, unit/recovery/guard and their directories
+after atomic replacement, before systemd daemon-reload.
+
+This prevents a just-installed but still dirty/empty systemd recovery unit
+from being treated as safely provisioned during an abrupt VM power loss.
+The QEMU live-worker guest uses the same fixed file/directory sync primitive
+to commit its test-only unit/enablement before the hard cut. That guest does
+not run the production installer itself; installation interruption remains
+an independently reviewable failure mode. These flushes cannot guarantee
+that storage hardware correctly honors fsync, or make the multi-file
+migration one atomic transaction.
+
 ## Transaction disk barriers (partial power-loss hardening)
 
 The immutable root Broker now writes the journal and status result through
