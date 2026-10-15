@@ -8,9 +8,9 @@
 - Web 会话使用随机令牌和 HttpOnly / SameSite Cookie，生产 HTTPS 使用 Secure。私有状态文件模式 0600。
 - 生产验证 Host、来源 Origin、CSRF；只信任回环来源的 Nginx 代理头。
 - API 绑定 `127.0.0.1`，对公网只开放 Nginx HTTPS；设置 CSP、HSTS 和其他响应头。
-- MCP 默认关闭，新客户端注册与每个 Action 白名单均默认关闭。
-- OAuth Authorization Code + PKCE S256，Token 绑定 MCP 资源，客户端 Scope 与用户权限和 Action 白名单取交集；撤销/密码变更导致旧授权失效。
-- MCP 提供只读系统信息。v0.5 可选的 `panel.update.request` **仅创建准确 Git SHA 的更新申请**，必须先授予独立 OAuth Scope 并由 Web 管理员重新输入密码确认；若管理员已启用 TOTP，还须输入新的动态验证码；实际更新由单独安装、root 固定脚本 + 非 root 构建账号执行，不开放任意 SSH Shell。
+- MCP 默认关闭。已登录客户端共享明确声明暴露的只读 Action 和全局允许的更新 Action；不再逐客户端、逐 Action 配置 Scope。新客户端注册、更新申请和直接更新由全局策略分别控制。
+- OAuth Authorization Code + PKCE S256，Token 绑定 MCP 资源；每次调用重查有效授权和全局策略。撤销整个客户端授权或修改密码使旧授权失效；新增全局允许的 Action 会对已有有效连接开放。
+- MCP 默认提供只读系统信息。可选 `panel.update.request` 仅创建准确 SHA 的更新申请，由 Web 管理员密码及可选 TOTP 确认；全局开启的 `panel.update.execute` 可由有效可信客户端直接提交，无需每次 Web 审批。两者均须单独安装并启用受限 Broker；只接受受信任 origin/main 的准确 SHA，以固定 root 脚本和非 root 构建账号完成，不开放任意 SSH Shell。
 - 更新 Broker 独占 root 所有目录保存锁和备份，更新状态文件只对 Web 服务账号可读；Git/npm 由独立 updater 用户执行，避免以 root 运行不可信依赖构建代码。
 - 登录及 OAuth 注册有应用层速率限制；公网还需要独立 Nginx 限流。
 
