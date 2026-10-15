@@ -164,6 +164,15 @@ real Git SHA transition, healthy HTTP, durable `success`, and reports the
 worker's `MemoryPeak` and code-volume free space before/after the build.
 The memory cap is removed immediately after the positive transaction.
 
+**Measured evidence (disposable Ubuntu 24.04, 2026-10-15):**
+[GitHub Actions 38697686455](https://github.com/Ran-ying/linux-panel/actions/runs/38697686455)
+completed `success` for both Web and MCP jobs. Kernel cgroup-v2
+`memory.peak` recorded **342,978,560 bytes** (Web) and
+**342,577,152 bytes** (MCP), about 327 MiB for each complete isolated
+updater transaction. Both full builds and HTTP restart succeeded under
+`MemoryMax=768M`. These are observed one-run figures, not a worst-case
+memory bound or production coexistence guarantee.
+
 **Important:** This is an actual cgroup restriction on a host with more
 memory than the user's roughly 962 MiB VPS; it is not proof of simultaneous
 coexistence with other services on that VPS, nor a check of production swap.
