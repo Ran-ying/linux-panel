@@ -336,6 +336,26 @@ systemctl set-property --runtime linux-panel-update.service MemoryMax=768M
 code_before_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
 free_before_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
 note "FULL npm ci/check/test/build with MemoryMax=768MiB (free code disk ${code_before_kib}KiB)"
+# A Type=oneshot worker's cgroup disappears immediately after it exits.
+# Sample the authoritative kernel cgroup-v2 memory.peak WHILE the real
+# npm transaction is active; systemctl show MemoryPeak afterward is [not set].
+peak_file="$(mktemp /tmp/lp-updater-memory-peak.XXXXXXXX)"
+(
+ max=0
+ while [[ ! -e "$peak_file.stop" ]];do
+   control_group="$(systemctl show linux-panel-update.service -p ControlGroup --value)"
+   if [[ "$control_group" == /system.slice/linux-panel-update.service &&
+         -r "/sys/fs/cgroup${control_group}/memory.peak" ]];then
+     sample="$(cat "/sys/fs/cgroup${control_group}/memory.peak")"
+     if [[ "$sample" =~ ^[0-9]+$ ]] && ((sample>max));then
+       max="$sample"
+       printf '%s\n' "$max" > "$peak_file"
+     fi
+   fi
+   sleep 0.1
+ done
+) &
+resource_sampler_pid=$!
 note 'Real HTTP Web approval + OAuth PKCE + MCP → systemd Broker'
 # Enabled only in throwaway GitHub-hosted runner.
 ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
@@ -348,11 +368,14 @@ STAGE_PASSWORD="$STAGE_PASSWORD" STAGE_POSITIVE_PATH="$STAGE_POSITIVE_PATH" \
  /opt/node24/bin/node "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
 [[ "$(head_now)" == "$TARGET" ]] || fail 'Positive HTTP update did not reach target SHA'
 grep -Fq '"status":"success"' "$RESULT" || fail 'Root Broker did not report success'
-peak_bytes="$(systemctl show linux-panel-update.service -p MemoryPeak --value)"
+touch "$peak_file.stop"
+wait "$resource_sampler_pid" || fail 'Cgroup resource sampler unexpectedly failed'
+peak_bytes="$(cat "$peak_file")"
+rm -f -- "$peak_file" "$peak_file.stop"
 code_after_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
-[[ "$peak_bytes" =~ ^[0-9]+$ && "$peak_bytes" -gt 0 && "$peak_bytes" -le 805306368 ]] ||
- fail "No valid peak resident/swap-cgroup sample from real npm transaction: $peak_bytes"
-note "Measured real-systemd full npm transaction peak MemoryPeak=${peak_bytes} bytes; code space before=${code_before_kib}KiB after=${code_after_kib}KiB"
+[[ "$peak_bytes" =~ ^[0-9]+$ && "$peak_bytes" -gt 0 ]] ||
+ fail "Kernel cgroup-v2 memory.peak was never sampled for the real npm transaction: $peak_bytes"
+note "Measured actual peak cgroup-v2 memory.peak=${peak_bytes} bytes; actual MemoryMax=805306368; code space before=${code_before_kib}KiB after=${code_after_kib}KiB"
 systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
