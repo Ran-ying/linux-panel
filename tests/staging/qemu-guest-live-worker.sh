@@ -89,8 +89,23 @@ install -o root -g root -m 0644 /home/stage/lp-guard.conf \
 systemctl daemon-reload
 systemctl enable linux-panel-update-recover.service
 systemctl start linux-panel.service
-curl -fsS --max-time 5 http://127.0.0.1:4188/api/auth/status |
- grep -q '"initialized":true'
+# systemctl start returns when the process is spawned, not when the HTTP
+# listener has completed startup. Do not race the readiness signal.
+web_ready=0
+for attempt in $(seq 1 40);do
+ if curl -fsS --max-time 2 http://127.0.0.1:4188/api/auth/status 2>/dev/null |
+    grep -q '"initialized":true';then
+  web_ready=1
+  break
+ fi
+ sleep 1
+done
+if ((web_ready==0));then
+ systemctl status linux-panel.service --no-pager --lines=25 || true
+ journalctl -u linux-panel.service --no-pager -n 50 || true
+ echo 'QEMU fixture Web did not reach healthy HTTP readiness' >&2
+ exit 1
+fi
 test ! -e /var/lib/linux-panel-update-root/active-transaction
 touch /run/lp-hold-npm
 printf 'id=%s\nsha=%s\n' cccccccccccccccccccccccccccccccc "$target" \
