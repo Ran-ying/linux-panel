@@ -1,3 +1,9 @@
+# Owner-approved v0.5 publication — 2026-10-15
+
+The owner explicitly said publication of v0.5 may proceed after reviewing the reported outstanding work. This supersedes earlier statements that final publication was blocked: the remaining physical-device, Debian, snapshot-restore and independent-review items are **known follow-up gaps, not passed tests**. Existing public historical-host metadata is retained; no Git history rewrite is authorized or performed.
+
+At this snapshot, main and last independently observed test-server deployment are `651dd945da8c27371fcec8891acb313b680821af`; restricted MCP transaction `52dc197d7e84b14abf7e80100b1fca3f` persisted success at `2026-10-15T15:55:11Z`, Broker enabled, pending null. Four staged MCP updates succeeded in this work. Release id 413997645 is still a draft at snapshot time. This PR updates release notes and the validation-gated workflow to publish **that existing release only**, targeting the exact merged release-documentation SHA. It does not expand runtime/root privileges. Check Issue #54 for independently verified publication/tag/CI and subsequent test-server MCP results; do not infer publication merely from merging this PR.
+
 # Stage 4 release preparation — 2026-10-15
 
 PR #76 prepares `docs/RELEASE-V0.5.md` and a validation-gated GitHub workflow that creates **a draft only**. It never publishes a stable release or modifies an existing release. Physical-device checks, Debian full install, owner snapshot recovery, historical-host metadata decision and independent review remain open; detailed reasons are in PUBLIC-RELEASE.md and the release notes. Owner requested stages 1–4 with test-server MCP updates after each stage; implementation and release preparation proceed, but missing real-world evidence is not fabricated.
