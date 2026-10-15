@@ -154,6 +154,22 @@ It never runs on production VPSs and does not prove the actual 962 MiB
 server's concurrent resource use, swap headroom or ENOSPC rollback.
 Those release gates remain separate and open.
 
+## Real npm transaction with a 768 MiB cgroup cap
+
+On the disposable Ubuntu 24.04 Web/MCP positive-update matrix, the entire
+fixed root Broker's **actual** `npm ci`, MCP dependencies, `npm run check`,
+`npm test`, `npm run build:web`, Git and Web restart are now run with
+`MemoryMax=768M` on that worker's systemd cgroup. The harness requires the
+real Git SHA transition, healthy HTTP, durable `success`, and reports the
+worker's `MemoryPeak` and code-volume free space before/after the build.
+The memory cap is removed immediately after the positive transaction.
+
+**Important:** This is an actual cgroup restriction on a host with more
+memory than the user's roughly 962 MiB VPS; it is not proof of simultaneous
+coexistence with other services on that VPS, nor a check of production swap.
+If the full build exceeds 768 MiB, the runner must fail rather than hiding
+an OOM. Production requires a separate swap and free-resource preflight.
+
 ## Resource gate — conservative minimums, not a 3 GiB block
 
 The root worker refuses in-place npm deployment **before stopping Web** only
