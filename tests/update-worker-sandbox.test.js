@@ -99,7 +99,7 @@ function prepare(){
   ['"$(stat -c %u:%a "$backup")" == 0:600','"$(stat -c %a "$backup")" == 600'],
   ['export PATH=/usr/sbin:/usr/bin:/sbin:/bin','export PATH='+JSON.stringify(bin)+':/usr/sbin:/usr/bin:/sbin:/bin'],
   ['as_updater(){ /usr/bin/setpriv --reuid="$USER" --regid="$USER" --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i HOME=/var/lib/linux-panel-updater USER="$USER" LOGNAME="$USER" GIT_TERMINAL_PROMPT=0 PATH=/opt/node24/bin:/opt/linux-panel/runtime:/usr/local/bin:/usr/bin:/bin "$@"; }','as_updater(){ "$@"; }'],
-  ['web_can_read(){\\n  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$1"\\n}','web_can_read(){ /usr/bin/test -r "$1"; }'],
+  ['web_can_read(){\n  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$1"\n}','web_can_read(){ /usr/bin/test -r "$1"; }'],
   ['"$(stat -c %U "$ROOT")" == "$USER"','-O "$ROOT"'],
   ['"$(stat -c %U "$path")" != "$USER"','! -O "$path"'],
   ['"$(stat -c %U "$parent")" != "$USER"','! -O "$parent"'],
