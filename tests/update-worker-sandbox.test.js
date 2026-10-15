@@ -84,7 +84,8 @@ function prepare(){
    writeFileSync(join(state,'update-trigger'),'id='+id+'\nsha='+sha+'\n');
    const process=spawnSync('bash',[script],{encoding:'utf8',timeout:20000,env:{
     ...globalThis.process.env,TEST_LOG:log,FAIL_BUILD:build?'1':'0',
-    FAIL_HEALTH:health?'1':'0',FAIL_HEALTH_ALL:healthEverywhere?'1':'0',\n     TEST_ROOT:root,TEST_TARGET:target,FAIL_ROLLBACK:rollback?'1':'0',
+    FAIL_HEALTH:health?'1':'0',FAIL_HEALTH_ALL:healthEverywhere?'1':'0',
+     TEST_ROOT:root,TEST_TARGET:target,FAIL_ROLLBACK:rollback?'1':'0',
     TEST_FREE_KIB:lowDisk?'900000':'4000000'
    }});
    const result=JSON.parse(readFileSync(join(status,'result.json'),'utf8'));
