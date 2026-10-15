@@ -266,6 +266,63 @@ wait_healthy || fail 'OOM recovery did not restore Web'
   fail 'OOM recovery left unfinished root transaction'
 note 'Real cgroup OOM during npm recovered old revision and Web'
 
+note 'Case 5: real ENOSPC in isolated status tmpfs retains recovery journal'
+# The only full filesystem is a temporary status-only mount in a disposable
+# GitHub-hosted runner. No root/opt/VPS filesystem is filled or modified.
+status_dir=/var/lib/linux-panel-update-status
+mountpoint -q "$status_dir" && fail 'Status already mounted unexpectedly'
+mount -t tmpfs -o size=1m,mode=0750 tmpfs "$status_dir" ||
+ fail 'Cannot isolate the status mount; refuse disk-fill test'
+# Force real kernel ENOSPC, not an injected shell return code. Never fill /
+# or any application/data filesystem used by another service.
+if dd if=/dev/zero of="$status_dir/.enospc-only" bs=4096 count=512 status=none 2>/dev/null;then
+ fail 'Status-only tmpfs unexpectedly accepted twice its declared capacity'
+fi
+[[ "$(df -Pk "$status_dir" | awk 'NR==2{print $4}')" == 0 ]] ||
+ fail 'Status tmpfs did not reach actual ENOSPC'
+# Existing target remains trusted. The injected npm-test failure triggers
+# rollback, but its final status cannot be persisted while tmpfs is full.
+touch /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE
+chown linuxpanel-updater:linuxpanel-updater \
+ /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE
+enospc_id=88888888888888888888888888888888
+queue "$enospc_id" "$TARGET"
+enospc_terminal=0
+for i in $(seq 1 450);do
+  state_now="$(systemctl show linux-panel-update.service -p ActiveState --value)"
+  if [[ "$state_now" == failed || "$state_now" == inactive ]];then
+    # Do not mistake a pre-start inactive state for completion: require
+    # the durable transaction first and the exact worker job to finish.
+    if [[ -f "$transaction" &&
+          -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-$enospc_id" ]];then
+      enospc_terminal=1
+      break
+    fi
+  fi
+  sleep 0.2
+done
+((enospc_terminal)) ||
+ fail 'ENOSPC case failed to reach terminal journaled worker state'
+[[ "$(head_now)" == "$OLD" ]] ||
+ fail 'ENOSPC rollback changed expected original Git HEAD'
+[[ -f "$transaction" && -f /var/lib/linux-panel/update-processing ]] ||
+ fail 'ENOSPC incorrectly discarded active transaction'
+! grep -Fq '"status":"success"' "$status_dir/result.json" 2>/dev/null ||
+ fail 'ENOSPC produced a false durable success result'
+# Recover only after freeing the dedicated status filesystem. This unmasks
+# the original status directory (normal root-owned persistence path).
+rm -f -- "$status_dir/.enospc-only"
+umount "$status_dir"
+systemctl reset-failed linux-panel-update.service || true
+systemctl start linux-panel-update-recover.service ||
+ fail 'Boot recovery could not settle once status space returned'
+wait_result "$enospc_id" rolled_back
+[[ "$(head_now)" == "$OLD" ]] || fail 'ENOSPC recovery changed original HEAD'
+wait_healthy || fail 'ENOSPC recovery left Web unavailable'
+[[ ! -e "$transaction" && ! -e /var/lib/linux-panel/update-processing ]] ||
+ fail 'ENOSPC recovery left root journal or processing marker'
+note 'Actual status-filesystem ENOSPC retained journal, then independently recovered'
+
 note 'Case 4: valid Web or MCP update after real crash recovery'
 [[ "${STAGE_POSITIVE_PATH:-}" == web || "${STAGE_POSITIVE_PATH:-}" == mcp ]] ||
   fail 'Positive path must be web or mcp'
