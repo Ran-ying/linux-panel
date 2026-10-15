@@ -56,18 +56,19 @@ try {
         const side=sidebar.getBoundingClientRect(), box=content.getBoundingClientRect();
         const nodes=[...content.querySelectorAll(':scope > .module-intro,:scope > .action-card,:scope > .settings-section,:scope > .action-flow > .action-card')];
         const rects=nodes.map(n=>n.getBoundingClientRect());
-        return {width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
+        return {centerError:Math.abs(box.right+side.left-innerWidth),width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
           radius:getComputedStyle(sidebar).borderTopLeftRadius,
           cards:nodes.map(n=>{const s=getComputedStyle(n);return {radius:s.borderTopLeftRadius,
             borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};}),
           gaps:rects.slice(1).map((r,i)=>r.top-rects[i].bottom)};
       });
-      assert.ok(frames.width<=1100.5,'content must stop growing at 1100px');
-      assert.ok(Math.abs(frames.gutter-16)<1,width+' sidebar-to-content gap must be 16px');
+      assert.ok(frames.width<=914.5,'content must fit the narrower 1200px overall shell');
+      assert.ok(frames.centerError<1,width+' sidebar and content must be centered together');
+      assert.ok(Math.abs(frames.gutter-24)<1,width+' sidebar-to-content gap must be 24px');
       assert.ok(frames.cards.length>0,'module title/card frame missing');
       assert.ok(frames.cards.every(c=>c.radius===frames.radius && c.borders.every(b=>b==='1px')),
         width+' '+name+' cards must match the rounded sidebar frame');
-      assert.ok(frames.gaps.every(g=>Math.abs(g-16)<1),width+' '+name+' card gaps must match sidebar gap');
+      assert.ok(frames.gaps.every(g=>Math.abs(g-24)<1),width+' '+name+' card gaps must match sidebar gap');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
     }
     // Sidebar grouping, account placement and appearance controls remain intact.
@@ -150,8 +151,9 @@ try {
         overflowing:region.scrollHeight>region.clientHeight,accountBottom:account.bottom};
     });
     assert.ok(layout.radius>0,'sidebar must keep rounded outer frame');
-    assert.ok(Math.abs(layout.left-layout.top)<1,'top and left gutters must match');
-    assert.ok(layout.bottom<=layout.height-layout.left+1,'sidebar must preserve bottom gutter');
+    assert.ok(Math.abs(layout.top-16)<1,'sidebar must preserve its top gutter');
+    assert.ok(Math.abs(layout.left-(Math.max(0,(viewport.width-1200)/2)+16))<1,'sidebar must follow the centered shell');
+    assert.ok(layout.bottom<=layout.height-16+1,'sidebar must preserve bottom gutter');
     assert.ok(layout.accountBottom<=layout.bottom,'account controls must remain inside sidebar');
     assert.ok(layout.overflowing,'many modules must overflow the independent module region');
     await page.locator('.module-nav button').last().scrollIntoViewIfNeeded();
