@@ -1,3 +1,15 @@
+# Action information tabs and editable terminal commands — 2026-10-16
+
+Owner specified title, an Information section with Description/Commands tabs initially hidden, and an Operation result section with Refresh immediately before Visual/JSON. Description lazily renders short/detail prose. Commands lazily loads a non-JSON key/value table, with fixed output keys, editable command values and one bottom Save button. Save persists configuration; subsequent refresh really executes it.
+
+All five built-in Linux business read Actions now define terminal defaults/decoders: system.info has 9 per-field commands; memory reads /proc/meminfo; CPU samples /proc/stat and reads processor metadata; disk uses stat -f; services uses systemctl. Web and MCP share the ActionEngine command provider and saved state. Other platforms retain native collectors without command editing. Core output contracts remain validated. Selected CPU sample interval reports measured command duration.
+
+This is an owner-authorized architecture change: custom shell commands execute only under a non-root panel service identity, with 5s/128KiB limits, never through the root Broker or sudo. UID 0 execution is refused. The read label is intent, not a sandbox for arbitrary admin-written shell. Web config writes require existing login/permission/Origin/CSRF controls and audit only Action ID. AGENTS/security documentation records this boundary.
+
+Local targeted tests: 11 passed, 1 real-Linux execution test skipped because this environment is root; root refusal itself passed. Vue build passed. CI will verify real command defaults, save/preview/execute persistence, API controls and browser edits that change the actual hostname result then restore defaults. CI/screenshot review/deployment pending.
+
+Base main and last confirmed test deployment: `1a8e6b7649efcc86a5ed0a43d3954238923ffaf4`, PR #91; durable MCP transaction `72d38930f76c9adb9ace12009aee380a`, success at 2026-10-15T22:12:11Z, panel active/running. Issue #54 records final evidence.
+
 # One execution disclosure with concrete collector code — 2026-10-16
 
 Owner rejected repeated prose and vague “etc. APIs” previews. Read Action cards now have a single Execution content disclosure, replacing the old description/explanation disclosure, separate preview button and repeated preview heading/note/JSON UI. Existing write-operation notices remain visible. Opening the disclosure fetches preview independently of data loading and retains current results.
