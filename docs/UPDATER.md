@@ -2,6 +2,22 @@
 
 The tool is intentionally **not** an arbitrary command executor.
 
+## Fast operator workflow for the owner's disposable test VPS (2026-10-16)
+
+**Working agreement:** this is an owner-controlled test machine; prioritize quick fixes and avoid piling on operator snapshot requests, invented/duplicate hashes, lengthy one-off migration scripts or repeated confirmations. A small, directly executable command and a single real service/transaction result are preferred. Retain the actual Broker isolation, authorization and rollback mechanisms; this exception is **not** permission to skip safety controls for a production or shared host.
+
+The 2026-10-15 502 was caused by old immutable Broker handling of tracked backend source permissions. PR #83 fixed the worker; PR #84 added new-install read/import checks and negative tests. The owner reported `BROKER_UPDATED` after extracting the tested worker blob from already-fetched Git objects directly to the root-owned installed worker, with the Web source still on `eaa5ba0`. That user-reported result is evidence of script completion, not yet proof of a final application update.
+
+After an operator has **already** replaced the worker, frozen the updater gate, and confirmed there are no unresolved transaction markers, the shortest supported activation path is the existing installer’s activation mode (do not reinstall the Broker):
+
+```bash
+sudo bash /opt/linux-panel/scripts/install-update-broker.sh --activate --ack-acceptance
+```
+
+Activation does not itself update application code. The installer may warn that the newly installed immutable root worker differs from the old Git checkout's `scripts/update-worker.sh`; this mismatch is expected until the application is deployed. Once Web is active and the Broker is enabled, request exactly one authorized fast-forward update to the reviewed trusted `origin/main` SHA through the normal MCP/Web update Action. Check the **persisted result** and Web HTTP health once. An accepted `queued` response is not success. If it fails, inspect the newest Web/Broker error instead of repeatedly retrying.
+
+For an ordinary test-VM edit, do not invoke provider snapshots, extra SHA256 comparisons, or custom all-in-one migration harnesses by default. Those are optional diagnostics if a real mismatch or filesystem fault is observed. Do not remove an unresolved root recovery journal or weaken systemd sandboxing.
+
 ## Roles
 
 - `panel.update.request` 是标准写入（申请型）**Action**，Web 模块页面与 ChatGPT/MCP 均通过同一 `ActionEngine` 调用；`panel.update.status` 是只读 Action，也可在 Web 面板查看。
