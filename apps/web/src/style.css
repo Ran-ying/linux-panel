@@ -453,3 +453,6 @@ table{min-width:500px}
     border-top:1px solid var(--border-panel);border-radius:0;background:var(--panel-bg);
     color:var(--text-secondary);cursor:pointer}
 }
+
+/* Three explicit preferences: light, automatic/system, dark. */
+.theme-capsule .theme-auto{font-size:.72rem;font-weight:650;letter-spacing:-.02em}
