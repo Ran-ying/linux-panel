@@ -327,6 +327,15 @@ note 'Case 4: valid Web or MCP update after real crash recovery'
 [[ "${STAGE_POSITIVE_PATH:-}" == web || "${STAGE_POSITIVE_PATH:-}" == mcp ]] ||
   fail 'Positive path must be web or mcp'
 [[ "$(head_now)" == "$OLD" ]] || fail 'Positive HTTP test requires old revision'
+# Resource acceptance: constrain the COMPLETE real npm ci/check/test/build
+# transaction, not only a synthetic Python allocator. This test-only cgroup
+# cap is never set on an actual VPS. No first-run package cache assumptions.
+systemctl set-property --runtime linux-panel-update.service MemoryMax=768M
+[[ "$(systemctl show linux-panel-update.service -p MemoryMax --value)" == 805306368 ]] ||
+ fail 'Cannot apply real 768MiB root-worker cgroup cap'
+code_before_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
+free_before_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+note "FULL npm ci/check/test/build with MemoryMax=768MiB (free code disk ${code_before_kib}KiB)"
 note 'Real HTTP Web approval + OAuth PKCE + MCP → systemd Broker'
 # Enabled only in throwaway GitHub-hosted runner.
 ! grep -q '^PANEL_UPDATER_ENABLED=1$' /etc/linux-panel/panel.env ||
@@ -339,6 +348,12 @@ STAGE_PASSWORD="$STAGE_PASSWORD" STAGE_POSITIVE_PATH="$STAGE_POSITIVE_PATH" \
  /opt/node24/bin/node "$GITHUB_WORKSPACE/tests/staging/web-mcp-broker.mjs"
 [[ "$(head_now)" == "$TARGET" ]] || fail 'Positive HTTP update did not reach target SHA'
 grep -Fq '"status":"success"' "$RESULT" || fail 'Root Broker did not report success'
+peak_bytes="$(systemctl show linux-panel-update.service -p MemoryPeak --value)"
+code_after_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
+[[ "$peak_bytes" =~ ^[0-9]+$ && "$peak_bytes" -gt 0 && "$peak_bytes" -le 805306368 ]] ||
+ fail "No valid peak resident/swap-cgroup sample from real npm transaction: $peak_bytes"
+note "Measured real-systemd full npm transaction peak MemoryPeak=${peak_bytes} bytes; code space before=${code_before_kib}KiB after=${code_after_kib}KiB"
+systemctl set-property --runtime linux-panel-update.service MemoryMax=infinity
 wait_healthy || fail 'Updated Web unhealthy'
 [[ ! -e /var/lib/linux-panel/update-trigger &&
    ! -e /var/lib/linux-panel/update-processing ]] || fail 'Stale marker'
