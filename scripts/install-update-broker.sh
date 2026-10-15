@@ -329,9 +329,12 @@ if [[ "$MODE" == apply ]];then
   chgrp -- linuxpanel "$f"
   chmod -- g+r,g-w,o-w "$f"
  done
- [[ "$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" -C "$ROOT" rev-parse HEAD)" ==
-    "$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD)" ]] ||
+ web_head="$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" -C "$ROOT" rev-parse HEAD)" ||
     die 'Web cannot resolve Git HEAD after broker installation'
+ updater_head="$(runuser -u linuxpanel-updater -- git -C "$ROOT" rev-parse HEAD)" ||
+    die 'Updater cannot resolve Git HEAD after broker installation'
+ [[ "$web_head" == "$updater_head" ]] ||
+    die 'Web and updater Git HEAD differ after broker installation'
  sync_installed_paths \
   "file:$BACKUP_DIR/panel-state.before-broker.json" \
   "file:$BACKUP_DIR/panel.env.before-broker" \
