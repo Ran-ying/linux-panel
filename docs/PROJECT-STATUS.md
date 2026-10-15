@@ -1,6 +1,6 @@
 # Three-way appearance capsule — 2026-10-16
 
-Owner requested replacing the Follow system checkbox with Auto between sun and moon. Owner also requested inset rounded mobile tabs: the tab group now has a 10px rounded frame, rounded buttons, 12px side gutters and 8/12px vertical margins. Collapsed-height measurement includes those margins, preserving the normal content gap.
+Owner requested replacing the Follow system checkbox with Auto between sun and moon. Owner also requested inset rounded mobile tabs: the tab group now has a 10px rounded frame, rounded buttons, 12px side gutters and 8/12px vertical margins. Expanded module lists also have 12px side gutters, rounded rows and 8px row gaps. Collapsed-height measurement includes those margins, preserving the normal content gap.
 
 Shared login/sidebar appearance control now offers Light → Auto → Dark as three always-available buttons; pressed state reflects the stored preference, with Auto following OS changes through the existing theme controller. No separate checkbox or disabled manual buttons remain. Browser coverage verifies ordering, switching, preference persistence and OS-follow behavior at five widths, alongside fixed phone header/short-screen navigation checks.
 
