@@ -195,10 +195,10 @@ try {
     if(viewport.width<=730) await page.waitForFunction(()=>
       Math.abs(document.querySelector('.sidebar-slot').getBoundingClientRect().height-
         document.querySelector('.module-sidebar').getBoundingClientRect().height)<1);
-    const contentTop=(await page.locator('.module-content').boundingBox()).y;
+    const contentTop=await page.locator('.module-content').evaluate(n=>n.getBoundingClientRect().top+scrollY);
     if(viewport.width<=730){
       await page.getByRole('tab',{name:'功能模块',exact:true}).click();
-      const sameTop=(await page.locator('.module-content').boundingBox()).y;
+      const sameTop=await page.locator('.module-content').evaluate(n=>n.getBoundingClientRect().top+scrollY);
       assert.ok(Math.abs(sameTop-contentTop)<1,'expanded navigation must overlay without moving content');
       const placement=await page.locator('.module-sidebar').evaluate(sidebar=>{
         const theme=sidebar.querySelector('.appearance-control').getBoundingClientRect();
@@ -236,7 +236,7 @@ try {
       assert.equal(await page.getByRole('button',{name:'退出登录',exact:true}).isVisible(),true);
       await page.getByRole('button',{name:'收起',exact:true}).click();
       assert.equal(await page.locator('.sidebar-navigation').isVisible(),false);
-      assert.ok(Math.abs((await page.locator('.module-content').boundingBox()).y-contentTop)<1,'collapse must preserve content position');
+      assert.ok(Math.abs(await page.locator('.module-content').evaluate(n=>n.getBoundingClientRect().top+scrollY)-contentTop)<1,'collapse must preserve content position');
       await page.screenshot({path:join(output,'sidebar-collapsed-'+viewport.width+'-'+viewport.height+'.png')});
     }
     await context.close();
