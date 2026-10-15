@@ -52,6 +52,34 @@ negative authorization and Broker migration tests. This does **not** prove
 physical power loss, low-resource exhaustion, shared-production behavior,
 or a user's actual ChatGPT connector session.
 
+## QEMU guest hard-power smoke (separate, deliberately partial gate)
+
+The disposable `qemu-powercut.yml` workflow boots a real Ubuntu 24.04
+QEMU guest from a checksum-verified official cloud image, creates fresh
+one-run-only SSH credentials and a writable guest disk, and **kills the QEMU
+process without asking the guest kernel/systemd to shut down**. It reboots
+the exact same guest disk twice. The tested boundaries are:
+
+1. After the real, checked-out non-root `StateStore.mutate()` commits a
+   private JSON update and after the immutable Broker's checked-out
+   `durable_sync()` function flushes an illustrative root-only journal
+   and processing marker. After abrupt VM termination/reboot, the test
+   requires the correct private JSON, journal, processing metadata and
+   root-only journal permissions.
+2. After the same fixed `durable_sync()` helper commits an illustrative
+   final success-result file and flushes deletion of the processing and
+   journal markers. The guest is hard-killed again and rebooted; the final
+   JSON result must still exist and neither deleted marker may reappear.
+
+These are **actual guest-wide virtual power cuts**, unlike process SIGKILL.
+The workflow runs only on disposable GitHub-hosted runners and never uses
+production private state. It covers persistence at two file-operation
+boundaries, **not** the complete systemd root Broker, Git/npm build, active
+rollback, or automated boot recovery. The broader hard-shutdown release gate
+remains OPEN until those transitions are exercised under an actual VM
+shutdown with before/after integrity and operator evidence. Do not mark
+production-safe based on the smoke run alone.
+
 ## Private-state persistence boundary
 
 The non-root Node.js `StateStore.mutate()` already fsyncs a new 0600 JSON
