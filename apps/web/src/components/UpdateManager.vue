@@ -135,7 +135,6 @@ onMounted(refresh);
       <h3>受控面板更新</h3>
       <button type="button" :disabled="busy || checking" @click="refresh">刷新状态</button>
     </div>
-    <p class="muted small">平台级维护功能，不依赖 MCP 是否启用。所有检查和申请经由统一 ActionEngine；只有 Web 管理员可独立审批。TOTP 完全可选。</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="message" role="status" class="notice success-notice">{{ message }}</p>
     <p v-if="!enabled" class="notice">受限更新 Broker 尚未启用。仍可只读检查 Git 更新，但不能申请或执行部署；不可绕过旧版 systemd 隔离要求。</p>
