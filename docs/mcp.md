@@ -21,6 +21,14 @@ Web 设置开启 MCP、按需开启客户端注册；OAuth Authorization Code + 
 
 平台还可能提供 panel.update.status。panel.update.request 只创建申请，需 Web 密码/可选 TOTP 确认；panel.update.execute 需全局直接执行策略和已激活 Broker，可直接排队可信 origin/main SHA，无需重复 Web 审批。实际清单以 live tools/list 为准。
 
+## 工具清单与客户端缓存
+
+模块在进程启动时加载。安装、删除或修改 Action 后，需要通过正常更新/重启让注册表生效；下一次 tools/list 会按当前注册表与全局策略生成清单。已有有效 OAuth grant 不需要因为新增工具重新授权，退役工具也不会保留可调用别名。
+
+当前适配器使用按请求创建的 MCP server，没有跨请求主动广播 notifications/tools/list_changed；不能保证客户端自动发现更新。客户端缓存的工具名与服务器实时清单是两回事。升级后在客户端刷新工具清单；客户端没有刷新入口时，重新连接并再次发现工具。仅刷新面板网页不等于刷新 MCP 工具缓存，也不应通过重新部署或放宽权限来处理旧清单。
+
+回归测试 tests/mcp-inputs.test.js 模拟模块升级及服务重启，复用原 Bearer/grant，验证新工具及必填参数、旧工具消失/不可调用、旧授权撤销继续生效。它证明服务端协议行为，不代表某个第三方客户端已刷新缓存。
+
 ## 更新和排错
 
 用完整 SHA 调用直接更新；queued 只代表入队，之后检查 lastResult.status/sha、pending 和服务健康。重启窗口可短暂返回 Internal error，恢复后重查，不重复排队。授权测试 VPS 使用最少必要检查，不默认要求快照/额外哈希流程。

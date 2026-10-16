@@ -63,3 +63,73 @@ test('MCP advertises original nested input schema and forwards validated argumen
   assert.equal(web.statusCode,200);assert.deepEqual(web.json().result,input);
   assert.equal((await app.inject({method:'POST',url:'/api/actions/fixture.echo/execute',headers,payload:{input:{...input,extra:true}}})).statusCode,400);
 });
+
+
+test('fresh tools/list after module upgrade uses the new registry with the existing OAuth token',async t=>{
+  const folder=await mkdtemp(join(tmpdir(),'panel-mcp-upgrade-'));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const versions=[];
+  for(const [version,name] of [['before','old'],['after','new']]){
+    const modulesPath=join(folder,version,'modules'),modulePath=join(modulesPath,'fixture');
+    await mkdir(modulePath,{recursive:true});
+    await writeFile(join(folder,version,'package.json'),'{"type":"module"}');
+    await writeFile(join(modulePath,'manifest.json'),JSON.stringify({
+      id:'fixture',name:'Fixture',version:version==='before'?'0.1.0':'0.2.0',entry:'./index.js',dependencies:[]
+    }));
+    const schema={type:'object',additionalProperties:false,required:['message'],
+      properties:{message:{type:'string',minLength:1}}};
+    await writeFile(join(modulePath,'index.js'),
+      "export function setup({actions,moduleId}){actions.register(moduleId,{id:'fixture."+name+
+      "',title:'Fixture',kind:'read',permission:'fixture:"+name+
+      "',exposure:{web:true,mcp:true},inputSchema:"+JSON.stringify(schema)+
+      ",outputSchema:"+JSON.stringify(schema)+",execute:async input=>input});}");
+    versions.push(modulesPath);
+  }
+  const statePath=join(folder,'state.json'),store=new StateStore(statePath),auth=new AuthService(store);
+  const user=await auth.bootstrap('admin','fixture long password for upgrade testing');
+  const registry=new ActionRegistry();await new ModuleManager(versions[0],registry).loadAll();
+  await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true},user.id);
+  const resource='http://127.0.0.1:4188/mcp',oauth=new OAuthStore(store,registry,resource);
+  const client=await oauth.register({client_name:'Upgrade fixture',redirect_uris:['https://client.example/cb']});
+  const grant=await oauth.createGrant(client.id,user.id,['fixture:old'],resource),access=secret();
+  await oauth.saveToken({accessToken:access,accessTokenExpiresAt:new Date(Date.now()+3600000),
+    refreshToken:secret(),refreshTokenExpiresAt:new Date(Date.now()+7200000),scope:['fixture:old']},
+    await oauth.client(client.id),{id:user.id,grantId:grant.id,resource});
+  let app;
+  t.after(async()=>{if(app)await app.close();});
+  const start=async modulesPath=>{
+    app=await createApp({root:process.cwd(),statePath,modulesPath,production:false});
+    await app.listen({host:'127.0.0.1',port:0});
+  };
+  const rpc=async request=>{
+    const response=await fetch('http://127.0.0.1:'+app.server.address().port+'/mcp',{
+      method:'POST',signal:AbortSignal.timeout(8000),
+      headers:{'content-type':'application/json',accept:'application/json, text/event-stream',authorization:'Bearer '+access},
+      body:JSON.stringify({jsonrpc:'2.0',id:1,...request})
+    });
+    return {status:response.status,data:parseRPC(await response.text())};
+  };
+  await start(versions[0]);
+  const before=await rpc({method:'tools/list'});
+  assert.equal(before.status,200);
+  assert.ok(before.data.result.tools.some(tool=>tool.name==='fixture.old'));
+  await app.close();app=null;
+  // Simulate an installed module upgrade and process restart, without reauthorizing.
+  await start(versions[1]);
+  const after=await rpc({method:'tools/list'});
+  assert.equal(after.status,200);
+  const tools=after.data.result.tools;
+  assert.ok(!tools.some(tool=>tool.name==='fixture.old'),'retired Action must disappear');
+  const added=tools.find(tool=>tool.name==='fixture.new');
+  assert.ok(added,'new exposure must be visible to the existing narrow grant');
+  assert.deepEqual(added.inputSchema.required,['message']);
+  const input={message:'upgrade-input-ok'};
+  const result=await rpc({method:'tools/call',params:{name:'fixture.new',arguments:input}});
+  assert.deepEqual(result.data.result.structuredContent,input);
+  for(const params of [{name:'fixture.old',arguments:input},{name:'fixture.new',arguments:{}}]){
+    const denied=await rpc({method:'tools/call',params});
+    assert.ok(denied.data.error || denied.data.result?.isError);
+  }
+  await oauth.revokeGrant(grant.id,user.id);
+  assert.equal((await rpc({method:'tools/list'})).status,401);
+});
