@@ -48,6 +48,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('nginx.repairExecutor').embedded,true);
   assert.equal(registry.get('nginx.repairExecutor').exposure.mcp,false);
   assert.equal(configured.get('cron.list').renderer,'scheduled-tasks');
+  assert.equal(configured.get('cron.list').chrome,'flat');
   assert.equal(configured.get('cron.list').operations.save,'cron.save');
   assert.equal(registry.get('cron.save').exposure.mcp,false);
   assert.equal(configured.get('files.list').renderer,'files');
