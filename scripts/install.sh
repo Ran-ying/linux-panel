@@ -143,14 +143,18 @@ log 'Installing dependencies and running tests/builds (resource-intensive)'
 "$NPM_BIN" ci --no-audit --no-fund
 "$NPM_BIN" install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock
 "$NPM_BIN" run check
-"$NPM_BIN" test
-"$NPM_BIN" run build:web
 if ! id linuxpanel >/dev/null 2>&1; then
   useradd --system --home-dir /var/lib/linux-panel --shell /usr/sbin/nologin linuxpanel
 fi
 runuser -u linuxpanel -- "$NODE_BIN" -v >/dev/null ||
   die 'Selected Node binary cannot run as linuxpanel'
 install -d -o linuxpanel -g linuxpanel -m 0700 /var/lib/linux-panel
+# Application collectors and terminals intentionally refuse root. Exercise the
+# actual ordinary identity, with read-only access to the installed source/deps.
+chown -R root:linuxpanel /opt/linux-panel
+chmod -R g+rX,g-w,o-w /opt/linux-panel
+runuser -u linuxpanel -- env "PATH=$(dirname "$NODE_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "$NPM_BIN" test
+"$NPM_BIN" run build:web
 install -d -o root -g root -m 0755 /etc/linux-panel
 printf 'PANEL_LISTEN_HOST=%s\nPANEL_LISTEN_PORT=%s\nPANEL_DATA_DIR=/var/lib/linux-panel\n' \
   "$LP_HOST" "$LP_PORT" > /etc/linux-panel/panel.env
@@ -169,17 +173,6 @@ runuser -u linuxpanel -- test -r /opt/linux-panel/node_modules/fastify/package.j
   die 'Web account cannot read Fastify runtime dependencies after install'
 runuser -u linuxpanel -- test -r /opt/linux-panel/apps/web/dist/index.html ||
   die 'Web account cannot read built frontend assets after install'
-# The backend imports Git-tracked package.json and create-app.js at process
-# startup. Test their actual service-UID readability, not just server.js:
-# a 0600 checkout file otherwise passes npm tests as root then produces 502.
-for code in package.json apps/api/src/server.js apps/api/src/create-app.js; do
-  runuser -u linuxpanel -- test -r "/opt/linux-panel/$code" ||
-    die "Web account cannot read backend runtime file after install: $code"
-  ! runuser -u linuxpanel -- test -w "/opt/linux-panel/$code" ||
-    die "Web account must not write backend runtime file: $code"
-done
-runuser -u linuxpanel -- "$NODE_BIN" --input-type=module -e "await import('./apps/api/src/create-app.js')" ||
-  die 'Web account cannot import backend runtime modules after install'
 runuser -u linuxpanel -- "$NODE_BIN" --input-type=module -e "await import('fastify'); await import('@fastify/static');" ||
   die 'Web account cannot import production Node dependencies after install'
 log 'Initialize admin credentials interactively (only once)'
