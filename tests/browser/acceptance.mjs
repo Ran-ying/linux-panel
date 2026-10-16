@@ -212,36 +212,36 @@ try {
       }
       if(name.trim()==='定时任务' && [390,1280].includes(width)){
         const schedule=page.locator('.scheduled-tasks');
-        const managedTab=schedule.getByRole('tab',{name:'Linux Panel 托管的定时任务'});
-        const systemTab=schedule.getByRole('tab',{name:'系统现有定时任务'});
-        await managedTab.waitFor();
-        assert.equal(await managedTab.getAttribute('aria-selected'),'true');
-        assert.equal(await systemTab.getAttribute('aria-selected'),'false');
-        assert.equal(await schedule.getByRole('tab').count(),2,
-          'one navigation module, two internal sections');
-        assert.equal(await schedule.locator('.system-task-table').count(),0,
-          'system section is not visible in the managed tab');
-        assert.equal(await schedule.getByRole('button',{name:'新建任务'}).count(),1);
-        // Existing managed Cron task create/toggle/delete flow stays in its section.
-        await schedule.getByRole('button',{name:'新建任务'}).click();
-        const form=page.getByRole('dialog',{name:'新建定时任务'});
-        await form.getByRole('textbox',{name:'任务名称'}).fill('Fixture nightly');
-        await form.getByRole('textbox',{name:'Cron 表达式'}).fill('0 2 * * *');
-        await form.getByRole('textbox',{name:'执行命令'}).fill('/usr/bin/true');
-        await form.getByRole('button',{name:'保存'}).click();
-        await page.getByText('Fixture nightly').waitFor();
-        await page.getByRole('button',{name:'停用 Fixture nightly'}).click();
-        await schedule.getByRole('cell',{name:'已停用',exact:true}).waitFor();
-        const callsBeforeTabs=cronListCalls;
-        await systemTab.click();
-        assert.equal(await managedTab.getAttribute('aria-selected'),'false');
-        assert.equal(await systemTab.getAttribute('aria-selected'),'true');
-        assert.equal(await schedule.getByRole('button',{name:'新建任务'}).count(),0,
-          'system tab must not expose Panel-managed creation');
-        assert.equal(await schedule.getByText('Fixture nightly').count(),0,
-          'managed tasks must not appear in system section');
-        const systemTable=schedule.locator('.system-task-table');
-        await systemTable.waitFor();
+        await schedule.getByRole('heading',{name:'Linux Panel 托管的定时任务'}).waitFor();
+        const managed=schedule.locator('.managed-task-group');
+        const system=schedule.locator('.system-task-group');
+        await system.getByRole('heading',{name:'系统现有定时任务'}).waitFor();
+        assert.equal(await schedule.getByRole('tab').count(),0,'the two sections are not tabs');
+        assert.deepEqual(await schedule.locator(':scope > .task-group > h3').allTextContents(),
+          ['Linux Panel 托管的定时任务','系统现有定时任务'],
+          'managed section must be above existing system schedules');
+        assert.equal(await schedule.locator(':scope > .task-group').count(),2,
+          'there must be exactly two permanently visible sections');
+        const layout=await schedule.locator(':scope > .task-group').evaluateAll(nodes=>nodes.map(node=>{
+          const rect=node.getBoundingClientRect(),style=getComputedStyle(node);
+          return {top:rect.top,bottom:rect.bottom,borderRadius:style.borderTopLeftRadius,
+            background:style.backgroundColor,borderTop:style.borderTopStyle,
+            padding:style.paddingLeft};
+        }));
+        assert.ok(layout[0].bottom<=layout[1].top,'managed section must be completely above system section');
+        assert.ok(layout.every(row=>row.borderRadius==='0px' && row.background==='rgba(0, 0, 0, 0)'
+          && row.padding==='0px'),'sections must be unboxed, without rounded container backgrounds/padding');
+        const chrome=await schedule.locator('xpath=ancestor::section[contains(@class,"action-card")]').evaluate(node=>{
+          const style=getComputedStyle(node);
+          return {flat:node.classList.contains('flat-action'),radius:style.borderTopLeftRadius,
+            background:style.backgroundColor,border:style.borderTopStyle,padding:style.paddingLeft};
+        });
+        assert.ok(chrome.flat && chrome.radius==='0px' && chrome.border==='none'
+          && chrome.background==='rgba(0, 0, 0, 0)' && chrome.padding==='0px',
+          'no surrounding action card may box the two lists');
+        assert.equal(await managed.getByRole('button',{name:'新建任务'}).count(),1);
+        assert.equal(await system.getByRole('button',{name:'新建任务'}).count(),0);
+        const systemTable=system.locator('.system-task-table');
         const visibleRows=systemTable.locator('tbody tr');
         const source=systemTable.getByRole('combobox',{name:'按来源筛选'});
         const owner=systemTable.getByRole('combobox',{name:'按执行用户筛选'});
@@ -249,6 +249,7 @@ try {
         assert.equal(await visibleRows.count(),3);
         assert.deepEqual(await owner.locator('option').allTextContents(),
           ['全部用户','alice','root','systemd']);
+        const callsBeforeFilters=cronListCalls;
         await source.selectOption('user-crontab');
         assert.equal(await visibleRows.count(),1);
         await owner.selectOption('root');
@@ -259,20 +260,27 @@ try {
         await systemTable.getByText('该来源没有发现系统任务').waitFor();
         await status.selectOption('disabled');
         assert.equal(await visibleRows.count(),1);
-        assert.ok((await visibleRows.first().innerText()).includes('alice'));
         await source.selectOption('all');
         await owner.selectOption('all');
         await status.selectOption('all');
         assert.equal(await visibleRows.count(),3);
-        assert.equal(cronListCalls,callsBeforeTabs,
-          'internal tab switching and dropdown filters must never fetch again');
-        await managedTab.click();
-        assert.equal(await systemTable.count(),0);
-        await page.getByRole('button',{name:'删除 Fixture nightly'}).click();
+        assert.equal(cronListCalls,callsBeforeFilters,'all dropdown filtering must remain client-side');
+        // Managed CRUD must not hide or replace the system inventory section.
+        await managed.getByRole('button',{name:'新建任务'}).click();
+        const form=page.getByRole('dialog',{name:'新建定时任务'});
+        await form.getByRole('textbox',{name:'任务名称'}).fill('Fixture nightly');
+        await form.getByRole('textbox',{name:'Cron 表达式'}).fill('0 2 * * *');
+        await form.getByRole('textbox',{name:'执行命令'}).fill('/usr/bin/true');
+        await form.getByRole('button',{name:'保存'}).click();
+        await managed.getByText('Fixture nightly').waitFor();
+        assert.equal(await visibleRows.count(),3);
+        await managed.getByRole('button',{name:'停用 Fixture nightly'}).click();
+        await managed.getByRole('cell',{name:'已停用',exact:true}).waitFor();
+        await managed.getByRole('button',{name:'删除 Fixture nightly'}).click();
         await page.getByRole('dialog',{name:'删除任务'}).getByRole('button',{name:'删除'}).click();
-        await page.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
-        assert.equal(await schedule.getByRole('tab').count(),2);
-        await page.screenshot({path:join(output,'cron-two-sections-'+width+'.png'),fullPage:true});
+        await managed.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
+        assert.equal(await visibleRows.count(),3);
+        await page.screenshot({path:join(output,'cron-stacked-flat-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
         const manager=page.locator('.managed-configs');
