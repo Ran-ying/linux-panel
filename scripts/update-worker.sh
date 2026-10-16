@@ -133,13 +133,13 @@ priv_stage(){
     rm -rf -- "$pkg" || return 1
   fi
   (umask 077; mkdir -- "$pkg" && mkdir -- "$pkg/node_modules") || return 1
-  as_updater git -C "$ROOT" show "$sha:platform/privileged/package-manifest.json" > "$pkg/manifest.json" || return 1
+  as_updater /usr/bin/git -C "$ROOT" show "$sha:platform/privileged/package-manifest.json" > "$pkg/manifest.json" || return 1
   priv_manifest "$pkg/manifest.json" "$pkg/.entries" || return 1
   while read -r kind file;do
     [[ "$kind" == file ]] || continue
     # Read bytes from the pinned Git object, not potentially mutated
     # files in the working tree after npm install/test lifecycle hooks.
-    as_updater git -C "$ROOT" show "$sha:platform/privileged/$file" > "$pkg/$file" || return 1
+    as_updater /usr/bin/git -C "$ROOT" show "$sha:platform/privileged/$file" > "$pkg/$file" || return 1
     chmod 0600 "$pkg/$file" || return 1
   done < "$pkg/.entries"
   printf '{"type":"module"}\n' > "$pkg/package.json" || return 1
@@ -240,7 +240,7 @@ ensure_tracked_web_read_access(){
     return 1
   }
   manifest="$(mktemp "${ALLOW_START%/*}/.tracked-web.XXXXXXXX")" || return 1
-  if ! as_updater git -C "$ROOT" ls-files --cached -z > "$manifest";then
+  if ! as_updater /usr/bin/git -C "$ROOT" ls-files --cached -z > "$manifest";then
     rm -f -- "$manifest"
     log 'Could not list tracked checkout files'
     return 1
@@ -401,7 +401,7 @@ recover(){
      "$TARGET" =~ ^[a-f0-9]{40}$ && "$OLD" =~ ^[a-f0-9]{40}$ ]] ||
       { log 'Corrupt recovery journal';return 1; }
   backup="$ROOT_BACKUP/panel-state.json.before-$OLD-$ID"
-  current="$(as_updater git -C "$ROOT" rev-parse HEAD 2>/dev/null)" || return 1
+  current="$(as_updater /usr/bin/git -C "$ROOT" rev-parse HEAD 2>/dev/null)" || return 1
   # Success is durable only after authenticated root result and matching HEAD.
   if [[ -f "$RESULT" && ! -L "$RESULT" ]] &&
      grep -Fq "\"id\":\"$ID\"" "$RESULT" &&
@@ -430,7 +430,7 @@ recover(){
     return 1
   fi
   systemctl stop linux-panel.service || restored=0
-  as_updater git -C "$ROOT" reset --hard "$OLD" || restored=0
+  as_updater /usr/bin/git -C "$ROOT" reset --hard "$OLD" || restored=0
   if [[ -f "$backup" && ! -L "$backup" &&
         "$(stat -c %u:%a "$backup")" == 0:600 ]];then
     (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
@@ -506,10 +506,10 @@ TARGET="${shaline#sha=}"
 [[ -f "$EXPECTED_REMOTE" && ! -L "$EXPECTED_REMOTE" ]] || { record failed;exit 2; }
 EXPECTED="$(cat "$EXPECTED_REMOTE")"
 [[ "$EXPECTED" =~ ^(https://github\.com/[^[:space:]]+\.git|git@github\.com:[^[:space:]]+\.git)$ ]] || { record failed;exit 2; }
-[[ "$(as_updater git -C "$ROOT" remote get-url origin)" == "$EXPECTED" ]] || { record failed;exit 2; }
-[[ "$(as_updater git -C "$ROOT" branch --show-current)" == main ]] || { record failed;exit 2; }
-[[ -z "$(as_updater git -C "$ROOT" status --porcelain)" ]] || { record failed;exit 2; }
-OLD="$(as_updater git -C "$ROOT" rev-parse HEAD)"
+[[ "$(as_updater /usr/bin/git -C "$ROOT" remote get-url origin)" == "$EXPECTED" ]] || { record failed;exit 2; }
+[[ "$(as_updater /usr/bin/git -C "$ROOT" branch --show-current)" == main ]] || { record failed;exit 2; }
+[[ -z "$(as_updater /usr/bin/git -C "$ROOT" status --porcelain)" ]] || { record failed;exit 2; }
+OLD="$(as_updater /usr/bin/git -C "$ROOT" rev-parse HEAD)"
 [[ "$OLD" =~ ^[a-f0-9]{40}$ ]] || { record failed;exit 2; }
 if ! priv_preflight;then
   log "Installed root package is not versioned at old SHA; explicit operator bootstrap required"
@@ -517,8 +517,8 @@ if ! priv_preflight;then
   exit 2
 fi
 log "Fetch pinned origin/main commit $TARGET"
-as_updater git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
-REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
+as_updater /usr/bin/git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
+REMOTE="$(as_updater /usr/bin/git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 [[ "$REMOTE" == "$TARGET" ]] || { record failed; exit 2; }
 if [[ "$OLD" == "$TARGET" ]];then
   record no_change
@@ -526,7 +526,7 @@ if [[ "$OLD" == "$TARGET" ]];then
   durable_sync dir "$STATE"
   exit 0
 fi
-as_updater git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record failed; exit 2; }
+as_updater /usr/bin/git -C "$ROOT" merge-base --is-ancestor "$OLD" "$TARGET" || { record failed; exit 2; }
 # Stop BEFORE service interruption if the shared VPS cannot safely build.
 # These are fixed, root-owned safety thresholds, not MCP-controlled parameters.
 # 1 GiB on the code filesystem; 256 MiB for root-only backups, and
@@ -595,7 +595,7 @@ if ! backup_tmp="$(mktemp "$ROOT_BACKUP/.state-snapshot.XXXXXXXX")" ||
   exit 2
 fi
 build(){
-  as_updater git -C "$ROOT" merge --ff-only "$TARGET" || return 1
+  as_updater /usr/bin/git -C "$ROOT" merge --ff-only "$TARGET" || return 1
   (cd "$ROOT" && as_updater npm ci --no-audit --no-fund &&
     as_updater npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock &&
     as_updater npm run check &&
