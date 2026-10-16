@@ -11,6 +11,9 @@ const call=(name,input)=>client.execute({id:'cron.'+name,privileged:{channels:['
   {authenticated:true,userId:'disposable-cron-acceptance',channel:'web'});
 const blank=createHash('sha256').update('').digest('hex');
 const initial=await call('list',{});
+assert.ok(Array.isArray(initial.systemTasks),'reviewed root handler must expose system-wide inventory');
+assert.ok(Array.isArray(initial.systemWarnings));
+await assert.rejects(call('systemSet',{id:'0'.repeat(64),revision:'0'.repeat(64),operation:'disable'}),{statusCode:404});
 assert.equal(initial.revision,blank,'Dedicated cron file must be absent before disposable acceptance');
 const create=await call('save',{revision:initial.revision,
   task:{name:'fixture never-run',expression:'0 0 31 2 *',command:'/usr/bin/true',enabled:true}});
