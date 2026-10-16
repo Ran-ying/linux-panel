@@ -9,7 +9,7 @@ const systemTask=object({
   id:revision,revision,sourceType:string(40),source:string(300),name:string(150),
   owner:{type:'string',maxLength:120},expression:{type:'string',maxLength:150},
   command:{type:'string',maxLength:3000},enabled:{type:'boolean'},editable:{type:'boolean'},
-  control:{type:'string',enum:['cron','timer','none']},nextRun:{type:'string',maxLength:60},
+  control:{type:'string',enum:['cron','timer','at','none']},nextRun:{type:'string',maxLength:60},
   detail:{type:'string',maxLength:300},line:{type:'integer',minimum:0},raw:{type:'string',maxLength:3000}
 });
 export const CRON_CONTRACTS={
