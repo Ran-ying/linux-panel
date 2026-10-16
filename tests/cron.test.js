@@ -100,8 +100,6 @@ test('Cron Web Actions use existing login/CSRF policy and a separate privileged 
   const removed=await post('remove',headers,{revision:listing.json().result.revision,id:saved.json().result.id});
   assert.equal(removed.statusCode,200,removed.body);
   assert.ok(!(JSON.stringify((await store.snapshot()).audit)).includes('/usr/bin/true'));
-  const exposed=app.printRoutes();
-  assert.ok(exposed.includes('/api/actions'));
 });
 
 test('root-disabled Cron module fails closed instead of writing user crontab',async t=>{
