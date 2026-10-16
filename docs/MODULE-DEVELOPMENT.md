@@ -117,7 +117,8 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | gauge | title、百分比 valueKey；totalKey 或非空 details 至少提供一种；可选 usedKey、quantityFormat（bytes/number）、unit |
 | table | rowsKey 指向对象数组；非空 columns:[{key,label,format?}] |
 | sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象；可选 layout:'grid' 并排展示 |
-| files | path/entries 输出，operations:{read,write,upload,create,rename,delete} 引用同模块 Web Action |
+| files | path/entries 输出，operations:{accounts,read,write,upload,create,rename,delete,chmod,chown} 引用同模块 Web Action |
+| scheduled-tasks | tasks[]、revision、count；operations:{save,remove} 引用同模块已暴露的写 Action，Web 面板提供编辑/启停/删除弹窗 |
 | terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 
 format 只支持 bytes/duration/milliseconds/integer/number；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度百分比必须声明为 number；圆环数量字段可为 number/integer，未给 usedKey 时用百分比 × 总量计算等效用量；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。
