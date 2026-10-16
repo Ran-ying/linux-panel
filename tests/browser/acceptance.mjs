@@ -280,8 +280,9 @@ try {
         await browser.getByText('空目录',{exact:true}).waitFor();
         await browser.getByRole('button',{name:'上一级',exact:true}).click();
         await browser.getByRole('button',{name:'note.txt',exact:true}).waitFor();
-        await browser.getByRole('columnheader',{name:'大小（MB）',exact:true}).waitFor();
-        await browser.getByRole('columnheader',{name:'权限 / 所有者',exact:true}).waitFor();
+        const fileHeaders=await browser.locator('.file-table th').allTextContents();
+        assert.ok(fileHeaders.includes('大小（MB）'));
+        assert.ok(fileHeaders.includes('权限 / 所有者'));
         await browser.getByRole('button',{name:'新建文件',exact:true}).click();
         await browser.getByRole('textbox',{name:'名称',exact:true}).fill('created-'+width+'.txt');
         await browser.getByRole('button',{name:'确定',exact:true}).click();
