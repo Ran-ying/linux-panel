@@ -10,6 +10,7 @@
 
 - 无默认密码的管理员账户、本地初始化、会话、CSRF、可选 TOTP 双因素认证（一次性恢复码）和审计事件。
 - 两个系统 Action：基本信息（system.info，含磁盘）与资源使用情况（system.resources，含 CPU/内存）；另有 services.list。旧拆分 Action 已移除。
+- 终端模块：一个 terminal.execute Action 支持 Web/MCP 带参数命令执行；下方真实 PTY 黑色终端支持目录保持与交互，仅普通服务账户。
 - 模块通过声明式配置复用面板指标、进度条、表格和组合分区；统一命令编辑/保存与原始输出/JSON，无需模块 CSS 或前端业务特判。
 - MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、可信客户端整体授权、全局工具策略及即时撤销。
 - Git + systemd + 独立非 root 服务账户。只提供可配置的 HTTP 监听端口，Nginx/Caddy/HTTPS/防火墙完全由管理员自行管理。
