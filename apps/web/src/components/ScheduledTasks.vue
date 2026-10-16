@@ -114,12 +114,12 @@ function remove(){
     <div class="task-section-tabs" role="tablist" aria-label="定时任务分类">
       <button id="panel-schedule-tab" type="button" role="tab"
         :aria-selected="activeSection==='managed'" aria-controls="panel-schedule-content"
-        :class="{active:activeSection==='managed'}" @click="activeSection='managed'">
+        :class="{active:activeSection==='managed'}" :disabled="busy" @click="activeSection='managed';error=''">
         Linux Panel 托管的定时任务
       </button>
       <button id="system-schedule-tab" type="button" role="tab"
         :aria-selected="activeSection==='system'" aria-controls="system-schedule-content"
-        :class="{active:activeSection==='system'}" @click="activeSection='system'">
+        :class="{active:activeSection==='system'}" :disabled="busy" @click="activeSection='system';error=''">
         系统现有定时任务
       </button>
     </div>
