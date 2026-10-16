@@ -17,6 +17,6 @@
 
 下一步：Nginx root 包显式升级与实际受控 Web 操作验收、真实 iPhone/Android QA、其它模块。Nginx 语法和 reload 检查不保证公网代理/HTTPS 上游的端到端健康；异常断电无 Nginx 独立恢复日志。没有不可信插件沙箱、多管理员或独立安全审计。
 
-## 开发中：root handler 随面板更新（PR #120）
+## 受控 root 包自动更新（PR #120）
 
-通用 manifest + 版本化 root-owned releases + 原子 current 切换，拟纳入已授权 Broker 的部署/回滚事务。**此处仅为开发分支设计，未合并或部署到 VPS。** 已部署的老 root 包和不可变 Broker 仍需一次显式 `enable-privileged-auto-updates.sh --enable` 初始化才可能实现后续自动同步；操作员需要先检查 CI、代码审查与服务验收，不得声称上线。
+通用 manifest + 版本化 root-owned releases + 原子 current 切换，作为可信 origin/main Broker 部署事务的一部分，出错时与 Web 一并恢复。**以 PR #120 实际合并/CI 为源码状态依据，目标 VPS 尚未完成 root Broker 初次迁移。** 已部署的旧 root 包和不可变 Broker 必须由操作员显式运行一次 `enable-privileged-auto-updates.sh --enable`，之后才能在后续 main 更新中自动同步；普通面板 SHA 更新成功不能替代 root 包版本校验。
