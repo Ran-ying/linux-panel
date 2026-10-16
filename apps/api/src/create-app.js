@@ -1,3 +1,5 @@
+import {randomBytes} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import {TerminalSessions} from '../../../platform/terminal.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
@@ -327,6 +329,14 @@ export async function createApp({
 
   const dist = resolve(root, 'apps/web/dist');
   if (existsSync(join(dist, 'index.html'))) {
+    const indexHtml=await readFile(join(dist,'index.html'),'utf8');
+    const serveIndex=async(request,reply)=>{
+      const nonce=randomBytes(24).toString('base64url');
+      reply.header('Cache-Control','no-store');
+      if(production)reply.header('Content-Security-Policy',panelContentSecurityPolicy(null,nonce));
+      return reply.type('text/html; charset=utf-8').send(indexHtml.replace('<head>','<head><meta name="panel-style-nonce" content="'+nonce+'">'));
+    };
+    app.get('/',serveIndex);app.get('/index.html',serveIndex);
     await app.register(fastifyStatic, { root: dist, prefix: '/' });
   } else {
     app.get('/', async () => ({ message: 'UI not built; run npm run dev:web or npm run build:web' }));
