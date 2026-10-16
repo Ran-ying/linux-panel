@@ -700,6 +700,7 @@ table{min-width:500px}
 .file-browser button.file-danger:not(.file-entry):not(.config-site-selector){
   background:var(--warning-bg);border-color:var(--warning-border);color:var(--warning-text);
 }
+.scheduled-tasks .task-toolbar.panel-control-capsule{gap:2px}
 .panel-control-capsule{
   display:inline-flex;align-items:center;flex-wrap:nowrap;gap:2px;
   width:max-content;max-width:100%;box-sizing:border-box;
