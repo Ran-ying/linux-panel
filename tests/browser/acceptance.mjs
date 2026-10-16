@@ -237,11 +237,17 @@ try {
           const rect=node.getBoundingClientRect(),style=getComputedStyle(node);
           return {top:rect.top,bottom:rect.bottom,borderRadius:style.borderTopLeftRadius,
             background:style.backgroundColor,borderTop:style.borderTopStyle,
-            padding:style.paddingLeft};
+            borderWidth:style.borderTopWidth,padding:style.paddingLeft};
         }));
         assert.ok(layout[0].bottom<=layout[1].top,'managed section must be completely above system section');
-        assert.ok(layout.every(row=>row.borderRadius==='0px' && row.background==='rgba(0, 0, 0, 0)'
-          && row.padding==='0px'),'sections must be unboxed, without rounded container backgrounds/padding');
+        assert.ok(layout.every(row=>parseFloat(row.borderRadius)>0
+          && row.borderTop==='solid' && row.borderWidth==='1px'
+          && row.background!=='rgba(0, 0, 0, 0)' && parseFloat(row.padding)>0),
+          'both independent sections must each have their own rounded outer card');
+        assert.ok(layout[1].top-layout[0].bottom>=12,
+          'two independent cards must have a visible gap, not just a divider');
+        assert.equal(await schedule.locator('.task-group .task-group').count(),0,
+          'neither task card may contain an extra nested task card');
         const chrome=await schedule.locator('xpath=ancestor::section[contains(@class,"action-card")]').evaluate(node=>{
           const style=getComputedStyle(node);
           return {minimal:node.classList.contains('minimal-action'),
@@ -249,12 +255,12 @@ try {
             radius:style.borderTopLeftRadius,background:style.backgroundColor,
             border:style.borderTopStyle,borderWidth:style.borderTopWidth,padding:style.paddingLeft};
         });
-        assert.ok(chrome.minimal && !chrome.flat && parseFloat(chrome.radius)>0
-          && chrome.border==='solid' && chrome.borderWidth==='1px'
-          && chrome.background!=='rgba(0, 0, 0, 0)' && parseFloat(chrome.padding)>0,
-          'the whole scheduled-tasks module must retain exactly one rounded outer ActionCard');
+        assert.ok(!chrome.minimal && chrome.flat && chrome.radius==='0px'
+          && chrome.border==='none' && chrome.background==='rgba(0, 0, 0, 0)'
+          && chrome.padding==='0px',
+          'the ActionCard wrapper must be invisible; the two task groups themselves are the outer rounded cards');
         assert.equal(await schedule.locator(':scope > .task-group').count(),2,
-          'the two inner groups must live directly inside that outer ActionCard content');
+          'the two standalone rounded cards must be direct children of the scheduled tasks surface');
         assert.equal(await managed.getByRole('button',{name:'新建任务'}).count(),1);
         assert.equal(await system.getByRole('button',{name:'新建任务'}).count(),0);
         const systemTable=system.locator('.system-task-table');
