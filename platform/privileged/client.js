@@ -13,7 +13,7 @@ export class PrivilegedActionClient {
       const socket=createConnection(this.socketPath);let bytes=0,buffer='',finished=false;
       const done=(error,result)=>{if(finished)return;finished=true;socket.destroy();error?reject(error):resolve(result);};
       socket.setTimeout(this.timeoutMs,()=>done(failure('root 执行通道超时')));
-      socket.on('error',()=>done(failure('root 执行通道不可用，请检查独立执行服务')));
+      socket.on('error',cause=>done(failure('root 执行通道不可用（'+cause.code+'），请检查独立执行服务')));
       socket.on('connect',()=>socket.write(JSON.stringify({version:1,action:action.id,input,channel:context.channel})+'\n'));
       socket.setEncoding('utf8');
       socket.on('data',chunk=>{

@@ -97,6 +97,12 @@ for ((LP_ATTEMPT=0; LP_ATTEMPT<50; LP_ATTEMPT++));do
   sleep .1
 done
 [[ -S /run/linux-panel-privileged/executor.sock ]]
+runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- "$LP_NODE" --input-type=module -e '
+const {PrivilegedActionClient}=await import(process.argv[1]);
+const client=new PrivilegedActionClient({socketPath:"/run/linux-panel-privileged/executor.sock"});
+const result=await client.execute({id:"files.list",privileged:{channels:["web"]}},{path:"/root",limit:1},{authenticated:true,userId:"operator-enable",channel:"web"});
+if(result.accessMode!=="root")process.exit(1);
+' "file://$LP_ROOT/platform/privileged/client.js"
 systemctl restart linux-panel.service
 systemctl is-active --quiet linux-panel.service
 echo 'Enabled reviewed root Actions; Web remains linuxpanel. The same UID terminal is trusted to use these file operations.'
