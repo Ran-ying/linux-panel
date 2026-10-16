@@ -1,3 +1,4 @@
+import {createSystemCronOperations} from './cron-system-operations.js';
 import * as fs from 'node:fs/promises';
 import {randomUUID,createHash} from 'node:crypto';
 import {dirname,join} from 'node:path';
@@ -116,7 +117,12 @@ export function createCronOperations({path='/etc/cron.d/linux-panel',requireRoot
     gate=current.catch(()=>{});
     return current;
   };
-  const list=async()=>{const data=await read();return {...data,count:data.tasks.length};};
+  const system=createSystemCronOperations({requireRoot});
+  const list=async()=>{
+    const data=await read();
+    const inventory=requireRoot?await system.enumerate():{systemTasks:[],systemCount:0,systemWarnings:[]};
+    return {...data,count:data.tasks.length,...inventory};
+  };
   const save=({task,revision})=>locked(async()=>{
     const data=await read();
     if(revision!==data.revision)throw fail('任务已经变化，请刷新后重试',409);
@@ -136,5 +142,5 @@ export function createCronOperations({path='/etc/cron.d/linux-panel',requireRoot
     data.tasks.splice(index,1);
     return {id,revision:await write(data.tasks,revision)};
   });
-  return {list,save,remove};
+  return {list,save,remove,systemSet:system.set};
 }
