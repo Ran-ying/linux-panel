@@ -11,6 +11,15 @@ import {ActionRegistry} from '../core/action-registry.js';
 import {ActionEngine} from '../core/action-engine.js';
 import {setup} from '../modules/nginx/index.js';
 
+test('fixed root unit allows address families and bind capability needed by nginx -t',async()=>{
+  const unit=await readFile(new URL('../deployment/systemd/linux-panel-privileged.service',import.meta.url),'utf8');
+  assert.match(unit,/^RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6$/m);
+  assert.match(unit,/^CapabilityBoundingSet=.*\bCAP_NET_BIND_SERVICE\b/m);
+  assert.match(unit,/^NoNewPrivileges=true$/m);
+  assert.doesNotMatch(unit,/CAP_SYS_ADMIN|CAP_SYS_MODULE|AF_PACKET/);
+});
+
+
 async function fixture(t){
   const root=await mkdtemp(join(tmpdir(),'nginx-configs-'));
   t.after(()=>rm(root,{recursive:true,force:true}));

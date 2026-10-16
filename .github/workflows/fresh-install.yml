@@ -6,6 +6,9 @@ on:
       - 'scripts/setup.sh'
       - 'scripts/admin-init.js'
       - 'scripts/verify-cron-executor.js'
+      - 'scripts/verify-nginx-executor.js'
+      - 'deployment/systemd/linux-panel-privileged.service'
+      - 'modules/nginx/**'
       - 'platform/privileged/**'
       - 'modules/cron/**'
       - '.github/workflows/fresh-install.yml'
@@ -30,6 +33,12 @@ jobs:
           trap 'rm -f "$secret"' EXIT
           chmod 600 "$secret"
           openssl rand -hex 24 > "$secret"
+          # Only on this disposable runner, exercise the installed root unit
+          # against an actual Nginx master. Never run this acceptance on VPS.
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nginx
+          sudo systemctl enable --now nginx.service
+          sudo nginx -t
           # The runner's Node toolcache is not root-owned; provide a root-owned
           # runtime specifically for the privileged service.
           sudo install -d -o root -g root -m 0755 /usr/lib/linux-panel-root-test-runtime
@@ -72,6 +81,7 @@ jobs:
           sudo test ! -e /etc/cron.d/linux-panel
           sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env PANEL_CRON_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-cron-executor.js
           sudo rm -f /etc/cron.d/linux-panel
+          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env CI=true PANEL_NGINX_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-nginx-executor.js
           PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import {randomUUID} from 'node:crypto';
@@ -122,4 +132,5 @@ jobs:
           sudo cmp /opt/linux-panel/scripts/update-worker.sh /usr/local/libexec/linux-panel-update-worker
           sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env PANEL_CRON_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-cron-executor.js
           sudo rm -f /etc/cron.d/linux-panel
-          echo 'PASS root Broker migration and Cron handler on disposable fresh install'
+          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env CI=true PANEL_NGINX_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-nginx-executor.js
+          echo 'PASS root Broker migration and Cron/Nginx handlers on disposable fresh install'

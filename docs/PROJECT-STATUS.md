@@ -19,4 +19,4 @@
 
 ## 受控 root 包自动更新（PR #120）
 
-通用 manifest + 版本化 root-owned releases + 原子 current 切换，作为可信 origin/main Broker 部署事务的一部分，出错时与 Web 一并恢复。**以 PR #120 实际合并/CI 为源码状态依据，目标 VPS 尚未完成 root Broker 初次迁移。** 已部署的旧 root 包和不可变 Broker 必须由操作员显式运行一次 `enable-privileged-auto-updates.sh --enable`，之后才能在后续 main 更新中自动同步；普通面板 SHA 更新成功不能替代 root 包版本校验。
+通用 manifest + 版本化 root-owned releases + 原子 current 切换，作为可信 origin/main Broker 部署事务的一部分，出错时与 Web 一并恢复。**2026-10-16 现场核查**：测试 VPS main 为 `8d31bbd55e061942f587cb0e778bfe88feece327`，版本化 root releases 中存在相同 SHA，`nginx.sites` 和 `cron.list` 已由实际 root socket 成功执行，说明一次性迁移已完成且 root Handler 同步生效。**已发现的独立缺陷**：已安装的特权 unit 仍只允许 `AF_UNIX`，实际 `nginx.check` 返回失败（禁止 AF_INET socket）；修复见后续 Nginx root unit 回归 PR。版本化 Handler 更新不等于 root unit 自动升级；现场修复必须对 unit 另行安全激活，不能靠重发普通 Broker 更新假定生效。
