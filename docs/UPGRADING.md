@@ -1,3 +1,11 @@
+# 系统概览资源重构（2026-10-16）
+
+system.resources 现在返回 cpu、memory、disk，并显示在基本信息前面；system.info 不再返回 disk，也不再执行 filesystem 命令。磁盘输出路径从 system.info.result.disk 改为 system.resources.result.disk；两个 Action ID 保持不变。
+
+磁盘命令配置按 system.resources.filesystem → system.info.filesystem → storage.usage.filesystem → 默认命令的顺序沿用；保存只写当前 resources Action，旧私有条目保留。资源 raw 中包含 filesystem，基本信息 raw 不再包含它。CPU/内存原有命令迁移不变。
+
+面板新增通用 gauge renderer 与 sections.layout:'grid'；CPU 显示整体忙碌比例及等效已用逻辑核数/总逻辑核数，内存和磁盘显示已用/总量。模块不附带 CSS/Vue。
+
 # 新增终端与 MCP 参数映射（2026-10-16）
 
 新增 terminal.execute 写能力，以普通服务账户运行，MCP 工具从 Action Schema 自动生成参数并转发；旧无参数工具继续工作。终端模块加载后，此能力对有效可信 MCP grant 自动可用，客户端刷新工具清单；不要求重新逐工具授权。Web PTY 需要 Python 3，安装 xterm 依赖由正常 npm ci 构建完成。详细使用/清理/资源边界见 [TERMINAL.md](TERMINAL.md)。
@@ -6,12 +14,12 @@
 
 | 旧接口 | 新接口 |
 | --- | --- |
-| system.info + storage.usage | system.info，新增 result.disk |
-| system.cpu + system.memory | system.resources，返回 result.cpu/result.memory |
+| 旧 system.info + storage.usage | 当前 system.info（基本字段）+ system.resources（含 result.disk） |
+| system.cpu + system.memory | system.resources，返回 result.cpu/result.memory/result.disk |
 
 仅注册两个系统 Action，不保留旧别名；storage 模块删除。Web 直接按模块展示配置渲染；MCP 客户端刷新 tools/list，改用新 ID。旧 OAuth grant 无需逐工具重新授权。
 
-保存的 system.info 原字段优先保留；filesystem 从旧 storage.usage 读取；CPU/meminfo 从旧 system.cpu/system.memory 读取。统一保存写入当前 Action，并优先于旧配置。旧私有条目保留，不写公开日志；迁移不执行。升级后在命令页核对自定义值并刷新验证。
+保存的 system.info 原字段优先保留；filesystem 按上述顺序从旧 system.info/storage.usage 读取；CPU/meminfo 从旧 system.cpu/system.memory 读取。统一保存写入当前 Action，并优先于旧配置。旧私有条目保留，不写公开日志；迁移不执行。升级后在命令页核对自定义值并刷新验证。
 
 新增通用 sections，其他模块的 metrics/progress/table 不受影响。Web raw 按原 key 展示 stdout/stderr/exitCode、底部 JSON 同源；MCP 保持解析后 result 契约。
 

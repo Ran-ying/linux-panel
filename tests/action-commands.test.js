@@ -16,7 +16,7 @@ test('saved command configuration persists and is shared by preview and actual A
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const store=new StateStore(join(folder,'state.json'));
   const values={hostname:'fixture',platform:'linux',release:'test',arch:'x86_64',cpuCount:'2',
-    totalMemoryBytes:'1024',freeMemoryBytes:'512',uptimeSeconds:'60',nodeVersion:'v24.0.0',filesystem:'1024 100 40 30'};
+    totalMemoryBytes:'1024',freeMemoryBytes:'512',uptimeSeconds:'60',nodeVersion:'v24.0.0'};
   const output=new Map(Object.entries(info.terminal.fields).map(([key,command])=>[command,values[key]]));
   output.set('printf changed',{stdout:'changed\n\n',stderr:'fixture warning\n',exitCode:0});
   let runs=0;
@@ -81,12 +81,48 @@ test('legacy field overrides migrate by module descriptor and new values take pr
   };});
   const commands=new ActionCommands(store);
   const configured=async action=>Object.fromEntries((await commands.config(action)).fields.map(f=>[f.key,f.value]));
-  assert.equal((await configured(info)).filesystem,'printf disk-fixture');
+  assert.ok(!Object.hasOwn(await configured(info),'filesystem'));
+  assert.equal((await configured(resources)).filesystem,'printf disk-fixture');
   assert.equal((await configured(info)).hostname,'printf old-host');
   const migrated=await configured(resources);
   assert.equal(migrated.sample,'printf cpu-fixture');
   assert.equal(migrated.meminfo,'printf memory-fixture');
-  assert.equal(Object.keys(migrated).length,4);
+  assert.equal(Object.keys(migrated).length,5);
   await commands.save(resources,{...migrated,sample:'printf new-fixture'},'fixture-admin');
   assert.equal((await configured(resources)).sample,'printf new-fixture');
+});
+
+
+test('disk command moves to resources and preserves ordered migration and original output',async t=>{
+  const folder=await mkdtemp(join(tmpdir(),'panel-disk-resource-'));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const store=new StateStore(join(folder,'state.json'));
+  await store.mutate(state=>{state.actionCommands={
+    'storage.usage':{filesystem:'legacy-disk'},
+    'system.info':{filesystem:'info-disk'}
+  };});
+  const values={sample:'cpu 10 0 0 90 0 0 0 0\ncpu 20 0 0 180 0 0 0 0',
+    logicalCpus:'2',model:'Fixture CPU',
+    meminfo:'MemTotal: 1000 kB\nMemAvailable: 400 kB\nMemFree: 100 kB',
+    filesystem:'1024 100 40 30\n'};
+  const commands=new ActionCommands(store,{run:async command=>{
+    const key=command==='info-disk'?'filesystem':Object.keys(resources.terminal.fields)
+      .find(key=>resources.terminal.fields[key]===command);
+    return {stdout:values[key],stderr:'',exitCode:0};
+  }});
+  const config=()=>commands.config(resources);
+  assert.equal((await config()).fields.find(f=>f.key==='filesystem').value,'info-disk');
+  const registry=new ActionRegistry();registry.register('system',resources);
+  const {result,raw}=await new ActionEngine(registry,{commands}).run('system.resources');
+  assert.equal(result.disk.usedBytes,61440);
+  assert.equal(result.cpu.usagePercent,10);
+  assert.equal(result.memory.usedBytes,614400);
+  assert.equal(raw.filesystem.stdout,values.filesystem);
+  assert.ok(!Object.hasOwn(info.outputSchema.properties,'disk'));
+  assert.ok(!Object.hasOwn(info.terminal.fields,'filesystem'));
+  await commands.save(resources,Object.fromEntries((await config()).fields.map(f=>[f.key,
+    f.key==='filesystem'?'current-disk':f.value])),'fixture-admin');
+  assert.equal((await config()).fields.find(f=>f.key==='filesystem').value,'current-disk');
+  await store.mutate(state=>{delete state.actionCommands['system.resources'];delete state.actionCommands['system.info'];});
+  assert.equal((await config()).fields.find(f=>f.key==='filesystem').value,'legacy-disk');
 });

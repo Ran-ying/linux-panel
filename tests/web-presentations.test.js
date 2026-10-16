@@ -16,8 +16,12 @@ test('each module owns its Web render configuration separately from Action metad
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
   assert.equal(presentations.length, 4);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
-  assert.equal(configured.get('system.info').sections[1].key, 'disk');
-  assert.equal(configured.get('system.info').renderer, 'sections');
+  assert.equal(configured.get('system.info').renderer, 'metrics');
+  assert.equal(configured.get('system.resources').layout,'grid');
+  assert.deepEqual(configured.get('system.resources').sections.map(p=>[p.key,p.renderer]),
+    [['cpu','gauge'],['memory','gauge'],['disk','gauge']]);
+  assert.deepEqual(registry.list('web').filter(a=>a.moduleId==='system').map(a=>a.id),
+    ['system.resources','system.info']);
   assert.equal(configured.get('services.list').renderer, 'table');
   assert.equal(configured.get('system.resources').refreshIntervalMs, 5000);
   assert.equal(configured.get('services.list').refreshIntervalMs, 0);
@@ -110,4 +114,27 @@ test('sections reject nested fields outside the declared output contract',async(
       execute:async()=>({nested:{count:1}})});
     await assert.rejects(loadWebPresentations(folder,[{id:'demo'}],registry),/unknown result field/);
   } finally {await rm(folder,{recursive:true,force:true});}
+});
+
+
+test('gauge and grid declarations reject unsupported quantities and layouts',async t=>{
+  for(const view of [
+    {renderer:'gauge',valueKey:'percent'},
+    {renderer:'gauge',valueKey:'percent',totalKey:'total',quantityFormat:'html'},
+    {renderer:'sections',layout:'absolute',sections:[{renderer:'metrics',fields:[{key:'total',label:'Total'}]}]}
+  ]){
+    const folder=await mkdtemp(join(tmpdir(),'panel-gauge-contract-'));
+    t.after(()=>rm(folder,{recursive:true,force:true}));
+    await mkdir(join(folder,'demo','ui'),{recursive:true});
+    await writeFile(join(folder,'package.json'),'{"type":"module"}');
+    await writeFile(join(folder,'demo','ui','presentations.js'),
+      'export default '+JSON.stringify([{actionId:'demo.read',...view}])+';');
+    const registry=new ActionRegistry();
+    registry.register('demo',{id:'demo.read',kind:'read',exposure:{web:true},
+      inputSchema:{type:'object',properties:{}},
+      outputSchema:{type:'object',properties:{percent:{type:'number'},total:{type:'integer'}}},
+      execute:async()=>({percent:50,total:2})});
+    await assert.rejects(loadWebPresentations(folder,[{id:'demo'}],registry),
+      /Gauge requires|Invalid gauge|Invalid sections layout/);
+  }
 });

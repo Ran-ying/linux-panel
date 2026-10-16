@@ -12,8 +12,8 @@ Web 设置开启 MCP、按需开启客户端注册；OAuth Authorization Code + 
 
 | Action / 工具 ID | result |
 | --- | --- |
-| system.info | 主机基本字段及 disk 对象 |
-| system.resources | cpu、memory 对象 |
+| system.info | 主机基本字段 |
+| system.resources | cpu、memory、disk 对象 |
 | services.list | systemd 服务列表 |
 | terminal.execute | 普通服务账户执行 command，返回 stdout/stderr/exitCode 等 |
 

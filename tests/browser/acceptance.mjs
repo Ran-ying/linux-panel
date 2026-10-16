@@ -74,15 +74,33 @@ try {
         assert.equal(await page.locator('.action-card').count(),2,'overview must render exactly two real Actions');
         const ids=await page.evaluate(async()=>(await (await fetch('/api/actions')).json()).actions.map(a=>a.id));
         assert.ok(ids.includes('system.resources') && !ids.some(id=>['system.cpu','system.memory','storage.usage'].includes(id)));
-        await page.locator('.action-card').first().getByRole('progressbar',{name:'磁盘占用',exact:true}).waitFor();
+        const resource=page.locator('.action-card').first();
+        assert.equal(await resource.locator('h3').innerText(),'资源使用情况');
+        await resource.getByRole('progressbar',{name:'磁盘',exact:true}).waitFor();
+        assert.equal(await resource.locator('.gauge-card').count(),3);
+        for(const label of ['CPU','内存','磁盘']){
+          const ring=resource.getByRole('progressbar',{name:label,exact:true});
+          assert.ok(Number.isFinite(Number(await ring.getAttribute('aria-valuenow'))));
+        }
+        const layout=await resource.locator('.gauge-card').evaluateAll(nodes=>nodes.map(n=>{
+          const r=n.getBoundingClientRect(),ring=n.querySelector('.gauge-ring').getBoundingClientRect();
+          const label=n.querySelector('.metric-label').getBoundingClientRect();
+          const quantity=n.querySelector('.gauge-quantity').getBoundingClientRect();
+          return {width:r.width,left:r.left,top:r.top,round:parseFloat(getComputedStyle(n).borderRadius),
+            ordered:label.bottom<=ring.top && ring.bottom<=quantity.top,
+            text:n.querySelector('.gauge-quantity').textContent};
+        }));
+        assert.ok(Math.abs(layout[0].top-layout[1].top)<1,'resource cards must sit side by side');
+        assert.ok(layout.every(card=>card.round>0 && card.ordered && card.text.includes('/')));
+        await page.screenshot({path:join(output,'resource-gauges-'+width+'.png'),fullPage:true});
         if(width===390){
-          const cards=page.locator('.action-card').first().locator('.metric-card');
+          const cards=page.locator('.action-card').nth(1).locator('.metric-card');
           assert.ok(Math.abs((await cards.nth(0).boundingBox()).y-(await cards.nth(1).boundingBox()).y)<1,
             'section renderer must preserve the phone two-column metrics layout');
         }
       }
       if([390,1280].includes(width) && ['系统概览','服务浏览'].includes(name.trim())){
-        const card=page.locator('.action-card').first();
+        const card=name.trim()==='系统概览'?page.locator('.action-card').nth(1):page.locator('.action-card').first();
         assert.equal(await card.locator('.info-panel').count(),0,'information must start hidden');
         await card.getByRole('tab',{name:'说明',exact:true}).click();
         await card.locator('.description-panel').waitFor();
@@ -95,7 +113,7 @@ try {
         if(name.trim()==='服务浏览')
           assert.equal(await card.getByRole('textbox',{name:'命令 units',exact:true}).inputValue(),'systemctl list-units --type=service --all --no-pager --no-legend --plain');
         else {
-          assert.equal(await card.locator('.command-table tbody tr').count(),10);
+          assert.equal(await card.locator('.command-table tbody tr').count(),9);
           const hostname=card.getByRole('textbox',{name:'命令 hostname',exact:true});
           assert.equal(await hostname.inputValue(),'hostname');
           const shortHeight=await hostname.evaluate(n=>n.getBoundingClientRect().height);
@@ -138,16 +156,16 @@ try {
         assert.ok(!(await card.locator('.commands-panel').innerText()).includes('命令以面板普通用户执行'));
         await card.getByRole('button',{name:'原始数据',exact:true}).click();
         await card.locator('.raw-command-table').first().waitFor();
-        assert.equal(await card.locator('.raw-command-table tbody tr').count(),name.trim()==='系统概览'?10:1);
+        assert.equal(await card.locator('.raw-command-table tbody tr').count(),name.trim()==='系统概览'?9:1);
         await card.locator('.raw-json summary').click();
         const raw=JSON.parse(await card.locator('.raw-json .raw-output').innerText());
         assert.ok(Object.values(raw).every(output=>typeof output.stdout==='string' && typeof output.stderr==='string' && output.exitCode===0));
         await card.getByRole('button',{name:'可视化',exact:true}).click();
         if(name.trim()==='系统概览'){
-          const resource=page.locator('.action-card').nth(1);
+          const resource=page.locator('.action-card').first();
           await resource.getByRole('button',{name:'原始数据',exact:true}).click();
           await resource.locator('.raw-command-table').first().waitFor();
-          assert.equal(await resource.locator('.raw-command-table tbody tr').count(),4,'CPU and memory must retain all original command keys');
+          assert.equal(await resource.locator('.raw-command-table tbody tr').count(),5,'CPU, memory and disk must share the resource Action command keys');
           await resource.getByRole('button',{name:'可视化',exact:true}).click();
         }
         await card.getByRole('button',{name:'原始数据',exact:true}).click();

@@ -3,8 +3,8 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal']);
-const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge']);
+const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer', 'number']);
 
 function validateView(view,schema,actionId,depth=0) {
   if(!TYPES.has(view.renderer))throw new Error('Unsupported UI renderer');
@@ -15,6 +15,7 @@ function validateView(view,schema,actionId,depth=0) {
         if (typeof f.label !== 'string' || f.label.length > 100) throw new Error('Invalid field label');
       };
       if (view.renderer === 'sections') {
+        if(view.layout!==undefined && view.layout!=='grid')throw new Error('Invalid sections layout');
         if(depth>=3 || !Array.isArray(view.sections) || !view.sections.length || view.sections.length>12)
           throw new Error('Invalid sections');
         for(const section of view.sections) {
@@ -39,8 +40,15 @@ function validateView(view,schema,actionId,depth=0) {
         if (typeof view.valueKey !== 'string' || schema[view.valueKey]?.type !== 'number')
           throw new Error(`Invalid progress value field: ${actionId}`);
         for (const key of ['totalKey', 'usedKey', 'availableKey']) {
-          if (view[key] && schema[view[key]]?.type !== 'number')
+          if (view[key] && !['number','integer'].includes(schema[view[key]]?.type))
             throw new Error(`Invalid progress quantity field: ${actionId}`);
+        }
+        if(view.renderer==='gauge'){
+          if(!view.totalKey)throw new Error('Gauge requires a total quantity');
+          if(view.quantityFormat!==undefined && !['bytes','number'].includes(view.quantityFormat))
+            throw new Error('Invalid gauge quantity format');
+          if(view.unit!==undefined && (typeof view.unit!=='string' || view.unit.length>20))
+            throw new Error('Invalid gauge unit');
         }
         if (view.details) {
           if (!Array.isArray(view.details)) throw new Error('Invalid detail fields');

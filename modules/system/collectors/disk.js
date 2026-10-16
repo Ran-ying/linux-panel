@@ -27,7 +27,7 @@ async function readDiskUsage() {
   return summarizeStatfs(await statfs('/', { bigint: true }));
 }
 
-// Internal collector; only system.info is registered as an Action.
+// Internal collector; only system.resources is registered as an Action.
 export default {
   outputSchema: {
     type: 'object',

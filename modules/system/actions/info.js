@@ -1,4 +1,3 @@
-import disk from '../collectors/disk.js';
 import os from 'node:os';
 
 async function readSystemInfo() {
@@ -11,24 +10,22 @@ async function readSystemInfo() {
     totalMemoryBytes: os.totalmem(),
     freeMemoryBytes: os.freemem(),
     uptimeSeconds: os.uptime(),
-    nodeVersion: process.version,
-    disk: await disk.execute()
+    nodeVersion: process.version
   };
 }
 
 export default {
   id: 'system.info',
   title: '基本信息',
-  description: '读取主机名、系统版本、架构、内存、运行时间与根文件系统磁盘占用。',
+  description: '读取主机名、系统版本、架构、内存与运行时间。',
   kind: 'read',
   permission: 'system:read',
   exposure: { web: true, mcp: true },
   inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   outputSchema: {
     type: 'object',
-    required: ['hostname', 'platform', 'release', 'arch', 'cpuCount', 'totalMemoryBytes', 'freeMemoryBytes', 'uptimeSeconds', 'nodeVersion', 'disk'],
+    required: ['hostname', 'platform', 'release', 'arch', 'cpuCount', 'totalMemoryBytes', 'freeMemoryBytes', 'uptimeSeconds', 'nodeVersion'],
     properties: {
-      disk: disk.outputSchema,
       hostname: { type: 'string' }, platform: { type: 'string' }, release: { type: 'string' },
       arch: { type: 'string' }, cpuCount: { type: 'integer', minimum: 1 },
       totalMemoryBytes: { type: 'number', minimum: 0 }, freeMemoryBytes: { type: 'number', minimum: 0 },
@@ -36,7 +33,7 @@ export default {
     },
     additionalProperties: false
   },
-  explain: 'Linux 通过可编辑的终端命令读取；CPU 数量由 nproc 返回，是当前进程可用处理器数量。根文件系统使用 stat -f，available 与 free 可能因保留块不同。其他平台使用 Node.js 标准库。',
+  explain: 'Linux 通过可编辑的终端命令读取；CPU 数量由 nproc 返回，是当前进程可用处理器数量。其他平台使用 Node.js 标准库。',
   terminal:{
     fields:{
     "hostname": "hostname",
@@ -47,15 +44,10 @@ export default {
     "totalMemoryBytes": "awk '/^MemTotal:/ {printf \"%.0f\\n\", $2 * 1024}' /proc/meminfo",
     "freeMemoryBytes": "awk '/^MemFree:/ {printf \"%.0f\\n\", $2 * 1024}' /proc/meminfo",
     "uptimeSeconds": "cut -d ' ' -f 1 /proc/uptime",
-    "nodeVersion": "node --version",
-    ...disk.terminal.fields
+    "nodeVersion": "node --version"
 },
-    migrateFrom:{filesystem:{actionId:'storage.usage',key:'filesystem'}},
-    decode: values => ({
-      ...Object.fromEntries(Object.entries(values).filter(([key])=>key!=='filesystem').map(([key,value]) =>
-        [key,['cpuCount','totalMemoryBytes','freeMemoryBytes','uptimeSeconds'].includes(key)?Number(value):value])),
-      disk:disk.terminal.decode({filesystem:values.filesystem})
-    })
+    decode: values => Object.fromEntries(Object.entries(values).map(([key,value]) =>
+      [key,['cpuCount','totalMemoryBytes','freeMemoryBytes','uptimeSeconds'].includes(key)?Number(value):value]))
   },
   createPlan: async () => [{ type: 'node-api', code: readSystemInfo.toString() }],
   execute: readSystemInfo

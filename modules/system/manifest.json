@@ -1,7 +1,7 @@
 {
   "id": "system",
   "name": "系统概览",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "entry": "./index.js",
   "dependencies": []
 }
