@@ -1,3 +1,11 @@
+# Content-width pills with semicircular ends — 2026-10-16
+
+Owner clarified that Action buttons need fully rounded semicircular ends rather than 8px corners. Information options, result options and Refresh now use 999px radius and 4px/8px padding. Result buttons use natural content width instead of fixed 96px width, while retaining the same 32px height/font and right alignment.
+
+Existing browser acceptance now checks shared height/type/padding, fully rounded ends and actual text width plus padding/borders. Build/CI and MCP test-server deployment pending at this snapshot.
+
+Base main / last confirmed test deployment: `941e0c35537ea80f66486a9c8a54b2bdebb62793` (PR #94). MCP transaction `2af12fc36486f1e6d78c570a65c9a7a5` succeeded 2026-10-16T00:13:50Z; panel active/running. Final evidence follows in Issue #54.
+
 # Compact right-aligned Action controls — 2026-10-16
 
 Owner requested less vertical space inside capsules, right-aligned groups, and Refresh styled like their options. Both Action information/result groups now align right; capsule frames use 2px padding, and their inner buttons use 8px rounded rectangles with 4px/12px padding. Refresh and result options share 96px width, 32px height and typography. Command textarea autosizing remains intact.
