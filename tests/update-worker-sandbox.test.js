@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,statSync,chmodSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,statSync,chmodSync,symlinkSync,readlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const original=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
@@ -16,7 +16,7 @@ const swap=(s,a,b)=>{
  assert.equal(s.split(a).length,2,'Expected unique worker anchor: '+a);
  return s.replace(a,b);
 };
-function prepare(){
+function prepare({withPrivileged=false}={}){
  const base=mkdtempSync(join(tmpdir(),'lp-updater-stage-'));
  const root=join(base,'code'),bare=join(base,'remote.git'),state=join(base,'state');
  const backup=join(base,'backup'),status=join(base,'status'),bin=join(base,'bin'),runtime=join(base,'run');
@@ -31,6 +31,12 @@ function prepare(){
  writeFileSync(join(root,'apps','api','src','server.js'),'export const version = 1;\n');
  writeFileSync(join(root,'apps','api','src','create-app.js'),'export const boot = 1;\n');
  writeFileSync(join(root,'.gitignore'),'node_modules/\napps/web/dist/\n');
+ mkdirSync(join(root,'platform','privileged'),{recursive:true});
+ const manifest={version:1,files:['server.js','handlers.js'],dependencies:['ajv']};
+ writeFileSync(join(root,'platform','privileged','package-manifest.json'),JSON.stringify(manifest)+'\n');
+ writeFileSync(join(root,'platform','privileged','server.js'),'export const ok = true;\n');
+ writeFileSync(join(root,'platform','privileged','handlers.js'),
+   'export function createPrivilegedHandlers(){return new Map([["old",true]])}\n');
  exec('git',['-C',root,'add','.']);
  exec('git',['-C',root,'commit','-qm','first']);
  const old=exec('git',['-C',root,'rev-parse','HEAD']);
@@ -40,6 +46,8 @@ function prepare(){
  writeFileSync(join(root,'version'),'2\n');
  writeFileSync(join(root,'package.json'),'{"name":"fixture","type":"module","version":"2.0.0"}\n');
  writeFileSync(join(root,'apps','api','src','create-app.js'),'export const boot = 2;\n');
+ writeFileSync(join(root,'platform','privileged','handlers.js'),
+   'export function createPrivilegedHandlers(){return new Map([["target",true]])}\n');
  exec('git',['-C',root,'commit','-qam','second']);
  const target=exec('git',['-C',root,'rev-parse','HEAD']);
  exec('git',['-C',root,'push','-q','origin','main']);
@@ -52,6 +60,8 @@ function prepare(){
  // even when backup fails before the update reaches npm ci.
  mkdirSync(join(root,'node_modules','fastify'),{recursive:true});
  writeFileSync(join(root,'node_modules','fastify','package.json'),'{"name":"fastify"}\n');
+ mkdirSync(join(root,'node_modules','ajv'),{recursive:true});
+ writeFileSync(join(root,'node_modules','ajv','package.json'),'{"name":"ajv"}\n');
  writeFileSync(join(state,'panel-state.json'),'{"original":true}\n');
  const env=join(base,'panel.env'),pin=join(base,'pin');
  writeFileSync(env,'PANEL_LISTEN_PORT=4188\nPANEL_PUBLIC_ORIGIN=http://127.0.0.1:4188\n');
@@ -67,8 +77,9 @@ function prepare(){
  // Simulate real npm removing/reinstalling dependencies under worker umask 077.
  // The Web account is a different UID and must receive group read/execute.
  fake('npm',`if [ "$1" = ci ]; then
- mkdir -p "$TEST_ROOT/node_modules/fastify"
+ mkdir -p "$TEST_ROOT/node_modules/fastify" "$TEST_ROOT/node_modules/ajv"
  printf '{"name":"fastify"}\\n' > "$TEST_ROOT/node_modules/fastify/package.json"
+ printf '{"name":"ajv"}\\n' > "$TEST_ROOT/node_modules/ajv/package.json"
  chmod 0700 "$TEST_ROOT/node_modules" "$TEST_ROOT/node_modules/fastify"
  chmod 0600 "$TEST_ROOT/node_modules/fastify/package.json"
  fi
@@ -84,6 +95,21 @@ function prepare(){
  const meminfo=join(base,'meminfo');
  writeFileSync(meminfo,'MemAvailable:    3000000 kB\\nSwapFree:    3000000 kB\\n'.replaceAll('\\n','\n'));
  let worker=original.replaceAll('/proc/meminfo',JSON.stringify(meminfo));
+ const privRoot=join(base,'privileged');
+ if(withPrivileged){
+   mkdirSync(join(privRoot,'releases',old,'node_modules'),{recursive:true});
+   writeFileSync(join(privRoot,'releases',old,'.ready'),old+'\n');
+   writeFileSync(join(privRoot,'releases',old,'handlers.js'),'// old release\n');
+   symlinkSync('releases/'+old,join(privRoot,'current'));
+   writeFileSync(join(root,'socket-ready'),'fixture');
+ }
+ worker=swap(worker,'PRIV_ROOT=/usr/local/lib/linux-panel-privileged','PRIV_ROOT='+JSON.stringify(privRoot));
+ worker=swap(worker,'/opt/node24/bin/node --input-type=module -e',JSON.stringify(process.execPath)+' --input-type=module -e');
+ worker=swap(worker,'[[ -S /run/linux-panel-privileged/executor.sock ]]','[[ -f "$ROOT/socket-ready" ]]');
+ worker=swap(worker,'"$(stat -c %u "$PRIV_ROOT")" -eq 0','-O "$PRIV_ROOT"');
+ worker=swap(worker,'"$(stat -c %u "$PRIV_RELEASES")" -eq 0','-O "$PRIV_RELEASES"');
+ worker=swap(worker,'"$(stat -c %u "$pkg")" -eq 0','-O "$pkg"');
+ worker=swap(worker,'"$(stat -c %U "$source")" == "$USER"','-O "$source"');
  for(const [a,b] of [
   ['ROOT=/opt/linux-panel','ROOT='+JSON.stringify(root)],
   ['STATE=/var/lib/linux-panel','STATE='+JSON.stringify(state)],
@@ -129,7 +155,7 @@ record(){`);
  writeFileSync(log,'');
  writeFileSync(script,worker,{mode:0o700});
  exec('bash',['-n',script]);
- return {base,root,state,status,script,log,old,target,meminfo,
+ return {base,root,state,status,script,log,old,target,meminfo,privRoot,
   cleanup(){rmSync(base,{recursive:true,force:true})},
   run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false,partialJournal=false,partialResult=false,partialBackup=false}={}){
    const id=(++sequence).toString(16).padStart(32,'0');
@@ -330,4 +356,25 @@ test('tracked source and root package manifest get Web group read/traverse on up
    }
   }finally{f.cleanup();}
  }
+});
+
+test('versioned root package switches with pinned Git target and Web health',()=>{
+ const f=prepare({withPrivileged:true});
+ try{
+  const out=f.run();
+  assert.equal(out.result?.status,'success',JSON.stringify(out.process));
+  assert.equal(readlinkSync(join(f.privRoot,'current')),'releases/'+f.target);
+  assert.ok(existsSync(join(f.privRoot,'releases',f.target,'.ready')));
+  assert.match(readFileSync(join(f.privRoot,'releases',f.target,'handlers.js'),'utf8'),/target/);
+  assert.equal(out.head,f.target);
+ }finally{f.cleanup();}
+});
+test('versioned root package rolls back together with Web after health failure',()=>{
+ const f=prepare({withPrivileged:true});
+ try{
+  const out=f.run({health:true});
+  assert.equal(out.result?.status,'rolled_back',JSON.stringify(out.process));
+  assert.equal(readlinkSync(join(f.privRoot,'current')),'releases/'+f.old);
+  assert.equal(out.head,f.old);
+ }finally{f.cleanup();}
 });
