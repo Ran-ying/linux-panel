@@ -85,7 +85,7 @@ test('file listing, text revisions, UTF-8 bounds, uploads and HTTP write guards'
   assert.equal((await execute('create',{path:join(created,'empty'),type:'file'})).statusCode,200);
   assert.equal((await execute('rename',{path:created,newPath:join(dir,'renamed')})).statusCode,200);
   assert.equal((await execute('delete',{path:join(dir,'renamed')})).statusCode,200);
-  assert.deepEqual((await store.snapshot()).moduleOrder,['system','services','terminal','files','cron']);
+  assert.deepEqual((await store.snapshot()).moduleOrder,['system','services','terminal','files','cron','nginx']);
 });
 
 test('recursive directory sizes, ownership, creation, rename collisions and symlink deletion',async t=>{

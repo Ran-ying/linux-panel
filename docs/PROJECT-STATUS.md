@@ -7,7 +7,7 @@
 - 通用 [root 执行层](PRIVILEGED.md)：PrivilegedActionClient、独立 Unix socket 服务、固定 root-owned handlers 与独立 Schema 验证。Web 仍普通账户，更新 Broker 保持独立；新 handler 需操作员安装，不动态加载模块目录。
 - [文件管理](FILES.md)九个 Action：列表/文本读写/上传/新建/重命名/删除/chmod/chown。Web 可选 root，未配置时普通身份，配置后离线 503；MCP 文件工具保持普通身份。显示实际权限模式、可写状态，权限列可修改八进制 mode、用户/UID、组/GID。
 - 启用即信任整个 linuxpanel UID，同 UID 终端、PTY、自定义 collectors 可直接调用受控 root 文件通道，Web-only 不是 OS 隔离。系统文件编辑是广泛 root 管理能力，不适合不可信模块/终端用户。
-- 保持模块顺序持久化，模块管理可通用上下移动保存导航顺序（不硬编码业务模块名称）；文件权限弹窗所有账户下拉框统一使用内收箭头。Nginx 网站模块尚未创建；Cron 定时任务模块支持独立配置文件的任务浏览/创建/编辑/启停/删除及通用 Web 编辑器（PR #117）。新的 Cron root handler 仍需目标机显式重新安装，不能根据源代码合并或普通 Web 更新宣称 Cron 已可用。文件两排行导航、MB 两位小数、日期时间分行、Action 极简文件展示、目录大小按需统计。资源/基本信息两 Action，服务本地筛选，真实交互终端，共享 ActionEngine/MCP 参数协议保持。
+- 保持模块顺序持久化，模块管理可通用上下移动保存导航顺序（不硬编码业务模块名称）；文件权限弹窗所有账户下拉框统一使用内收箭头。新增 [Nginx 网站模块](NGINX.md)（PR #118）：列出站点、读取和编辑配置、创建/启停/删除、revision 冲突检查、nginx -t 验证、受控 reload 及失败恢复。单元、响应式浏览器及 disposable Ubuntu 真实 Nginx/root handler/HTTP 204 验收通过（CI 38936982003）；仍须分别确认合并、普通代码部署、root 包显式更新和真实 Web 操作，不把代码合并等同于目标机已经启用；Cron 定时任务模块支持独立配置文件的任务浏览/创建/编辑/启停/删除及通用 Web 编辑器（PR #117）。新的 Cron root handler 仍需目标机显式重新安装，不能根据源代码合并或普通 Web 更新宣称 Cron 已可用。文件两排行导航、MB 两位小数、日期时间分行、Action 极简文件展示、目录大小按需统计。资源/基本信息两 Action，服务本地筛选，真实交互终端，共享 ActionEngine/MCP 参数协议保持。
 
 ## 验证与部署
 
@@ -15,4 +15,4 @@
 
 2026-10-16 实机复核：独立 linux-panel-privileged.service 和普通 linux-panel.service 均为 active，socket 组为 root:linux-panel-privileged。以 linuxpanel 运行已有 verify-privileged-executor.js，/etc、/root 的随机临时文件创建、读写、版本冲突、chmod/chown、重命名和清理全部 PASS。新装仅在显式 --enable-privileged 后自动启用 root 文件 Actions；默认仍不安装，已有主机不需要重新安装应用。具体 CI/PR 与部署证据见 Issue #54。
 
-下一步：首次安装 opt-in 的完整 CI 验收、真实 iPhone/Android QA、更多诊断模块。没有不可信插件沙箱、多管理员或独立安全审计。
+下一步：Nginx root 包显式升级与实际受控 Web 操作验收、真实 iPhone/Android QA、其它模块。Nginx 语法和 reload 检查不保证公网代理/HTTPS 上游的端到端健康；异常断电无 Nginx 独立恢复日志。没有不可信插件沙箱、多管理员或独立安全审计。

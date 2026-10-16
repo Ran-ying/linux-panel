@@ -7,6 +7,9 @@ on:
       - 'scripts/admin-init.js'
       - 'scripts/verify-cron-executor.js'
       - 'platform/privileged/**'
+      - 'deployment/systemd/linux-panel-privileged.service'
+      - 'modules/nginx/**'
+      - 'scripts/verify-nginx-executor.js'
       - 'modules/cron/**'
       - '.github/workflows/fresh-install.yml'
 permissions:
@@ -20,6 +23,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Prepare disposable Nginx integration fixture
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nginx
+          sudo systemctl enable --now nginx.service
+          sudo nginx -t
       - name: Install current PR on disposable runner, login and refuse replacement
         env:
           INSTALL_REF: ${{ github.head_ref }}
@@ -71,6 +80,7 @@ jobs:
           sudo test ! -e /etc/cron.d/linux-panel
           sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env PANEL_CRON_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-cron-executor.js
           sudo rm -f /etc/cron.d/linux-panel
+          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env CI=true PANEL_NGINX_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-nginx-executor.js
           PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import {randomUUID} from 'node:crypto';
