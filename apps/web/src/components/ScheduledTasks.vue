@@ -8,10 +8,14 @@ const emit=defineEmits(['unauthorized','listing-change']);
 const listing=ref(props.initialData),busy=ref(false),error=ref(''),message=ref('');
 const dialog=ref(null),deleteDialog=ref(null),draft=ref(null),removeTarget=ref(null);
 const systemEditDialog=ref(null),systemConfirmDialog=ref(null),systemDraft=ref(null),systemConfirm=ref(null);
-const systemSource=ref('all'),systemQuery=ref('');
+const systemSource=ref('all'),systemOwner=ref('all'),systemStatus=ref('all'),systemQuery=ref('');
 const sources=[['all','全部'],['system-crontab','系统 Crontab'],['cron.d','Cron 配置'],['user-crontab','用户 Crontab'],['periodic','周期脚本'],['anacron','Anacron'],['at-job','AT 一次性任务'],['systemd-timer','systemd Timers']];
+const systemOwners=computed(()=>[...new Set((listing.value.systemTasks??[]).map(x=>x.owner).filter(Boolean))]
+  .sort((a,b)=>a.localeCompare(b,'zh-CN')));
 const systemRows=computed(()=>(listing.value.systemTasks??[]).filter(x=>
   (systemSource.value==='all'||x.sourceType===systemSource.value)&&
+  (systemOwner.value==='all'||x.owner===systemOwner.value)&&
+  (systemStatus.value==='all'||x.enabled===(systemStatus.value==='enabled'))&&
   (!systemQuery.value||[x.source,x.name,x.owner,x.expression,x.command].some(v=>String(v??'').toLowerCase().includes(systemQuery.value.trim().toLowerCase())))
 ));
 let noticeTimer;
@@ -114,44 +118,8 @@ function remove(){
     <div v-if="message" class="task-notice" role="status">{{ message }}</div>
     <p v-if="error && !draft && !removeTarget" class="error" role="alert">{{ error }}</p>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
-    <h3 class="system-title">系统现有定时任务</h3>
-    <div class="task-toolbar system-filters">
-      <label>来源
-        <select v-model="systemSource" aria-label="按任务来源筛选">
-          <option v-for="[value,text] in sources" :key="value" :value="value">{{ text }}</option>
-        </select>
-      </label>
-      <label>筛选
-        <input v-model="systemQuery" placeholder="任务名称、用户或命令" aria-label="筛选系统任务" />
-      </label>
-      <span class="muted small">显示 {{ systemRows.length }} / {{ listing.systemCount??0 }} 项</span>
-    </div>
-    <p v-if="listing.systemWarnings?.length" class="muted small" role="status">
-      部分来源读取受限：{{ listing.systemWarnings.join('；') }}
-    </p>
-    <div class="table-wrap">
-      <table class="task-table">
-        <thead><tr><th>来源 / 任务</th><th>执行用户</th><th>计划 / 下次执行</th><th>命令</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody>
-          <tr v-for="record in systemRows" :key="record.id">
-            <td><strong>{{ record.name }}</strong><span class="system-origin">{{ record.sourceType }} · {{ record.source }}</span></td>
-            <td>{{ record.owner }}</td>
-            <td><code>{{ record.expression }}</code><span v-if="record.nextRun" class="system-origin">{{ record.nextRun }}</span></td>
-            <td><code class="task-command">{{ record.command }}</code></td>
-            <td>{{ record.enabled?'已启用':'已停用' }}</td>
-            <td><div class="task-row-actions">
-              <button v-if="record.control==='cron'&&record.editable" type="button" :disabled="busy" @click="openSystemEdit(record)">编辑</button>
-              <button v-if="record.control==='cron'||record.control==='timer'" type="button" :disabled="busy" @click="beginSystemAction(record,record.enabled?'disable':'enable')">{{ record.enabled?'停用':'启用' }}</button>
-              <button v-if="record.control==='cron'||record.control==='at'" type="button" :disabled="busy" @click="beginSystemAction(record,'remove')">删除</button>
-              <span v-if="record.control==='none'" class="muted small" :title="record.detail">只读</span>
-            </div></td>
-          </tr>
-          <tr v-if="!systemRows.length"><td colspan="6">该来源没有发现系统任务</td></tr>
-        </tbody>
-      </table>
-    </div>
     <h3 class="system-title">Linux Panel 托管的定时任务</h3>
-    <p class="muted small">新建任务写入独立的 /etc/cron.d/linux-panel，以 linuxpanel 用户运行。系统原有任务显示在上方。</p>
+    <p class="muted small">新建任务写入独立的 /etc/cron.d/linux-panel，以 linuxpanel 用户运行。系统原有任务显示在下方。</p>
     <div class="table-wrap">
       <table class="task-table">
         <thead><tr><th>名称</th><th>计划（服务器本地时间）</th><th>命令</th><th>状态</th><th>操作</th></tr></thead>
@@ -168,6 +136,67 @@ function remove(){
             </div></td>
           </tr>
           <tr v-if="!listing.tasks.length"><td colspan="5">暂无由 Linux Panel 管理的定时任务</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="system-title">系统现有定时任务</h3>
+    <div class="task-toolbar system-filters">
+      <label>搜索
+        <input v-model="systemQuery" placeholder="任务名称、用户或命令" aria-label="搜索系统任务" />
+      </label>
+      <span class="muted small">显示 {{ systemRows.length }} / {{ listing.systemCount??0 }} 项</span>
+    </div>
+    <p v-if="listing.systemWarnings?.length" class="muted small" role="status">
+      部分来源读取受限：{{ listing.systemWarnings.join('；') }}
+    </p>
+    <div class="table-wrap">
+      <table class="task-table system-task-table">
+        <thead>
+          <tr>
+            <th>
+              <label class="task-filter-heading">来源 / 任务
+                <select v-model="systemSource" aria-label="按来源筛选">
+                  <option v-for="[value,text] in sources" :key="value" :value="value">{{ text }}</option>
+                </select>
+              </label>
+            </th>
+            <th>
+              <label class="task-filter-heading">执行用户
+                <select v-model="systemOwner" aria-label="按执行用户筛选">
+                  <option value="all">全部用户</option>
+                  <option v-for="owner in systemOwners" :key="owner" :value="owner">{{ owner }}</option>
+                </select>
+              </label>
+            </th>
+            <th>计划 / 下次执行</th>
+            <th>命令</th>
+            <th>
+              <label class="task-filter-heading">状态
+                <select v-model="systemStatus" aria-label="按任务状态筛选">
+                  <option value="all">全部状态</option>
+                  <option value="enabled">已启用</option>
+                  <option value="disabled">已停用</option>
+                </select>
+              </label>
+            </th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="record in systemRows" :key="record.id">
+            <td><strong>{{ record.name }}</strong><span class="system-origin">{{ record.sourceType }} · {{ record.source }}</span></td>
+            <td>{{ record.owner }}</td>
+            <td><code>{{ record.expression }}</code><span v-if="record.nextRun" class="system-origin">{{ record.nextRun }}</span></td>
+            <td><code class="task-command">{{ record.command }}</code></td>
+            <td>{{ record.enabled?'已启用':'已停用' }}</td>
+            <td><div class="task-row-actions">
+              <button v-if="record.control==='cron'&&record.editable" type="button" :disabled="busy" @click="openSystemEdit(record)">编辑</button>
+              <button v-if="record.control==='cron'||record.control==='timer'" type="button" :disabled="busy" @click="beginSystemAction(record,record.enabled?'disable':'enable')">{{ record.enabled?'停用':'启用' }}</button>
+              <button v-if="record.control==='cron'||record.control==='at'" type="button" :disabled="busy" @click="beginSystemAction(record,'remove')">删除</button>
+              <span v-if="record.control==='none'" class="muted small" :title="record.detail">只读</span>
+            </div></td>
+          </tr>
+          <tr v-if="!systemRows.length"><td colspan="6">该来源没有发现系统任务</td></tr>
         </tbody>
       </table>
     </div>
@@ -241,7 +270,9 @@ function remove(){
 .system-title{margin:1.15rem 0 .7rem}
 .system-origin{display:block;margin-top:.25rem;font-size:.78rem;opacity:.7;overflow-wrap:anywhere}
 .system-filters label{display:flex;align-items:center;gap:.4rem}
-.system-filters input,.system-filters select{min-height:2.35rem;max-width:18rem;font:inherit}
+.system-filters input{min-height:2.35rem;max-width:18rem;font:inherit}
+.task-filter-heading{display:flex;flex-direction:column;align-items:stretch;gap:.35rem;font-weight:inherit}
+.task-filter-heading select{width:100%;min-width:7rem;max-width:15rem;min-height:2.35rem;font:inherit}
 .task-toolbar,.task-row-actions,.task-dialog-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .task-toolbar{margin:.2rem 0 1rem}
 .task-toolbar button,.task-row-actions button,.task-dialog-actions button{min-height:2.35rem;font:inherit;padding:.35rem .8rem}
@@ -260,5 +291,5 @@ function remove(){
 .task-switch input{width:auto!important}
 .task-dialog-actions{justify-content:flex-end}
 .task-notice{padding:.6rem 0}
-@media(max-width:730px){.task-table{min-width:650px}.task-toolbar{align-items:stretch}}
+@media(max-width:730px){.task-table{min-width:650px}.system-task-table{min-width:950px}.task-toolbar{align-items:stretch}}
 </style>

@@ -37,13 +37,28 @@ try {
     const page=await context.newPage();
     // Disposable Cron fixture: run the new generic scheduler UI without any
     // system cron write or privileged socket on the browser CI host.
-    let cronJobs=[],cronVersion=0;
+    let cronJobs=[],cronVersion=0,cronListCalls=0;
+    const cronSystemJobs=[
+      {id:'system-cron-certbot',sourceType:'cron.d',source:'/etc/cron.d/certbot',
+        name:'certbot',owner:'root',expression:'0 */12 * * *',command:'/usr/bin/certbot',
+        enabled:true,control:'none',nextRun:'',detail:'fixture'},
+      {id:'user-cron-alice',sourceType:'user-crontab',source:'crontab:alice',
+        name:'alice',owner:'alice',expression:'0 2 * * *',command:'/usr/bin/true',
+        enabled:false,control:'none',nextRun:'',detail:'fixture'},
+      {id:'systemd-apt-timer',sourceType:'systemd-timer',source:'apt-daily.timer',
+        name:'apt-daily.timer',owner:'systemd',expression:'systemd',command:'apt-daily.service',
+        enabled:true,control:'none',nextRun:'2026-10-17T00:00:00Z',detail:'fixture'}
+    ];
     const cronRevision=()=>String(cronVersion).padStart(64,'0');
     await page.route('**/api/actions/cron.*/execute',async route=>{
       const id=new URL(route.request().url()).pathname.split('/')[3];
       const input=route.request().postDataJSON()?.input ?? {};
       let result,status=200;
-      if(id==='cron.list')result={tasks:cronJobs,revision:cronRevision(),count:cronJobs.length};
+      if(id==='cron.list'){
+        cronListCalls++;
+        result={tasks:cronJobs,revision:cronRevision(),count:cronJobs.length,
+          systemTasks:cronSystemJobs,systemCount:cronSystemJobs.length,systemWarnings:[]};
+      }
       else if(input.revision!==cronRevision()){status=409;result={error:'任务已改变'};}
       else if(id==='cron.save'){
         const task={...input.task,id:input.task.id??'00000000-0000-4000-8000-000000000001'};
@@ -133,6 +148,36 @@ try {
       await navigate(name.trim());
       await page.locator('.module-content').waitFor();
       if(name.trim()==='定时任务' && [390,1280].includes(width)){
+        const schedule=page.locator('.scheduled-tasks');
+        await schedule.getByRole('heading',{name:'Linux Panel 托管的定时任务'}).waitFor();
+        const headings=await schedule.locator(':scope > h3.system-title').allTextContents();
+        assert.deepEqual(headings,['Linux Panel 托管的定时任务','系统现有定时任务'],
+          'managed tasks must appear before existing system tasks');
+        const systemTable=schedule.locator('.system-task-table');
+        const visibleRows=systemTable.locator('tbody tr');
+        const source=systemTable.getByRole('combobox',{name:'按来源筛选'});
+        const owner=systemTable.getByRole('combobox',{name:'按执行用户筛选'});
+        const status=systemTable.getByRole('combobox',{name:'按任务状态筛选'});
+        assert.equal(await visibleRows.count(),3);
+        assert.deepEqual(await owner.locator('option').allTextContents(),
+          ['全部用户','alice','root','systemd']);
+        const callsBeforeFilters=cronListCalls;
+        await source.selectOption('user-crontab');
+        assert.equal(await visibleRows.count(),1);
+        await owner.selectOption('root');
+        await systemTable.getByText('该来源没有发现系统任务').waitFor();
+        await owner.selectOption('alice');
+        assert.equal(await visibleRows.count(),1);
+        await status.selectOption('enabled');
+        await systemTable.getByText('该来源没有发现系统任务').waitFor();
+        await status.selectOption('disabled');
+        assert.equal(await visibleRows.count(),1);
+        assert.ok((await visibleRows.first().innerText()).includes('alice'));
+        await source.selectOption('all');
+        await owner.selectOption('all');
+        await status.selectOption('all');
+        assert.equal(await visibleRows.count(),3);
+        assert.equal(cronListCalls,callsBeforeFilters,'dropdown filtering must not refresh backend');
         await page.getByRole('button',{name:'新建任务'}).click();
         const form=page.getByRole('dialog',{name:'新建定时任务'});
         await form.getByRole('textbox',{name:'任务名称'}).fill('Fixture nightly');
@@ -141,7 +186,7 @@ try {
         await form.getByRole('button',{name:'保存'}).click();
         await page.getByText('Fixture nightly').waitFor();
         await page.getByRole('button',{name:'停用 Fixture nightly'}).click();
-        await page.getByRole('cell',{name:'已停用',exact:true}).waitFor();
+        await schedule.locator('.task-table:not(.system-task-table)').getByRole('cell',{name:'已停用',exact:true}).waitFor();
         await page.getByRole('button',{name:'删除 Fixture nightly'}).click();
         await page.getByRole('dialog',{name:'删除任务'}).getByRole('button',{name:'删除'}).click();
         await page.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
