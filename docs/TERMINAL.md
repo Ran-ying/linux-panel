@@ -34,3 +34,5 @@ command 必填，1–16384 字符、不含 NUL；timeoutSeconds 可选，1–60 
 MCP 普通能力现通过 SDK fromJsonSchema 原样公布 Action.inputSchema/outputSchema，并转发实际 input；ActionEngine 再校验。此前空参数缺口已补齐，包含嵌套/数组/数值边界与非法参数测试。更新工具保留独立的受限执行策略。
 
 [模块规范](MODULE-DEVELOPMENT.md) · [MCP](mcp.md) · [当前状态](PROJECT-STATUS.md)
+
+生产 HTML 为面板终端的动态样式提供每次页面独立的 CSP style nonce；脚本仍只允许 self，不使用 unsafe-inline。终端模块不提供任意样式注入接口。
