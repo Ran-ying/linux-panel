@@ -117,14 +117,22 @@ try {
         }
         const sizes=await card.locator('.result-controls button').evaluateAll(nodes=>nodes.map(n=>{
           const s=getComputedStyle(n),r=n.getBoundingClientRect();
-          return [r.width,r.height,s.fontSize,s.fontWeight,s.lineHeight];
+          return [r.width,r.height,s.fontSize,s.fontWeight,s.lineHeight,s.padding,s.borderRadius];
         }));
         assert.equal(sizes.length,3);
         assert.ok(sizes.every(s=>JSON.stringify(s)===JSON.stringify(sizes[0])),'result buttons must share dimensions and typography');
         const pills=await card.locator('.action-info-tabs,.view-switch').evaluateAll(nodes=>
           nodes.every(n=>parseFloat(getComputedStyle(n).borderTopLeftRadius)>=999 &&
-            [...n.querySelectorAll('button')].every(b=>parseFloat(getComputedStyle(b).borderTopLeftRadius)>=999)));
-        assert.equal(pills,true,'information and result switches must be capsules');
+            [...n.querySelectorAll('button')].every(b=>getComputedStyle(b).borderTopLeftRadius==='8px' && getComputedStyle(b).paddingTop==='4px')));
+        assert.equal(pills,true,'capsules must contain compact rounded rectangular options');
+        const aligned=await card.evaluate(node=>{
+          const info=node.querySelector('.information-heading').getBoundingClientRect();
+          const tabs=node.querySelector('.action-info-tabs').getBoundingClientRect();
+          const result=node.querySelector('.result-header').getBoundingClientRect();
+          const views=node.querySelector('.view-switch').getBoundingClientRect();
+          return Math.abs(info.right-tabs.right)<1 && Math.abs(result.right-views.right)<1;
+        });
+        assert.equal(aligned,true,'information and result switches must align right');
         const controls=await card.locator('.result-controls').evaluate(node=>{
           const refresh=node.querySelector('.action-refresh').getBoundingClientRect();
           const visual=node.querySelector('.view-switch').getBoundingClientRect();
