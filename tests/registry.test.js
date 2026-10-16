@@ -54,7 +54,7 @@ test('bundled modules load after dependencies and expose expected actions', asyn
   assert.deepEqual([...ids].sort(), ['cron','files', 'nginx', 'services', 'system', 'terminal']);
   assert.deepEqual(ids,['system','services','terminal','files','cron','nginx']);
   assert.deepEqual(registry.list('web').map(a => a.id).sort(),
-    ['cron.list','cron.remove','cron.save','files.accounts','files.chmod','files.chown','files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','nginx.apply','nginx.check','nginx.read','nginx.repairExecutor','nginx.sites','services.list','system.info','system.resources','terminal.execute']);
+    ['cron.list','cron.remove','cron.save','cron.systemSet','files.accounts','files.chmod','files.chown','files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','nginx.apply','nginx.check','nginx.read','nginx.repairExecutor','nginx.sites','services.list','system.info','system.resources','terminal.execute']);
   for(const id of ['storage.usage','system.cpu','system.memory'])assert.equal(registry.get(id),undefined);
 });
 
