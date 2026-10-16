@@ -331,7 +331,10 @@ try {
         assert.deepEqual(firstRowOrder,['INPUT','BUTTON'],'the checkbox must precede the website name');
         const listWidth=await manager.locator('.config-list-panel').evaluate(
           node=>node.getBoundingClientRect().width);
-        assert.ok(listWidth<=280, 'the website list column should be narrow');
+        if(width===1280)assert.ok(listWidth<=280,
+          'the desktop website list column should be narrow');
+        else assert.ok(listWidth<=width,
+          'mobile list should fill available viewport instead of overflowing');
         assert.equal(await enabled.isChecked(),false,'new Nginx site defaults to unchecked');
         assert.equal(await manager.locator('.config-detail-panel').count(),0,
           'new sites are listed on the left without automatically showing details');
