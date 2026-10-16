@@ -31,6 +31,22 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
 
 `nginx -t` 会在检查已有 listen 指令时创建 AF_INET/AF_INET6 socket，即使它不会对公网启动新的 Nginx master。root executor 因而允许 `AF_UNIX AF_INET AF_INET6` 和 `CAP_NET_BIND_SERVICE`，保留其它 systemd 沙箱约束；这项扩大需单独审查并由操作员显式重新安装固定 root handler + unit 生效。未启动任意 TCP 服务，业务 Action 不接受网络地址参数。
 
+## 受控 root unit 自修复（一次性兼容迁移）
+
+版本化 root 包通过已授权 main Broker 更新自动安装；若旧主机的
+`linux-panel-privileged.service` 仍只允许 AF_UNIX，`nginx.check`
+会失败。修复 Action `nginx.repairExecutor` 不接受任意路径、命令、
+systemd 单元名或内容，只有固定确认短语与 `status`/`stage`/`restart` 三种模式。
+它被标记为 Web-only privileged write，而用户可信的 linuxpanel UID
+终端也可连接固定 root socket 执行该 Action。
+
+`stage` 仅安装固定的 systemd drop-in，`systemctl daemon-reload`
+并核实有效权限，不立即重启；`restart` 校验成功后只以
+`systemctl --no-block restart linux-panel-privileged.service` 重启
+自身。MCP 连接可能暂时中断；请求确认前务必先核验 socket、
+重新调用 `nginx.check`。固定覆盖文件冲突或单元与审核格式
+不符时拒绝覆盖。该修复不更改 Nginx 站点、配置、证书或 nginx.service。
+
 ## 重要限制
 
 目录清单是有限的文件扫描：每目录上限 200 项、每配置文件 64 KiB。解析出 \`server_name\`、\`listen\` 的字符串**仅为摘要**，并非完整 Nginx parser 或 \`nginx -T\` 生效配置。尤其 conf.d 仅是配置候选，需看 nginx.conf include。启用的站点还可能因 include 或其它复杂条件实际不生效。

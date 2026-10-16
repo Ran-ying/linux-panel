@@ -5,6 +5,8 @@ import {CRON_CONTRACTS} from './cron-contracts.js';
 import {createCronOperations} from './cron-operations.js';
 import {NGINX_CONTRACTS} from './nginx-contracts.js';
 import {createNginxOperations} from './nginx-operations.js';
+import {NGINX_UNIT_CONTRACT} from './nginx-unit-contracts.js';
+import {createNginxUnitOperations} from './nginx-unit-operations.js';
 // Add reviewed built-in handlers here, then explicitly reinstall the root package.
 // Never discover/import modules from the checkout or a Web-writable directory.
 export function createPrivilegedHandlers({privileged=true}={}){
@@ -18,5 +20,9 @@ export function createPrivilegedHandlers({privileged=true}={}){
   const nginx=createNginxOperations();
   for(const [name,contract] of Object.entries(NGINX_CONTRACTS))
     handlers.set('nginx.'+name,{validate:ajv.compile(contract.inputSchema),execute:nginx[name]});
+  const unitRepair=createNginxUnitOperations();
+  handlers.set('nginx.repairExecutor',{
+    validate:ajv.compile(NGINX_UNIT_CONTRACT.inputSchema),execute:unitRepair.repair
+  });
   return handlers;
 }
