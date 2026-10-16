@@ -54,9 +54,9 @@ function formatted(key, formatKind) {
     </p>
 
     <div v-if="presentation?.renderer === 'sections'" class="result-sections">
-      <section v-for="(section,index) in presentation.sections" :key="index">
+      <div v-for="(section,index) in presentation.sections" :key="index" class="result-section">
         <ResultRenderer :data="section.key === undefined ? data : data[section.key]" :presentation="section" />
-      </section>
+      </div>
     </div>
 
     <div v-else-if="presentation?.renderer === 'metrics'" class="metric-grid">
