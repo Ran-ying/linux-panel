@@ -1,0 +1,7 @@
+{
+  "id": "cron",
+  "name": "定时任务",
+  "version": "0.1.0",
+  "entry": "./index.js",
+  "dependencies": []
+}
