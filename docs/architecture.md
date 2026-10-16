@@ -6,6 +6,7 @@
 
 - platform：管理员、会话/TOTP、CSRF/Origin、私有状态、MCP 全局策略、可编辑命令、更新/监听配置。
 - core：可信随仓库模块发现与依赖、注册、JSON Schema、默认拒绝新写类型。
+- modules/cron：Cron 配置的声明式管理 Actions（仅 Web）；root-owned 固定 handler 只操作 /etc/cron.d/linux-panel 并强制执行身份 linuxpanel，不提供 root Shell。详见 [Cron 模块](CRON.md)。
 - modules/files：list/read/write/upload/create/rename/delete/chmod/chown，默认普通账户、可选 root fs 操作；面板负责目录、编辑器及文件变更控件，写能力仅 Web。参见 [文件管理](FILES.md)。
 - modules/system：system.resources（cpu + memory + disk，优先展示）、system.info（主机基本字段）。collectors 为内部帮助代码，旧 split Actions 与 storage 模块已移除。
 - modules/services：services.list。
