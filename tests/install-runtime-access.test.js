@@ -17,6 +17,19 @@ test('first install normalizes generated files and imports dependencies as Web i
   assert.match(script,/runuser -u linuxpanel -- test -r \/opt\/linux-panel\/apps\/web\/dist\/index\.html/);
 });
 
+test('first-install root option enables fixed executor only after Web starts',()=>{
+  const source=read('../scripts/install.sh');
+  const active=source.indexOf('systemctl is-active --quiet linux-panel.service');
+  const optin=source.indexOf('if ((LP_ENABLE_PRIVILEGED));then');
+  const install=source.indexOf('bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable');
+  assert.ok(active>=0 && active<optin && optin<install);
+  assert.match(source,/--privileged-node-bin requires --enable-privileged/);
+  assert.match(source,/Root file Actions OFF by default/);
+  const workflow=read('../.github/workflows/fresh-install.yml');
+  assert.match(workflow,/--enable-privileged --privileged-node-bin \/usr\/lib\/linux-panel-root-test-runtime\/node/);
+  assert.doesNotMatch(workflow,/sudo bash \/opt\/linux-panel\/scripts\/install-privileged-executor.sh --enable/);
+});
+
 test('manual updater refuses any installed Broker and restores Web access after npm ci',()=>{
   const script=read('../scripts/update.sh');
   const guard=script.indexOf('Installed update Broker detected');

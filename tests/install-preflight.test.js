@@ -12,6 +12,8 @@ test('installer help documents no proxy dependency and own listener',()=>{
   assert.equal(r.status,0,r.stderr);
   assert.match(r.stdout,/--preflight/);
   assert.match(r.stdout,/--node-bin/);
+  assert.match(r.stdout,/--enable-privileged/);
+  assert.match(r.stdout,/--privileged-node-bin/);
   assert.match(r.stdout,/--resume/);
   assert.match(r.stdout,/--host ADDRESS/);
   assert.match(r.stdout,/--port PORT/);
@@ -25,6 +27,11 @@ test('read-only preflight blocks unavailable isolated Node without mutating host
   assert.match(r.stdout,/Preflight summary: [1-9][0-9]* blocker/);
   assert.doesNotMatch(r.stdout,/Nginx|nginx|certificate/);
   assert.match(r.stderr,/Preflight blocked installation/);
+});
+test('privileged Node override requires opt-in before any installation',()=>{
+  const result=run('--preflight','--privileged-node-bin','/tmp/not-a-root-node');
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/requires --enable-privileged/);
 });
 test('invalid listener address and privileged port fail before installation',()=>{
   for(const args of [['--host','192.168.1.1'],['--port','80'],['--port','65536'],

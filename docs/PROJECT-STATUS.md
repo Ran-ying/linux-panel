@@ -1,6 +1,6 @@
 # Linux Panel 当前状态
 
-更新：2026-10-16。v0.5.0 已发布，main 持续迭代。本轮基于 d8b00f80d7468dfa4e93705e4162b8c48b00940a（PR #110），实施 [Issue #111](https://github.com/Ran-ying/linux-panel/issues/111)。准确 CI、合并、普通 Web 部署与 root 激活证据统一见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+更新：2026-10-16。v0.5.0 已发布，main 持续迭代。root 执行层已由 PR #112 合并进 main 697ff4698607008aa672c7db1164a39b9c4242b5，本轮补齐首次安装可选启用入口，关联 [Issue #111](https://github.com/Ran-ying/linux-panel/issues/111)。准确 CI、合并、普通 Web 部署与 root 激活证据统一见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
 ## 当前实现
 
@@ -13,6 +13,6 @@
 
 本轮增加独立 root /etc 与 /root 临时对象验收、跨 UID/group socket 权限、HTTP 鉴权/CSRF、未知操作/错误输入拒绝、MCP 普通身份、根通道离线不降级，以及权限编辑浏览器回归。本机运行环境禁止监听 Unix socket，不能把本地语法/构建与无 socket 测试写成 IPC 验收通过；完整 CI 是必要证据。
 
-此前观察到的测试服务器为上述 PR #110 SHA，更新成功。新的 root 服务不能靠普通 MCP 终端或现有更新 Broker 安装；代码经 CI/合并/普通更新后，仍需操作员执行一次安装命令，然后做真实 root 通道验收。未激活前不得宣称系统文件已可管理；最终状态见 Issue #54。
+2026-10-16 实机复核：独立 linux-panel-privileged.service 和普通 linux-panel.service 均为 active，socket 组为 root:linux-panel-privileged。以 linuxpanel 运行已有 verify-privileged-executor.js，/etc、/root 的随机临时文件创建、读写、版本冲突、chmod/chown、重命名和清理全部 PASS。新装仅在显式 --enable-privileged 后自动启用 root 文件 Actions；默认仍不安装，已有主机不需要重新安装应用。具体 CI/PR 与部署证据见 Issue #54。
 
-下一步：操作员 root 激活与实机验收、真实 iPhone/Android QA、更多诊断模块。没有不可信插件沙箱、多管理员或独立安全审计。
+下一步：首次安装 opt-in 的完整 CI 验收、真实 iPhone/Android QA、更多诊断模块。没有不可信插件沙箱、多管理员或独立安全审计。

@@ -27,10 +27,16 @@ jobs:
           trap 'rm -f "$secret"' EXIT
           chmod 600 "$secret"
           openssl rand -hex 24 > "$secret"
+          # The runner's Node toolcache is not root-owned; provide a root-owned
+          # runtime specifically for the privileged service.
+          sudo install -d -o root -g root -m 0755 /usr/lib/linux-panel-root-test-runtime
+          sudo install -o root -g root -m 0755 "$(command -v node)" /usr/lib/linux-panel-root-test-runtime/node
           sudo bash scripts/setup.sh --apply --host 127.0.0.1 --port 49331 \
             --node-bin "$(command -v node)" --ref "$INSTALL_REF" \
+            --enable-privileged --privileged-node-bin /usr/lib/linux-panel-root-test-runtime/node \
             --admin-password-stdin < "$secret"
           sudo systemctl is-active --quiet linux-panel.service
+          sudo systemctl is-active --quiet linux-panel-privileged.service
           PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import assert from 'node:assert/strict';
@@ -53,11 +59,7 @@ jobs:
           fi
           test ! -e /etc/systemd/system/linux-panel-update.service
           sudo test "$(sudo stat -c %a /etc/linux-panel/panel.env)" = 600
-          # Explicit root opt-in on this disposable host, including fixed-package
-          # installation, the real service sandbox and authenticated Web calls.
-          sudo install -d -o root -g root -m 0755 /usr/lib/linux-panel-root-test-runtime
-          sudo install -o root -g root -m 0755 "$(command -v node)" /usr/lib/linux-panel-root-test-runtime/node
-          sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable --node-bin /usr/lib/linux-panel-root-test-runtime/node
+          # The guided installer enabled this privileged service directly; no second command.
           test "$(systemctl show -P User linux-panel.service)" = linuxpanel
           test "$(systemctl show -P User linux-panel-privileged.service)" = root
           sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-privileged-executor.js

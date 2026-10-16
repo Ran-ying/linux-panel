@@ -6,7 +6,9 @@ Web 继续以 linuxpanel 运行。管理员可另外安装独立 root executor�
 
 ## 启用与关闭
 
-先更新普通面板代码，再在已安装的服务器执行一次：
+全新安装可直接使用 `sudo bash scripts/setup.sh --apply --node-bin /opt/node24/bin/node --enable-privileged ...`，或在 `scripts/install.sh` 的首次安装命令加 `--enable-privileged`。向导交互模式会单独询问是否启用。只有明确选择时，首次安装才在 Web 启动后运行固定 root executor 安装器；否则默认关闭。安装过程中 root 端失败不会撤销已创建的 Web 账号和私有状态，应修复并使用下方单独安装命令，不要重复运行首次安装覆盖状态。若 Node 在非 root-owned 路径，指定 `--privileged-node-bin /absolute/root-owned/node`。
+
+已有安装先更新普通面板代码，再在服务器执行一次：
 
 ```bash
 sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable

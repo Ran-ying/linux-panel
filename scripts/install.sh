@@ -16,6 +16,10 @@ Options:
                       using a reverse proxy or public listener.
                       Default for loopback: http://127.0.0.1:PORT
   --node-bin FILE     Dedicated Node binary (npm in the same directory)
+  --enable-privileged  Install reviewed root file Actions after Web setup.
+                      This trusts the panel OS identity, including its terminal.
+  --privileged-node-bin FILE  Optional separate root-owned Node 22.12+ binary
+                      (requires --enable-privileged).
   --preflight         Read-only compatibility and port-conflict report
   --check             Alias for --preflight (no changes)
   --admin-password-stdin Read one admin password from stdin; for unattended CI.
@@ -47,23 +51,33 @@ REF='main'
 PREFLIGHT_ONLY=0
 LP_RESUME=0
 LP_PASSWORD_STDIN=0
+LP_ENABLE_PRIVILEGED=0
+LP_PRIVILEGED_NODE_BIN=''
 while (($#)); do
   case "$1" in
-    --host|--port|--public-origin|--repo|--ref|--node-bin)
+    --host|--port|--public-origin|--repo|--ref|--node-bin|--privileged-node-bin)
       (($#>=2)) || die "Missing value after $1"
       case "$1" in
         --host) LP_HOST="$2";; --port) LP_PORT="$2";;
         --public-origin) LP_PUBLIC_ORIGIN="$2"; LP_ORIGIN_EXPLICIT=1;;
         --repo) REPO="$2";; --ref) REF="$2";;
+        --privileged-node-bin) LP_PRIVILEGED_NODE_BIN="$2";;
         --node-bin) LP_REQUESTED_NODE_BIN="$2";;
       esac; shift 2;;
     --preflight|--check) PREFLIGHT_ONLY=1; shift;;
     --admin-password-stdin) LP_PASSWORD_STDIN=1; shift;;
+    --enable-privileged) LP_ENABLE_PRIVILEGED=1; shift;;
     --resume) LP_RESUME=1; shift;;
     --help|-h) usage; exit 0;;
     *) die "Unknown option: $1; see --help. Proxy/TLS configuration is outside this installer.";;
   esac
 done
+[[ -z "$LP_PRIVILEGED_NODE_BIN" || "$LP_ENABLE_PRIVILEGED" == 1 ]] ||
+  die '--privileged-node-bin requires --enable-privileged'
+if [[ -n "$LP_PRIVILEGED_NODE_BIN" ]];then
+  [[ "$LP_PRIVILEGED_NODE_BIN" == /* && -x "$LP_PRIVILEGED_NODE_BIN" ]] ||
+    die '--privileged-node-bin must be an absolute executable path'
+fi
 [[ "$LP_HOST" == '127.0.0.1' || "$LP_HOST" == '0.0.0.0' ]] ||
   die 'Listen --host must be 127.0.0.1 or 0.0.0.0'
 [[ "$LP_PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$LP_PORT>=1024 && 10#$LP_PORT<=65535)) ||
@@ -189,6 +203,18 @@ systemctl daemon-reload
 systemctl enable --now linux-panel.service
 systemctl is-active --quiet linux-panel.service ||
   die 'Service failed to start; inspect journalctl -u linux-panel'
+if ((LP_ENABLE_PRIVILEGED));then
+  log 'Enabling reviewed root file Actions (explicit installer opt-in)'
+  if ! bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable \
+    --node-bin "${LP_PRIVILEGED_NODE_BIN:-$NODE_BIN}";then
+    die 'Web installed, but privileged executor setup failed. Repair and rerun its separate installer; never rerun first-install over existing account state.'
+  fi
+  systemctl is-active --quiet linux-panel-privileged.service ||
+    die 'Web installed, but privileged executor did not reach active state'
+  log 'Reviewed root file Actions enabled; this trusts the panel OS identity and its terminal.'
+else
+  log 'Root file Actions OFF by default; opt in with --enable-privileged during a new install.'
+fi
 log "Installed Linux Panel at $LP_HOST:$LP_PORT"
 log 'No reverse proxy, DNS, firewall or certificates were touched.'
 log "Canonical origin: $LP_PUBLIC_ORIGIN"

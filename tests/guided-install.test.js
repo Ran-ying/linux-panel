@@ -14,6 +14,11 @@ test('guided setup requires explicit mode without TTY and plans without changes'
   assert.equal(plan.status,0);
   assert.match(plan.stdout,/install.sh --port 49331/);
   assert.doesNotMatch(plan.stdout,/activate/);
+  assert.doesNotMatch(plan.stdout,/enable-privileged/);
+  const optin=run(['--plan','--port','49331','--enable-privileged','--privileged-node-bin','/opt/node24/bin/node']);
+  assert.equal(optin.status,0,optin.stderr);
+  assert.match(optin.stdout,/--enable-privileged/);
+  assert.match(optin.stdout,/--privileged-node-bin/);
   assert.notEqual(run(['--check','--apply']).status,0);
   assert.notEqual(run(['--unknown']).status,0);
 });
