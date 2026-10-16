@@ -255,7 +255,7 @@ try {
             radius:style.borderTopLeftRadius,background:style.backgroundColor,
             border:style.borderTopStyle,borderWidth:style.borderTopWidth,padding:style.paddingLeft};
         });
-        assert.ok(!chrome.minimal && chrome.flat && chrome.radius==='0px'
+        assert.ok(chrome.minimal && chrome.flat && chrome.radius==='0px'
           && chrome.border==='none' && chrome.background==='rgba(0, 0, 0, 0)'
           && chrome.padding==='0px',
           'the ActionCard wrapper must be invisible; the two task groups themselves are the outer rounded cards');
