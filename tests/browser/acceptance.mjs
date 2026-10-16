@@ -183,7 +183,7 @@ try {
       if([390,1280].includes(width) && ['文件管理','Linux Panel 托管的定时任务','系统现有定时任务','Nginx 网站'].includes(name.trim())){
         assert.ok(referenceControls,'system overview must establish the canonical button design first');
         const moduleRoot=page.locator(name.trim()==='文件管理'?'.file-browser':
-          name.trim()==='定时任务'?'.scheduled-tasks':'.managed-configs');
+          name.trim().includes('定时任务')?'.scheduled-tasks':'.managed-configs');
         await moduleRoot.waitFor();
         const group=moduleRoot.locator('.panel-control-capsule').first();
         const primary=moduleRoot.locator('.panel-control-primary').first();
