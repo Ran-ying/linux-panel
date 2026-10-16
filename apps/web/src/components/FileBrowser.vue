@@ -1,15 +1,17 @@
 <script setup>
-import {ref,watch,onUnmounted,computed} from 'vue';
+import {ref,watch,onUnmounted,computed,nextTick} from 'vue';
 const props=defineProps({initialData:Object,listAction:String,operations:Object,csrf:String});
 const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
 const busy=ref(false),error=ref(''),message=ref(''),uploadInput=ref(null);
+const actionDialog=ref(null),accounts=ref(null),accountsLoading=ref(false),accountsError=ref('');
+let notificationTimer;
 const dragging=ref(false),operation=ref(null),entryName=ref('');
 const permissionForm=ref({mode:'',owner:'',group:''});
 const canWrite=computed(()=>listing.value.writeAccess==='allowed');
 const controller=new AbortController();
 watch(()=>props.initialData,data=>{listing.value=data;address.value=data.path;});
-onUnmounted(()=>controller.abort());
+onUnmounted(()=>{controller.abort();clearTimeout(notificationTimer);});
 async function request(action,input){
   const response=await fetch('/api/actions/'+encodeURIComponent(action)+'/execute',{
     method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
@@ -21,8 +23,11 @@ async function request(action,input){
 }
 async function task(fn){
   if(busy.value)return;
-  busy.value=true;error.value='';message.value='';
-  try{const notice=await fn();if(typeof notice==='string')message.value=notice;}
+  busy.value=true;error.value='';message.value='';clearTimeout(notificationTimer);
+  try{const notice=await fn();if(typeof notice==='string'){
+    message.value=notice;
+    notificationTimer=setTimeout(()=>{message.value='';},3200);
+  }}
   catch(cause){if(cause.name!=='AbortError')error.value=cause.message;}
   finally{busy.value=false;}
 }
@@ -68,11 +73,30 @@ function uploadFiles(files){
   });
 }
 function beginCreate(type){operation.value={kind:'create',type};entryName.value='';}
-function beginRename(entry){operation.value={kind:'rename',entry};entryName.value=entry.name;}
-function editPermissions(entry){
-  operation.value={kind:'permissions',entry};
+function closeDialog(){
+  actionDialog.value?.close();
+  operation.value=null;
+}
+function showDialog(kind,entry){
+  operation.value={kind,entry};error.value='';
+  nextTick(()=>actionDialog.value?.showModal());
+}
+function beginRename(entry){entryName.value=entry.name;showDialog('rename',entry);}
+function beginDelete(entry){showDialog('delete',entry);}
+function accountChoices(type,current){
+  const choices=accounts.value?.[type] ?? [];
+  return current && !choices.some(item=>item.name===current)
+    ?[{name:current,id:null},...choices]:choices;
+}
+async function editPermissions(entry){
   const [owner,group]=entry.owner.split(':');
   permissionForm.value={mode:entry.permissions,owner,group};
+  showDialog('permissions',entry);
+  if(accounts.value || accountsLoading.value)return;
+  accountsLoading.value=true;accountsError.value='';
+  try{accounts.value=await request(props.operations.accounts,{});}
+  catch(cause){if(cause.name!=='AbortError')accountsError.value='无法读取系统账户：'+cause.message;}
+  finally{accountsLoading.value=false;}
 }
 function savePermissions(){return task(async()=>{
   const entry=operation.value.entry,path=join(entry.name),values=permissionForm.value;
@@ -84,7 +108,7 @@ function savePermissions(){return task(async()=>{
     if(Object.keys(input).length>1)await request(props.operations.chown,input);
     // chown may clear special mode bits; set the requested mode afterwards.
     if(!entry.symlink)await request(props.operations.chmod,{path,mode:values.mode});
-    operation.value=null;
+    closeDialog();
   }finally{await list(listing.value.path);}
   return '权限与属主已保存';
 });}
@@ -99,17 +123,15 @@ function submitEntry(){return task(async()=>{
     if(editor.value && (editor.value.path===oldPath || editor.value.path.startsWith(oldPath+'/')))
       editor.value.path=newPath+editor.value.path.slice(oldPath.length);
   }
-  operation.value=null;await list(listing.value.path);return current.kind==='create'?'已新建':'已重命名';
+  if(current.kind==='rename')closeDialog();else operation.value=null;
+  await list(listing.value.path);return current.kind==='create'?'已新建':'已重命名';
 });}
-function remove(entry){
-  const path=join(entry.name);
-  if(!window.confirm('删除 '+path+'？'+(entry.type==='directory' && !entry.symlink?'目录内所有内容也会删除。':'')+'此操作无法撤销。'))return;
-  return task(async()=>{
-    await request(props.operations.delete,{path});
-    if(editor.value && (editor.value.path===path || !entry.symlink && editor.value.path.startsWith(path+'/'))){editor.value=null;dirty.value=false;}
-    await list(listing.value.path);return '已删除';
-  });
-}
+function confirmDelete(){return task(async()=>{
+  const entry=operation.value.entry,path=join(entry.name);
+  await request(props.operations.delete,{path});
+  if(editor.value && (editor.value.path===path || !entry.symlink && editor.value.path.startsWith(path+'/'))){editor.value=null;dirty.value=false;}
+  closeDialog();await list(listing.value.path);return '已删除';
+});}
 function megabytes(entry){
   if(entry.size===null)return '—';
   return (entry.sizeComplete?'':'≥ ')+(entry.size/1000000).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MB';
@@ -133,30 +155,72 @@ function dateParts(value){
       <input ref="uploadInput" class="file-upload-input" type="file" multiple aria-label="上传文件" :disabled="busy || !canWrite" @change="upload" />
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('file')">新建文件</button>
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('directory')">新建文件夹</button>
-      <span class="muted small">可将文件拖入此处上传</span>
     </div>
-    <p class="muted small file-access-mode">文件权限：{{ listing.accessMode==='root'?'root':'普通账户（未启用 root 执行层）' }}</p>
     <p v-if="!canWrite" class="notice file-access-notice" role="status">{{ listing.writeAccess==='readonly'?'当前目录所在文件系统只读。':'面板服务账户没有当前目录的写入权限。' }}请打开可写目录后新建或上传文件。</p>
     <div v-if="dragging" class="file-drop-hint">松开以上传到当前目录</div>
-    <form v-if="operation && operation.kind!=='permissions'" class="file-entry-form" @submit.prevent="submitEntry">
-      <label>{{ operation.kind==='rename'?'重命名':operation.type==='file'?'新建文件':'新建文件夹' }}
+    <form v-if="operation?.kind==='create'" class="file-entry-form" @submit.prevent="submitEntry">
+      <label>{{ operation.type==='file'?'新建文件':'新建文件夹' }}
         <input v-model="entryName" aria-label="名称" required :disabled="busy" /></label>
       <button type="submit" :disabled="busy">确定</button>
       <button type="button" :disabled="busy" @click="operation=null">取消</button>
     </form>
-    <form v-if="operation?.kind==='permissions'" class="file-permission-form" @submit.prevent="savePermissions">
-      <strong>{{ operation.entry.name }}</strong>
-      <label>权限（八进制）<input v-model="permissionForm.mode" aria-label="文件权限" pattern="[0-7]{3,4}" required :disabled="busy || operation.entry.symlink" /></label>
-      <label>用户 / UID<input v-model="permissionForm.owner" aria-label="文件用户" required maxlength="128" :disabled="busy" /></label>
-      <label>用户组 / GID<input v-model="permissionForm.group" aria-label="文件用户组" required maxlength="128" :disabled="busy" /></label>
-      <p v-if="operation.entry.symlink" class="muted small">符号链接只修改链接本身的属主；权限请进入目标后修改。</p>
-      <div class="file-editor-controls">
-        <button type="submit" :disabled="busy">保存权限</button>
-        <button type="button" :disabled="busy" @click="operation=null">取消</button>
+    <dialog v-if="operation && operation.kind!=='create'" ref="actionDialog" class="file-action-dialog"
+      aria-labelledby="file-dialog-title" @close="operation=null">
+      <form v-if="operation.kind==='permissions'" class="file-dialog-body" @submit.prevent="savePermissions">
+        <h3 id="file-dialog-title">修改权限与所有者</h3>
+        <p class="file-dialog-target">{{ operation.entry.name }}</p>
+        <label>权限（八进制）
+          <input v-model="permissionForm.mode" aria-label="文件权限" pattern="[0-7]{3,4}" required :disabled="busy || operation.entry.symlink" />
+        </label>
+        <label>用户
+          <select v-model="permissionForm.owner" aria-label="文件用户" :disabled="busy || accountsLoading">
+            <option v-for="record in accountChoices('users',permissionForm.owner)" :key="record.name" :value="record.name">
+              {{ record.name }}{{ record.id===null?'': ' ('+record.id+')' }}
+            </option>
+          </select>
+        </label>
+        <label>用户组
+          <select v-model="permissionForm.group" aria-label="文件用户组" :disabled="busy || accountsLoading">
+            <option v-for="record in accountChoices('groups',permissionForm.group)" :key="record.name" :value="record.name">
+              {{ record.name }}{{ record.id===null?'': ' ('+record.id+')' }}
+            </option>
+          </select>
+        </label>
+        <p v-if="accountsLoading" class="muted small" role="status">正在读取系统用户与用户组…</p>
+        <p v-if="accountsError" class="error" role="alert">{{ accountsError }}</p>
+        <p v-if="operation.entry.symlink" class="muted small">符号链接只修改链接本身的属主；权限请进入目标后修改。</p>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <div class="file-dialog-actions">
+          <button type="button" :disabled="busy" @click="closeDialog">取消</button>
+          <button type="submit" class="file-primary" :disabled="busy || accountsLoading || !!accountsError">保存</button>
+        </div>
+      </form>
+      <form v-else-if="operation.kind==='rename'" class="file-dialog-body" @submit.prevent="submitEntry">
+        <h3 id="file-dialog-title">重命名</h3>
+        <p class="file-dialog-target">{{ operation.entry.name }}</p>
+        <label>新名称
+          <input v-model="entryName" aria-label="新名称" required :disabled="busy" autofocus />
+        </label>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <div class="file-dialog-actions">
+          <button type="button" :disabled="busy" @click="closeDialog">取消</button>
+          <button type="submit" class="file-primary" :disabled="busy">确定</button>
+        </div>
+      </form>
+      <div v-else-if="operation.kind==='delete'" class="file-dialog-body">
+        <h3 id="file-dialog-title">删除确认</h3>
+        <p>确定删除 <strong>{{ operation.entry.name }}</strong>？</p>
+        <p v-if="operation.entry.type==='directory' && !operation.entry.symlink">此文件夹中的所有内容也将删除。</p>
+        <p class="muted small">删除后无法撤销。</p>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <div class="file-dialog-actions">
+          <button type="button" :disabled="busy" @click="closeDialog">取消</button>
+          <button type="button" class="file-danger" :disabled="busy" @click="confirmDelete">删除</button>
+        </div>
       </div>
-    </form>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="message" class="notice success-notice" role="status">{{ message }}</p>
+    </dialog>
+    <p v-if="error && (!operation || operation.kind==='create')" class="error" role="alert">{{ error }}</p>
+    <div v-if="message" class="file-toast" role="status">{{ message }}</div>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
     <div class="table-wrap">
       <table class="file-table">
@@ -176,7 +240,7 @@ function dateParts(value){
             </time><span v-else>—</span></td>
             <td><div class="file-row-actions">
               <button type="button" :disabled="busy || !canWrite" :aria-label="'重命名 '+entry.name" @click="beginRename(entry)">重命名</button>
-              <button type="button" :disabled="busy || !canWrite" :aria-label="'删除 '+entry.name" @click="remove(entry)">删除</button>
+              <button type="button" :disabled="busy || !canWrite" :aria-label="'删除 '+entry.name" @click="beginDelete(entry)">删除</button>
             </div></td>
           </tr>
           <tr v-if="!listing.entries.length"><td colspan="6">空目录</td></tr>

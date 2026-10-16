@@ -7,6 +7,17 @@ import {createApp} from '../apps/api/src/create-app.js';
 import {StateStore} from '../platform/state-store.js';
 import {AuthService} from '../platform/auth/service.js';
 import {filePath,listFiles,readText,writeText,uploadFile,createEntry,renameEntry,deleteEntry} from '../modules/files/fs.js';
+import {listAccounts} from '../modules/files/accounts.js';
+test('files.accounts reads system NSS user and group directories for dropdowns',async t=>{
+  if(process.platform!=='linux'){t.skip('getent is a Linux account directory API');return;}
+  const result=await listAccounts();
+  assert.ok(result.users.some(item=>item.name==='root' && item.id===0));
+  assert.ok(result.groups.some(item=>item.name==='root' && item.id===0));
+  assert.ok(result.users.every(item=>typeof item.name==='string' && Number.isInteger(item.id)));
+  assert.ok(result.groups.every(item=>typeof item.name==='string' && Number.isInteger(item.id)));
+  assert.deepEqual([...result.users].sort((a,b)=>a.name.localeCompare(b.name)),result.users);
+});
+
 test('file paths must be absolute and root runtime refuses filesystem operations',async()=>{
   assert.throws(()=>filePath('relative'),{statusCode:400});
   assert.throws(()=>filePath('/bad\0path'),{statusCode:400});
