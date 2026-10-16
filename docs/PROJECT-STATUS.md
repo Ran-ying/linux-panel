@@ -1,3 +1,11 @@
+# Compact right-aligned Action controls — 2026-10-16
+
+Owner requested less vertical space inside capsules, right-aligned groups, and Refresh styled like their options. Both Action information/result groups now align right; capsule frames use 2px padding, and their inner buttons use 8px rounded rectangles with 4px/12px padding. Refresh and result options share 96px width, 32px height and typography. Command textarea autosizing remains intact.
+
+Existing browser coverage now checks shared padding/radius as well as dimensions and typography, compact inner shapes, and right alignment at mobile/desktop widths. Build/CI and test-server deployment pending at this snapshot.
+
+Base main and last verified test deployment: `4c39d9fb92a52079a632fb3f5fbfb3046ea90d73` (PR #93). MCP transaction `0d4dd332875d01e0413fc05a50f2e0c6` succeeded 2026-10-16T00:05:48Z; panel active/running. Final evidence follows in Issue #54.
+
 # Action capsules and expanding command inputs — 2026-10-16
 
 Refresh, Visual and Raw JSON now share button width, height and typography. Description/Commands and Visual/JSON use rounded capsule groups with selected-state borders. Command value textareas fit their contents on load, editing, saving and reopening, and reflow when the available width changes. Mobile controls retain 44px touch targets.
