@@ -10,7 +10,7 @@ RuntimeDirectory=linux-panel-privileged
 RuntimeDirectoryMode=0750
 Environment=NODE_OPTIONS=
 Environment=NODE_PATH=
-ExecStart=/opt/node24/bin/node /usr/local/lib/linux-panel-privileged/server.js
+ExecStart=/opt/node24/bin/node /usr/local/lib/linux-panel-privileged/current/server.js
 Restart=on-failure
 RestartSec=2
 UMask=0077
