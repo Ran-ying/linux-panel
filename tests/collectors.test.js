@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeStatfs } from '../modules/storage/actions/usage.js';
+import { summarizeStatfs } from '../modules/system/collectors/disk.js';
 import { parseSystemctlLines } from '../modules/services/actions/list.js';
-import { parseMeminfo } from '../modules/system/actions/memory.js';
-import { cpuSnapshot, cpuUsageBetween } from '../modules/system/actions/cpu.js';
+import { parseMeminfo } from '../modules/system/collectors/memory.js';
+import { cpuSnapshot, cpuUsageBetween } from '../modules/system/collectors/cpu.js';
 
 test('statfs disk accounting preserves available vs free blocks', () => {
   const data = summarizeStatfs({ bsize: 1024n, blocks: 100n, bfree: 40n, bavail: 30n });
