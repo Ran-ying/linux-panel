@@ -5,6 +5,7 @@ import ResultRenderer from './ResultRenderer.vue';
 const FileBrowser=defineAsyncComponent(()=>import('./FileBrowser.vue'));
 const ScheduledTasks=defineAsyncComponent(()=>import('./ScheduledTasks.vue'));
 const ManagedConfigs=defineAsyncComponent(()=>import('./ManagedConfigs.vue'));
+const V2RayManager=defineAsyncComponent(()=>import('./V2RayManager.vue'));
 const props=defineProps({
   action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
@@ -232,6 +233,10 @@ onUnmounted(()=>{
         <ManagedConfigs v-else-if="view==='visual' && presentation?.renderer==='managed-configs'"
           :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
           :labels="presentation.labels" :csrf="csrf" @listing-change="response.content.result=$event"
+          @unauthorized="emit('unauthorized')" />
+        <V2RayManager v-else-if="view==='visual' && presentation?.renderer==='v2ray-manager'"
+          :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
+          :csrf="csrf" @listing-change="response.content.result=$event"
           @unauthorized="emit('unauthorized')" />
         <ResultRenderer v-else-if="view==='visual'" :data="displayedResult" :presentation="presentation" />
         <div v-else class="raw-data">
