@@ -621,3 +621,10 @@ table{min-width:500px}
 .file-modified>span{display:block;white-space:nowrap}
 .file-time{color:var(--text-dim)}
 .file-access-notice{margin:12px 0}
+.file-permission-form{margin-top:12px;padding:12px;border:1px solid var(--border-panel);border-radius:12px;display:grid;gap:10px}
+.file-permission-form>strong{overflow-wrap:anywhere}
+.file-permission-form label{margin:0;font-size:.85rem}
+.file-permission-form input{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--text-primary);font:inherit}
+.file-table .file-permissions-button{text-align:left;background:transparent;padding:5px 7px}
+.file-access-mode{margin:10px 0}
+@media(max-width:730px){.file-permission-form input{font-size:16px}}

@@ -58,6 +58,8 @@ terminal.execute 是显式 user-shell 写能力，仅普通服务身份，拒绝
 
 交互终端使用面板 HTML 的随机 CSP style nonce，仅由面板组件给 xterm 动态样式使用；脚本策略仍为 self，不放开 unsafe-inline。HTML 不缓存。
 
-## 普通用户文件操作
+## 文件操作与可选 root 执行
 
-文件模块通过原生 fs API，以面板服务身份浏览、读写、上传、新建、重命名与删除，不通过 Shell 或 Broker，拒绝 UID 0。files.write/upload/create/rename/delete 为明确的 user-files 写策略，仅 Web 已认证管理员可经既有 CSRF/Origin 检查执行；MCP 暴露的 files.list/read 是已有可信个人客户端的读取能力，不是路径沙箱。文本保存检查 revision、保留权限/属主；上传创建新文件而不覆盖。删除目录会递归删除内容，GUI 要求确认；删除链接本身不删除目标。根目录不可删除或重命名。大小、分页与代理边界见 [文件管理](FILES.md)。路径、内容不写审计或公开日志。
+文件模块使用原生 fs 与经结构化参数调用的固定 handlers；普通路径拒绝 UID 0，root 路径只能在独立 root executor 中工作。九个文件 Actions 共享输入输出契约；七个写 Action 只在 Web 入口经管理员/CSRF/Origin 执行，MCP 文件工具 list/read 始终走普通账户。文本保留 revision 检查、大小限制、权限/属主；上传不覆盖同名；目录删除确认、根目录禁止删除/重命名仍有效。chmod 不跟随链接，chown 修改链接自身。不记录文件内容或路径。
+
+root 服务以 root-owned 固定代码、独立 Ajv 副本和注册表执行，不允许任意 root Shell，不与更新 Broker 混用。Unix socket 目录 root:linuxpanel 0750、socket 0660；启用即信任整个 linuxpanel UID/组，不隔离同 UID 的 terminal.execute、PTY 或自定义 Shell。Web-only 仅约束 Web/MCP Action 入口，无法阻止已授权同身份终端直接调用 root 文件通道。全面系统文件编辑是一项广泛 root 管理能力，可能通过修改系统配置/代码间接获得代码执行；它不适合不可信终端用户或不可信模块。详见 [权限执行层](PRIVILEGED.md)。

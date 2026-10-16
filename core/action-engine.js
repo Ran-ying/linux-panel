@@ -6,8 +6,9 @@ import Ajv from 'ajv';
  * explicit execution policy and trusted adapter context; UI metadata never grants permission.
  */
 export class ActionEngine {
-  constructor(registry, {commands} = {}) {
+  constructor(registry, {commands,privilegedClient} = {}) {
     this.commands = commands;
+    this.privilegedClient=privilegedClient;
     this.registry = registry;
     this.ajv = new Ajv({ allErrors: true, strict: false });
     this.inputValidators = new Map();
@@ -31,7 +32,8 @@ export class ActionEngine {
         action.permission==='panel:update:execute' &&
         action.executionPolicy==='broker-enqueue' &&
         context.directUpdateAuthorized===true;
-      if(!trustedCaller || (!isProposal && !isExactBrokerEnqueue && !isUserShellAction(action) && !(channel==='web' && isUserFileAction(action))))
+      const privileged=action.executionPolicy==='privileged' && action.privileged?.channels?.includes(channel);
+      if(!trustedCaller || (!isProposal && !isExactBrokerEnqueue && !isUserShellAction(action) && !(channel==='web' && isUserFileAction(action)) && !privileged))
         throw Object.assign(new Error('Write action requires explicit trusted execution policy'), { statusCode: 403 });
     }
     let validate = this.inputValidators.get(action);
@@ -61,9 +63,11 @@ export class ActionEngine {
 
   async run(id, input = {}, channel = 'web', context = {}) {
     const action = this.#resolve(id, channel, input, context);
-    const terminal = this.commands?.supports(action)
+    const elevated=this.privilegedClient?.enabled && action.privileged?.channels?.includes(channel);
+    const terminal = !elevated && this.commands?.supports(action)
       ? await this.commands.executeWithRaw(action,input) : null;
-    const result = terminal ? terminal.result : await action.execute(input, context);
+    const result = elevated ? await this.privilegedClient.execute(action,input,context)
+      : terminal ? terminal.result : await action.execute(input, context);
     if (action.outputSchema) {
       let validate = this.outputValidators.get(action);
       if (!validate) {

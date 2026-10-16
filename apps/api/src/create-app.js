@@ -8,6 +8,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ActionRegistry } from '../../../core/action-registry.js';
 import { ActionEngine } from '../../../core/action-engine.js';
+import { PrivilegedActionClient } from '../../../platform/privileged/client.js';
 import { ActionCommands } from '../../../platform/action-commands.js';
 import { ModuleManager } from '../../../core/module-manager.js';
 import { loadWebPresentations } from './web-presentations.js';
@@ -46,7 +47,8 @@ export async function createApp({
   publicOrigin = process.env.PANEL_PUBLIC_ORIGIN || '',
   production = process.env.NODE_ENV === 'production',
   listener = listenerDefaults(),
-  logger = false
+  logger = false,
+  privilegedClient = new PrivilegedActionClient()
 } = {}) {
   if (publicOrigin && (!/^https?:\/\//.test(publicOrigin) || new URL(publicOrigin).origin !== publicOrigin))
     throw new Error('PANEL_PUBLIC_ORIGIN must be an exact origin, with no trailing slash or path');
@@ -76,7 +78,7 @@ export async function createApp({
   // Platform capabilities are first-class Actions, not transport extensions.
   modules.loaded.push({ id:'panel', name:'面板维护', version:'0.5.0' });
   const commands = new ActionCommands(store);
-  const engine = new ActionEngine(registry, {commands});
+  const engine = new ActionEngine(registry, {commands,privilegedClient});
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
   const secure = publicOrigin.startsWith('https://');
   // Optional transport extensions are a separate lifecycle from business Actions.

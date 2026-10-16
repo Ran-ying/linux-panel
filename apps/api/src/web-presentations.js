@@ -126,7 +126,7 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       }
       if(item.embedded!==undefined && typeof item.embedded!=='boolean')throw new Error('Invalid embedded flag');
       if(item.renderer==='files'){
-        for(const name of ['read','write','upload','create','rename','delete']){
+        for(const name of ['read','write','upload','create','rename','delete','chmod','chown']){
           const id=item.operations?.[name],target=visible.get(id);
           if(!target || !id.startsWith(module.id+'.'))throw new Error('Files operation must reference an exposed module Action');
         }

@@ -161,3 +161,11 @@ renderer:'terminal' 复用面板黑色 stdout/stderr 结果视图；console:'ter
 源码入口：core/module-manager.js、action-registry.js、action-engine.js，platform/action-commands.js，apps/api/src/web-presentations.js，ActionCard.vue、ResultRenderer.vue、modules/system。不要发明不存在的模块 API。
 
 `presentation.chrome: "minimal"` 可用于自带交互控件的通用 renderer（如 files），隐藏 Action 说明/命令胶囊、操作结果标题及刷新/视图切换；默认 standard 保持既有界面。它只改变 Web 外观，不改变 Action 说明、Schema、权限或 API/MCP 暴露。
+
+## 复用 root 能力（Issue #111）
+
+平台提供 PrivilegedActionClient，由 ActionEngine 使用。模块 Action 可显式声明 privileged:{channels:['web']}；普通默认 execute 用于 root 通道未配置时的退化行为。新的高权限写 Action 还应使用 executionPolicy:'privileged'、明确 permission/exposure、输入输出 Schema。permission 字符串或 presentation 都不会授予 root。
+
+真正提权还需要在 platform/privileged/handlers.js 静态注册已审查 handler 与独立输入 validator，再由操作员重跑安装器，把固定文件及其可信依赖安装到 root-only 包。不要动态 import modules 目录或任何 linuxpanel 可写路径；不要接收任意 Shell。文件模块共享 file-contracts.js 与 file-operations.js，新增模块同样复用客户端、IPC、校验调度和安装流程，只增加已审查的根端实现/必要能力。首版根端只接受 web 通道，扩展 MCP 需同步根端授权设计。
+
+启用后同 UID 的终端/PTY/自定义 collectors 也能调用受控 root socket，不能宣称 Web-only 是 OS 隔离。参见 [权限执行层及扩展示例](PRIVILEGED.md)。

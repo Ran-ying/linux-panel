@@ -6,7 +6,7 @@
 
 - platform：管理员、会话/TOTP、CSRF/Origin、私有状态、MCP 全局策略、可编辑命令、更新/监听配置。
 - core：可信随仓库模块发现与依赖、注册、JSON Schema、默认拒绝新写类型。
-- modules/files：list/read/write/upload/create/rename/delete，普通账户 fs 操作；面板负责目录、编辑器及文件变更控件，写能力仅 Web。参见 [文件管理](FILES.md)。
+- modules/files：list/read/write/upload/create/rename/delete/chmod/chown，默认普通账户、可选 root fs 操作；面板负责目录、编辑器及文件变更控件，写能力仅 Web。参见 [文件管理](FILES.md)。
 - modules/system：system.resources（cpu + memory + disk，优先展示）、system.info（主机基本字段）。collectors 为内部帮助代码，旧 split Actions 与 storage 模块已移除。
 - modules/services：services.list。
 - modules/terminal：terminal.execute（显式 user-shell 写能力），命令输入和 PTY GUI 均由面板提供。
@@ -27,7 +27,7 @@ Linux terminal.fields/decode 定义命令/解析，管理员通过统一 CSRF/Or
 
 Web 使用管理员 Cookie、权限/Origin/CSRF，敏感变更另验密码/可选 TOTP。MCP 默认关闭；OAuth PKCE 授予整个可信客户端访问，全局控制 read 暴露、更新申请和直接更新，不按客户端/工具分配业务 Scope；旧 Scope 仅兼容保留。撤销整个 grant 即刻失效。
 
-写 Action 默认拒绝；现有 proposal-only、精确 broker-enqueue 和 terminal.execute 的 user-shell 策略要求可信适配器上下文。MCP 直接更新需独立全局策略与 Broker 激活，之后不要求每次 Web 审批。
+写 Action 默认拒绝；现有 proposal-only、精确 broker-enqueue、user-files、显式 privileged 和 terminal.execute 的 user-shell 策略要求可信适配器上下文。MCP 直接更新需独立全局策略与 Broker 激活，之后不要求每次 Web 审批。
 
 ## 范围
 
@@ -36,3 +36,9 @@ Web 使用管理员 Cookie、权限/Origin/CSRF，敏感变更另验密码/可�
 [安装](INSTALL.md) · [MCP](mcp.md) · [升级](UPGRADING.md) · [安全](security.md)
 
 模块首次启动按 manifest.navigationOrder 建立导航顺序，保存在私有状态 moduleOrder。后续新 ID 追加末尾，已有位置优先于 manifest，暂时移除的 ID 保留位置。依赖仍按拓扑顺序执行 setup，导航排序不改变依赖装载。
+
+## 独立 root 执行层
+
+`ActionEngine → PrivilegedActionClient → Unix socket → 固定 root handlers`。模块的 privileged.channels 声明与根端白名单共同决定能力；源代码注册元数据不自动安装 root handler。根包及其 Ajv 依赖安装到 root-only /usr/local/lib/linux-panel-privileged，不从 Web 可写目录加载模块。Web 的原有 systemd 身份与更新 Broker 不变。
+
+启用时信任整个 linuxpanel OS 身份，同 UID 的终端、PTY、自定义采集命令能直接调用受控文件 Actions。Web-only 不是 OS 隔离；MCP 文件工具本身走普通账户，可信 MCP 终端却属于同一已信任 OS 身份。详见 [权限执行层](PRIVILEGED.md)。

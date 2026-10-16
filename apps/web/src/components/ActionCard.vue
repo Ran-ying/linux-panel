@@ -212,6 +212,7 @@ onUnmounted(()=>{
         </div>
       </div>
       <div v-if="error" class="error" role="alert">{{ error }}</div>
+      <button v-if="minimal && error" type="button" :disabled="busy" @click="run('execute')">重试</button>
       <label v-if="response && refreshSeconds>0" class="refresh-choice">
         <input type="checkbox" v-model="autoRefresh" />每 {{ refreshSeconds }} 秒自动刷新
         <span class="muted">（默认关闭）</span>
