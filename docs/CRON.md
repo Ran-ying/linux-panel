@@ -1,12 +1,11 @@
-# Linux Panel 托管任务与系统现有定时任务
+# 定时任务
 
-面板侧边栏现在提供**两个独立模块**，没有“系统定时任务”父页面：
+Linux Panel 侧边栏**只有一个「定时任务」模块**。进入后有两个独立的页签：
 
-- **Linux Panel 托管的定时任务**（`cron`）：仅显示及管理面板自己的 `/etc/cron.d/linux-panel`。该文件及任务未迁移、未删除，已有 `cron.list/save/remove` Action 兼容保留。
-- **系统现有定时任务**（`schedules`）：独立查看系统和各用户已有调度任务，按来源/用户/状态本地筛选；使用 `schedules.list` 及 `schedules.set`，后者仅允许原有受控 root 操作。新增模块按通用模块顺序规则追加，不设置业务特例；管理员可通过“模块管理”自行调整先后。
+1. **Linux Panel 托管的定时任务**：仅列出面板在 `/etc/cron.d/linux-panel` 中创建的任务，支持新建、编辑、启停和删除。
+2. **系统现有定时任务**：列出系统已有 Cron、各用户 crontab、周期脚本和 systemd timers，并按来源、执行用户和状态筛选；支持按任务类型受控管理。
 
-仅拆分 Web 模块和 Action 入口；不更改任何 Cron 文件、用户运行身份、systemd timer 配置，也不授予任意 root Shell。旧 `cron.systemSet` handler 保留向后兼容，但不在新 UI 暴露操作入口。
-
+切换这两个页签只更换前端显示内容，不创建第二个侧边栏模块、不刷新后台数据，也不改动已有定时任务。
 
 ## 来源与支持范围
 
