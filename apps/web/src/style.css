@@ -693,7 +693,7 @@ table{min-width:500px}
   cursor:not-allowed;opacity:.5;
 }
 :is(.file-browser,.scheduled-tasks,.managed-configs)
-  button:is(.panel-control-primary,.file-primary){
+  button:is(.panel-control-primary,.file-primary):not(.file-entry):not(.config-site-selector){
   background:var(--accent-bg);border-color:var(--accent-bg);
   color:var(--button-primary-text);
 }
