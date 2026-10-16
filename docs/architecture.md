@@ -1,35 +1,32 @@
-# Linux Panel v0.4 架构
+# Linux Panel 当前架构
 
-## 核心边界
+更新：2026-10-16。[v0.5.0 已发布](https://github.com/Ran-ying/linux-panel/releases/tag/v0.5.0)；main 后续行为以 [当前状态](PROJECT-STATUS.md) / Issue #54 为准。
 
-```text
-modules/{system,storage,services}/actions    真正的只读系统能力
-                 |
-          ActionRegistry
-                 |
-          ActionEngine / JSON Schema
-          /                        \
-Web API + Vue 3                   MCP Streamable HTTP
-  Web Cookie/CSRF                  OAuth Bearer / PKCE
-  独立 UI presentations            Scope + MCP allowlist
-       |                                 |
-  GET/POST /api/*                     /mcp
-```
+模块 setup → ActionRegistry → ActionEngine（输入/执行/输出校验）→ Web/MCP 授权适配器。模块只定义业务；认证、命令配置、执行限制和 GUI 由面板提供。
 
-- **平台层**：`platform/auth` 管理管理员、会话及权限；`platform/state-store.js` 负责单进程 JSON 原子持久化。
-- **Core**：注册 Action（名称、输入/输出 Schema、授权元数据），验证及执行。UI 配置不能获得额外执行权限。
-- **模块**：放在 `modules/*`，一个模块拥有自己的 Actions 及可选 UI presentations。
-- **Web**：`apps/api` Fastify、`apps/web` Vue 3。Web 负责布局、进度条/表格/指标及刷新策略。
-- **MCP**：`extensions/mcp` 是独立可选传输适配器，复用业务 Action，**不依赖 Vue**。默认关闭，所有新工具默认不可见。
-- **平台更新 Action**：`platform/update-actions.js` 注册 `panel.update.status`（只读）和 `panel.update.request`（创建申请）；`platform/update-controller.js` 持有共享更新逻辑，Web API 和 MCP 都通过 Action Engine 执行。更新批准仍属于特殊高保障的 Web 认证流程，不是可由 MCP 自动批准的 Action。
-- **OAuth**：内置 Auth 登录确认、PKCE S256、Bearer Token、资源受众绑定、客户端单独 Scope 授权与即时撤销。实际执行需要 用户权限 ∩ Token Scope ∩ Action 白名单。
+- platform：管理员、会话/TOTP、CSRF/Origin、私有状态、MCP 全局策略、可编辑命令、更新/监听配置。
+- core：可信随仓库模块发现与依赖、注册、JSON Schema、默认拒绝新写类型。
+- modules/system：system.info（主机信息 + disk）、system.resources（cpu + memory）。collectors 为内部帮助代码，旧 split Actions 与 storage 模块已移除。
+- modules/services：services.list。
+- apps/api：Fastify、业务 API、数据型 presentation 校验。配置不能携带样式/脚本。
+- apps/web：布局、主题、固定导航、卡片、命令编辑保存、刷新、raw 表格/JSON、通用 metrics/progress/table/sections。没有系统 Action ID 特判和跨模块卡片拼装。
+- extensions/mcp：独立可选 Streamable HTTP/OAuth，无 Vue 依赖；调用同一引擎，当前工具只返回 result，Web 还能展示 raw。
+- root Broker：独立安装，可信 main SHA、非 root 构建、固定 systemd 部署/健康检查/回滚，不能接受任意模块命令。
 
-## 写入 Action 的安全边界
+## 执行与展示
 
-Action Engine 对任意 `kind:write` 仍默认拒绝。当前唯一允许的类型是 `executionPolicy:proposal-only`，且必须由已认证的 Web 或 OAuth MCP 适配器携带可信执行上下文，不能直接更改系统。部署步骤由单独的 root-owned Broker 执行，需要管理员在 Web 中二次确认。
+一个 Action 对应一个卡片、一个保存入口、一次刷新请求和原始 key 列表。组合结果在 outputSchema 定义子对象，由 sections.key 选取展示；协议及复制示例见 [模块规范](MODULE-DEVELOPMENT.md)。
 
-## 当前限制
+Linux terminal.fields/decode 定义命令/解析，管理员通过统一 CSRF/Origin 保护的 Web 表单配置。非 root 服务身份执行，每条 5 秒/128 KiB；引擎保留 raw 原文，用修剪副本解析并验证 result。自定义普通用户 Shell 不是只读沙箱，不获得 sudo/root。迁移配置使用模块声明的 migrateFrom。
 
-仅限单管理员、单个 Node 进程、单机 JSON 存储，不支持水平扩容；没有任意 Shell、文件系统写入或特权 Broker。多管理员、2FA、第三方扩展隔离需要另行设计。根文件系统是使用 `fs.statfs` 读取，内存使用 `/proc/meminfo`，CPU 采样 `os.cpus`，服务清单读取 systemctl。
+## 当前授权
 
-部署：[INSTALL.md](INSTALL.md) · OAuth：[mcp.md](mcp.md) · 升级：[UPGRADING.md](UPGRADING.md)。
+Web 使用管理员 Cookie、权限/Origin/CSRF，敏感变更另验密码/可选 TOTP。MCP 默认关闭；OAuth PKCE 授予整个可信客户端访问，全局控制 read 暴露、更新申请和直接更新，不按客户端/工具分配业务 Scope；旧 Scope 仅兼容保留。撤销整个 grant 即刻失效。
+
+写 Action 默认拒绝；现有 proposal-only 与精确 broker-enqueue 策略要求可信适配器上下文。MCP 直接更新需独立全局策略与 Broker 激活，之后不要求每次 Web 审批。
+
+## 范围
+
+单管理员、单 Node 进程、单机 JSON；没有分布式一致性、多管理员、第三方不可信插件沙箱或任意特权 Shell。TOTP、受限更新 Broker 和真实 MCP 部署已实现；测试不等于独立安全审计。真实手机/广泛发行版覆盖以具体验收为准。
+
+[安装](INSTALL.md) · [MCP](mcp.md) · [升级](UPGRADING.md) · [安全](security.md)
