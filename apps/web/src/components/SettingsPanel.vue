@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import McpSettings from './McpSettings.vue';
 
 const props = defineProps({
@@ -7,7 +7,9 @@ const props = defineProps({
   user: { type: Object, required: true },
   modules: { type: Array, default: () => [] }
 });
-const emit = defineEmits(['signed-out', 'settings-changed']);
+const emit = defineEmits(['signed-out', 'settings-changed', 'modules-changed']);
+const orderedModules=ref(props.modules.filter(module=>module.id!=='panel'));
+watch(()=>props.modules,modules=>{orderedModules.value=modules.filter(module=>module.id!=='panel');});
 const settings = ref({ panelName: 'Linux Panel', language: 'zh-CN', theme: 'dark' });
 const sessions = ref([]);
 const sessionDays = ref(30);
@@ -79,6 +81,20 @@ function saveSettings() {
     settings.value = result.settings;
     emit('settings-changed', result.settings);
   }, '面板设置已保存');
+}
+
+function moveModule(index,step) {
+  const next=[...orderedModules.value];
+  const to=index+step;
+  if(to<0 || to>=next.length)return;
+  [next[index],next[to]]=[next[to],next[index]];
+  return execute(async()=>{
+    const response=await request('/api/modules/order',{
+      method:'PUT',body:JSON.stringify({order:next.map(module=>module.id)})
+    });
+    orderedModules.value=response.modules.filter(module=>module.id!=='panel');
+    emit('modules-changed',response.modules);
+  },'模块顺序已保存');
 }
 
 function changePassword() {
@@ -208,12 +224,20 @@ onMounted(reload);
 
     <section class="settings-section">
       <h3>模块管理</h3>
-      <p class="muted small">当前为只读模块清单；安装、卸载和启停权限尚未实现。</p>
-      <div v-for="module in modules" :key="module.id" class="module-summary">
-        <strong>{{ module.name }}</strong>
-        <span class="muted small">{{ module.id }} · v{{ module.version }}</span>
+      <p class="muted small">上下移动模块即可保存导航顺序；安装、卸载和启停功能尚未实现。</p>
+      <div v-for="(module,index) in orderedModules" :key="module.id" class="module-summary module-order-item">
+        <div class="module-order-label">
+          <strong>{{ module.name }}</strong>
+          <span class="muted small">{{ module.id }} · v{{ module.version }}</span>
+        </div>
+        <div class="module-order-controls">
+          <button type="button" :aria-label="'上移 '+module.name"
+            :disabled="busy || index===0" @click="moveModule(index,-1)">↑</button>
+          <button type="button" :aria-label="'下移 '+module.name"
+            :disabled="busy || index===orderedModules.length-1" @click="moveModule(index,1)">↓</button>
+        </div>
       </div>
-      <p v-if="!modules.length" class="muted">尚未安装任何业务模块，面板设置仍然可用。</p>
+      <p v-if="!orderedModules.length" class="muted">尚未安装任何业务模块，面板设置仍然可用。</p>
     </section>
 
     <section class="settings-section">
