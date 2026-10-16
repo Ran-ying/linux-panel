@@ -37,7 +37,7 @@ try {
     const page=await context.newPage();
     // Disposable Cron fixture: run the new generic scheduler UI without any
     // system cron write or privileged socket on the browser CI host.
-    let cronJobs=[],cronVersion=0,cronListCalls=0,systemListCalls=0;
+    let cronJobs=[],cronVersion=0,cronListCalls=0;
     const cronSystemJobs=[
       {id:'system-cron-certbot',sourceType:'cron.d',source:'/etc/cron.d/certbot',
         name:'certbot',owner:'root',expression:'0 */12 * * *',command:'/usr/bin/certbot',
@@ -71,19 +71,6 @@ try {
       }else{status=404;result={error:'Unknown fixture action'};}
       await route.fulfill({status,contentType:'application/json',body:JSON.stringify(
         status===200?{action:id,result}:result)});
-    });
-    await page.route('**/api/actions/schedules.*/execute',async route=>{
-      const id=new URL(route.request().url()).pathname.split('/')[3];
-      if(id==='schedules.list'){
-        systemListCalls++;
-        await route.fulfill({status:200,contentType:'application/json',
-          body:JSON.stringify({action:id,result:{
-            systemTasks:cronSystemJobs,systemCount:cronSystemJobs.length,systemWarnings:[]
-          }})});
-      }else{
-        await route.fulfill({status:404,contentType:'application/json',
-          body:JSON.stringify({error:'No system tasks modified in browser fixture'})});
-      }
     });
     // Disposable Nginx fixture: browser exercises real controls without root writes.
     let nginxSites=[],nginxVersions=0,nginxSyntaxGood=true;
@@ -157,15 +144,25 @@ try {
     const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
     assert.deepEqual(names.slice(0,4).map(name=>name.trim()),['系统概览','服务浏览','终端','文件管理']);
     assert.ok(!names.some(name=>name.trim()==='磁盘使用情况'),'disk usage must not have a separate sidebar item');
+    assert.equal(names.filter(name=>name.trim()==='定时任务').length,1,'there is exactly one scheduled-tasks navigation module');
+    assert.ok(!names.some(name=>name.trim()==='系统现有定时任务'||name.trim()==='Linux Panel 托管的定时任务'),
+      'two scheduler sections must not appear as separate sidebar modules');
     for(const name of [...names,'面板设置']){
       await navigate(name.trim());
       await page.locator('.module-content').waitFor();
-      if(name.trim()==='Linux Panel 托管的定时任务' && [390,1280].includes(width)){
+      if(name.trim()==='定时任务' && [390,1280].includes(width)){
         const schedule=page.locator('.scheduled-tasks');
-        await schedule.getByRole('button',{name:'新建任务'}).waitFor();
+        const managedTab=schedule.getByRole('tab',{name:'Linux Panel 托管的定时任务'});
+        const systemTab=schedule.getByRole('tab',{name:'系统现有定时任务'});
+        await managedTab.waitFor();
+        assert.equal(await managedTab.getAttribute('aria-selected'),'true');
+        assert.equal(await systemTab.getAttribute('aria-selected'),'false');
+        assert.equal(await schedule.getByRole('tab').count(),2,
+          'one navigation module, two internal sections');
         assert.equal(await schedule.locator('.system-task-table').count(),0,
-          'managed module must not include system tasks');
+          'system section is not visible in the managed tab');
         assert.equal(await schedule.getByRole('button',{name:'新建任务'}).count(),1);
+        // Existing managed Cron task create/toggle/delete flow stays in its section.
         await schedule.getByRole('button',{name:'新建任务'}).click();
         const form=page.getByRole('dialog',{name:'新建定时任务'});
         await form.getByRole('textbox',{name:'任务名称'}).fill('Fixture nightly');
@@ -175,16 +172,14 @@ try {
         await page.getByText('Fixture nightly').waitFor();
         await page.getByRole('button',{name:'停用 Fixture nightly'}).click();
         await schedule.getByRole('cell',{name:'已停用',exact:true}).waitFor();
-        await page.getByRole('button',{name:'删除 Fixture nightly'}).click();
-        await page.getByRole('dialog',{name:'删除任务'}).getByRole('button',{name:'删除'}).click();
-        await page.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
-      }
-      if(name.trim()==='系统现有定时任务' && [390,1280].includes(width)){
-        const schedule=page.locator('.scheduled-tasks');
+        const callsBeforeTabs=cronListCalls;
+        await systemTab.click();
+        assert.equal(await managedTab.getAttribute('aria-selected'),'false');
+        assert.equal(await systemTab.getAttribute('aria-selected'),'true');
         assert.equal(await schedule.getByRole('button',{name:'新建任务'}).count(),0,
-          'system inventory module must not offer a Panel-owned task form');
-        assert.equal(await schedule.getByText('暂无由 Linux Panel 管理的定时任务').count(),0,
-          'system inventory must not render the managed list');
+          'system tab must not expose Panel-managed creation');
+        assert.equal(await schedule.getByText('Fixture nightly').count(),0,
+          'managed tasks must not appear in system section');
         const systemTable=schedule.locator('.system-task-table');
         await systemTable.waitFor();
         const visibleRows=systemTable.locator('tbody tr');
@@ -194,7 +189,6 @@ try {
         assert.equal(await visibleRows.count(),3);
         assert.deepEqual(await owner.locator('option').allTextContents(),
           ['全部用户','alice','root','systemd']);
-        const callsBeforeFilters=systemListCalls;
         await source.selectOption('user-crontab');
         assert.equal(await visibleRows.count(),1);
         await owner.selectOption('root');
@@ -210,8 +204,15 @@ try {
         await owner.selectOption('all');
         await status.selectOption('all');
         assert.equal(await visibleRows.count(),3);
-        assert.equal(systemListCalls,callsBeforeFilters,'system filters must remain local');
-        await page.screenshot({path:join(output,'system-schedules-'+width+'.png'),fullPage:true});
+        assert.equal(cronListCalls,callsBeforeTabs,
+          'internal tab switching and dropdown filters must never fetch again');
+        await managedTab.click();
+        assert.equal(await systemTable.count(),0);
+        await page.getByRole('button',{name:'删除 Fixture nightly'}).click();
+        await page.getByRole('dialog',{name:'删除任务'}).getByRole('button',{name:'删除'}).click();
+        await page.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
+        assert.equal(await schedule.getByRole('tab').count(),2);
+        await page.screenshot({path:join(output,'cron-two-sections-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
         const manager=page.locator('.managed-configs');
