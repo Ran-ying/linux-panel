@@ -43,6 +43,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('files.list').renderer,'files');
+  assert.equal(configured.get('files.list').chrome,'minimal');
   assert.ok(mcpActions.every(a => !Object.hasOwn(a, 'presentation')));
 });
 

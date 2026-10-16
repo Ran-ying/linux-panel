@@ -10,7 +10,7 @@ export async function setup({actions,moduleId}){
   actions.register(moduleId,{...common,id:'files.list',title:'文件浏览',
     description:'分页列出目录、文件及目录内容大小、权限、所有者和修改时间。',
     inputSchema:input({path,offset:integer,limit:{type:'integer',minimum:1,maximum:500}}),
-    outputSchema:object({path:string,parent:{type:['string','null']},total:integer,nextOffset:{type:['integer','null']},
+    outputSchema:object({path:string,parent:{type:['string','null']},writeAccess:{type:'string',enum:['allowed','readonly','denied']},total:integer,nextOffset:{type:['integer','null']},
       entries:{type:'array',items:object({name:string,type:{type:'string',enum:['directory','file','other']},
         symlink:{type:'boolean'},size:{type:['integer','null'],minimum:0},sizeComplete:{type:'boolean'},
         permissions:string,owner:string,modifiedAt:string})}}),

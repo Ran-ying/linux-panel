@@ -1,6 +1,6 @@
 # Linux Panel 当前状态
 
-更新：2026-10-16。[v0.5.0 已发布](https://github.com/Ran-ying/linux-panel/releases/tag/v0.5.0)，main 持续迭代。本轮基于 main 405bf13488b56ea9200e6dc9c22080c7bd43bc46（PR #108）；准确合并 SHA、CI 和部署证据统一见 [Issue #54 最新记录](https://github.com/Ran-ying/linux-panel/issues/54)。旧过程见 [历史归档](history/PROJECT-STATUS-2026-10-16.md)。
+更新：2026-10-16。[v0.5.0 已发布](https://github.com/Ran-ying/linux-panel/releases/tag/v0.5.0)，main 持续迭代。本轮基于 main a9fb7c20fb386dcb9833f1b684ff50abf17c80cf（PR #109）；准确合并 SHA、CI 和部署证据统一见 [Issue #54 最新记录](https://github.com/Ran-ying/linux-panel/issues/54)。旧过程见 [历史归档](history/PROJECT-STATUS-2026-10-16.md)。
 
 ## 当前实现
 
@@ -17,7 +17,7 @@
 
 ## 验证与部署
 
-PR #108 的完整 CI 与手机/桌面文件操作验收通过，测试服务器已观察到 405bf13488b56ea9200e6dc9c22080c7bd43bc46 更新成功，并完成普通服务身份临时文件夹操作检查。合并后 main CI 又捕获保存成功提示早于列表刷新完成、紧接上传可能被忙碌守卫忽略的问题；本轮将成功提示集中到任务结束时发布，增加 250ms 延迟列表刷新后的即时上传回归。最终 CI 与再次部署证据见 Issue #54；本页不把旧部署或 queued 当作本轮补丁部署成功。
+PR #109 已通过完整 CI 并部署到测试服务器，观察到的 SHA 为 a9fb7c20fb386dcb9833f1b684ff50abf17c80cf。本轮按需求简化文件浏览（chrome:minimal、两排同高导航/操作、日期时间分行、MB 两位小数），新增 writeAccess 与不可写目录提示/控件状态。已核实默认服务的 ProtectSystem/ProtectHome 与普通账户权限是系统目录只读、/root 不可访问的原因；本轮调整 UI 与提示，不扩大主机权限。新增布局、格式和不可写目录浏览器回归，最终 CI 和部署记录见 Issue #54。
 
 下一步：真实 iPhone/Android QA、更多诊断模块和通用复杂输入表单。文件大目录完整统计与目录上传尚未实现，当前界面明确区分部分大小。
 

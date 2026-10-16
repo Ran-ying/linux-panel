@@ -89,6 +89,7 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       const action = visible.get(item.actionId);
       if (!action) throw new Error(`UI references an unavailable Web Action: ${item.actionId}`);
       if (!TYPES.has(item.renderer)) throw new Error(`Unsupported UI renderer: ${item.renderer}`);
+      if(item.chrome!==undefined && !['standard','minimal'].includes(item.chrome))throw new Error('Invalid Action chrome');
       // A page may opt into a one-shot initial read, but never auto-run a write
       // Action or an Action requiring parameters. The Engine remains authoritative.
       if (item.loadOnEnter !== undefined && typeof item.loadOnEnter !== 'boolean')

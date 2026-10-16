@@ -159,3 +159,5 @@ renderer:'terminal' 复用面板黑色 stdout/stderr 结果视图；console:'ter
 8. CI 通过后按授权合并/部署；queued 不是成功，核对持久化 SHA 和服务状态，最终部署证据统一记 Issue #54，当前文档链接该记录，避免重复缓存失效的运行版本。未观察的状态写待验证。
 
 源码入口：core/module-manager.js、action-registry.js、action-engine.js，platform/action-commands.js，apps/api/src/web-presentations.js，ActionCard.vue、ResultRenderer.vue、modules/system。不要发明不存在的模块 API。
+
+`presentation.chrome: "minimal"` 可用于自带交互控件的通用 renderer（如 files），隐藏 Action 说明/命令胶囊、操作结果标题及刷新/视图切换；默认 standard 保持既有界面。它只改变 Web 外观，不改变 Action 说明、Schema、权限或 API/MCP 暴露。

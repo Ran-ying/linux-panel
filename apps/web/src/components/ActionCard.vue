@@ -7,6 +7,7 @@ const props=defineProps({
   action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
 const emit=defineEmits(['unauthorized']);
+const minimal=computed(()=>props.presentation?.chrome==='minimal');
 const inputText=ref('{}'),response=ref(null),error=ref(''),busy=ref(false);
 const view=ref('visual'),autoRefresh=ref(false),infoTab=ref(null);
 const formInput=ref(Object.fromEntries((props.presentation?.inputs ?? []).map(field=>[field.key,props.action.inputSchema?.properties?.[field.key]?.default ?? ''])));
@@ -138,10 +139,10 @@ onUnmounted(()=>{
 </script>
 
 <template>
-  <section class="action-card" :aria-label="action.title">
+  <section class="action-card" :class="{'minimal-action':minimal}" :aria-label="action.title">
     <div class="card-heading">
       <h3>{{ action.title }}</h3>
-      <div class="action-info-tabs" role="tablist" :aria-label="action.title + '信息'">
+      <div v-if="!minimal" class="action-info-tabs" role="tablist" :aria-label="action.title + '信息'">
           <button type="button" role="tab" :id="'description-tab-'+action.id"
             :aria-selected="infoTab==='description'" :aria-controls="'description-'+action.id"
             @click="selectInfo('description')">说明</button>
@@ -198,7 +199,7 @@ onUnmounted(()=>{
     <textarea v-if="hasInputFields && !presentation?.inputs && presentation?.renderer!=='files'" :id="'input-'+action.id" v-model="inputText" rows="3" spellcheck="false" />
 
     <div class="result">
-      <div class="result-header">
+      <div v-if="!minimal" class="result-header">
         <strong>操作结果</strong>
         <div class="result-controls">
           <button type="button" class="action-refresh primary" :disabled="busy || commandBusy || !inputReady" @click="run('execute')">

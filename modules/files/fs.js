@@ -43,6 +43,7 @@ async function directorySize(path,budget){
 }
 async function listFilesImpl({path='/',offset=0,limit=200}={}){
   path=await target(path);
+  const writeAccess=await fs.access(path,constants.W_OK | constants.X_OK).then(()=>'allowed',error=>error.code==='EROFS'?'readonly':'denied');
   const names=await fs.readdir(path,{withFileTypes:true});
   names.sort((a,b)=>Number(b.isDirectory())-Number(a.isDirectory()) || a.name.localeCompare(b.name));
   const {users,groups}=await accounts(),budget={remaining:10000,deadline:Date.now()+1500},entries=[];
@@ -59,7 +60,7 @@ async function listFilesImpl({path='/',offset=0,limit=200}={}){
         modifiedAt:stats.mtime.toISOString()});
     }catch{entries.push({name:entry.name,type:'other',symlink:entry.isSymbolicLink(),size:null,sizeComplete:false,permissions:'—',owner:'—',modifiedAt:''});}
   }
-  return {path,parent:path==='/'?null:dirname(path),entries,total:names.length,
+  return {path,parent:path==='/'?null:dirname(path),writeAccess,entries,total:names.length,
     nextOffset:offset+entries.length<names.length?offset+entries.length:null};
 }
 async function readTextImpl({path}){
@@ -144,8 +145,8 @@ function expose(operation){
     catch(error){
       if(error.statusCode)throw error;
       const codes={ENOENT:[404,'文件或目录不存在'],ENOTDIR:[400,'路径不是目录'],EISDIR:[400,'路径指向目录'],
-        EACCES:[403,'没有访问此文件或目录的权限'],EPERM:[403,'没有执行此文件操作的权限'],
-        EROFS:[403,'文件系统只读'],ENOSPC:[507,'磁盘空间不足'],ELOOP:[400,'无法解析符号链接'],
+        EACCES:[403,'面板服务账户没有访问此文件或目录的权限，或目录被服务隔离'],EPERM:[403,'面板服务账户没有执行此文件操作的权限'],
+        EROFS:[403,'当前目录所在文件系统只读，可能受面板服务隔离限制'],ENOSPC:[507,'磁盘空间不足'],ELOOP:[400,'无法解析符号链接'],
         EEXIST:[409,'同名文件或目录已存在'],ENOTEMPTY:[409,'目标目录不是空目录']};
       const [status,message]=codes[error.code] ?? [500,'文件操作失败'];
       throw fail(message,status);
