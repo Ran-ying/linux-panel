@@ -1040,7 +1040,9 @@ try {
       assert.equal(placement.position,'fixed');
       assert.ok(placement.rowLeft>=12 && placement.rowRight>=12 && placement.rowRadius>0,'expanded module rows need rounded frames and side gutters');
       assert.equal(placement.tabRadius,0);
-      assert.ok(Math.abs(placement.tabLeft)<1 && Math.abs(placement.tabRight)<1 && placement.tabTop>=8,'phone tabs must be flush with the square frame');
+      assert.ok(placement.tabLeft>=0 && placement.tabLeft<=2 &&
+        placement.tabRight>=0 && placement.tabRight<=2 && placement.tabTop>=8,
+        'phone tabs should sit just inside the rounded header card border');
       assert.equal(placement.tabPadding,'0px');assert.equal(placement.tabBorder,'0px');
       assert.ok(placement.toggleHeight<44,'navigation toggle must be compact');
       assert.ok(placement.themeLeft>=placement.nameRight,'theme control must sit right of the panel name');
@@ -1054,10 +1056,11 @@ try {
         radius:parseFloat(getComputedStyle(sidebar).borderTopLeftRadius),sideBorder:getComputedStyle(sidebar).borderLeftWidth,
         overflowing:region.scrollHeight>region.clientHeight,accountBottom:account.bottom};
     });
-    assert.ok(viewport.width<=730?layout.radius===0:layout.radius>0,'mobile frame square, desktop frame rounded');
-    if(viewport.width<=730)assert.equal(layout.sideBorder,'0px');
+    assert.ok(layout.radius>=12,'mobile and desktop sidebar cards must stay rounded');
+    assert.equal(layout.sideBorder,'1px');
     assert.ok(Math.abs(layout.top-16)<1,'sidebar must preserve its top gutter');
-    assert.ok(Math.abs(layout.left-(viewport.width<=730?0:Math.max(0,(viewport.width-1200)/2)+16))<1,'mobile sidebar spans viewport, desktop follows shell');
+    assert.ok(Math.abs(layout.left-(viewport.width<=730?16:Math.max(0,(viewport.width-1200)/2)+16))<1,
+      'mobile sidebar keeps 16px left gutter; desktop follows the shell');
     assert.ok(layout.bottom<=layout.height-16+1,'sidebar must preserve bottom gutter');
     assert.ok(layout.accountBottom<=layout.bottom,'account controls must remain inside sidebar');
     assert.ok(layout.overflowing,'many modules must overflow the independent module region');
