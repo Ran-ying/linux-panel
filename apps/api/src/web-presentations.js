@@ -1,8 +1,9 @@
+import {isUserShellAction} from '../../../core/action-policy.js';
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer']);
 
 function validateView(view,schema,actionId,depth=0) {
@@ -31,6 +32,9 @@ function validateView(view,schema,actionId,depth=0) {
         if (!nested || !Array.isArray(view.columns) || !view.columns.length)
           throw new Error('Invalid table fields');
         view.columns.forEach(f => checkField(f, nested));
+      } else if(view.renderer==='terminal') {
+        for(const key of ['stdout','stderr'])
+          if(schema[key]?.type!=='string')throw new Error('Terminal renderer requires text output fields');
       } else {
         if (typeof view.valueKey !== 'string' || schema[view.valueKey]?.type !== 'number')
           throw new Error(`Invalid progress value field: ${actionId}`);
@@ -87,6 +91,21 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       const schema=action.outputSchema?.properties;
       if(!schema)throw new Error('Web UI requires an outputSchema: '+item.actionId);
       validateView(item,schema,item.actionId);
+      if(item.console!==undefined && (item.console!=='terminal' || !isUserShellAction(registry.get(item.actionId))))
+        throw new Error('Interactive terminal requires an approved user-shell Action');
+      if(item.inputs!==undefined){
+        if(!Array.isArray(item.inputs) || !item.inputs.length || item.inputs.length>12)throw new Error('Invalid input descriptors');
+        const keys=new Set();
+        for(const field of item.inputs){
+          const property=action.inputSchema?.properties?.[field.key];
+          if(!field || typeof field.key!=='string' || keys.has(field.key) || !property ||
+            property.type!=='string' || field.type!=='textarea' ||
+            typeof field.label!=='string' || field.label.length>100 ||
+            field.placeholder!==undefined && typeof field.placeholder!=='string')
+            throw new Error('Invalid input descriptor');
+          keys.add(field.key);
+        }
+      }
       // UI values must be inert JSON, with no executable callbacks exposed.
       presentations.push(JSON.parse(JSON.stringify(item)));
       seen.add(item.actionId);
