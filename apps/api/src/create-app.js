@@ -65,7 +65,10 @@ export async function createApp({
   const auth = new AuthService(store);
   const registry = new ActionRegistry();
   const modules = new ModuleManager(modulesPath, registry);
-  await modules.loadAll();
+  const savedOrder=(await store.snapshot()).moduleOrder;
+  await modules.loadAll(savedOrder);
+  if(JSON.stringify(savedOrder)!==JSON.stringify(modules.order))
+    await store.mutate(state=>{state.moduleOrder=modules.order;});
   const updates = createUpdateController({store, root, auth});
   registerUpdateActions(registry, updates);
   const listenerController=createListenerController({store,auth,active:activeListener,publicOrigin});

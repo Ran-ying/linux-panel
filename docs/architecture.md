@@ -6,7 +6,7 @@
 
 - platform：管理员、会话/TOTP、CSRF/Origin、私有状态、MCP 全局策略、可编辑命令、更新/监听配置。
 - core：可信随仓库模块发现与依赖、注册、JSON Schema、默认拒绝新写类型。
-- modules/files：list/read/write/upload，普通账户 fs 操作；面板负责目录和编辑器，写能力仅 Web。参见 [文件管理](FILES.md)。
+- modules/files：list/read/write/upload/create/rename/delete，普通账户 fs 操作；面板负责目录、编辑器及文件变更控件，写能力仅 Web。参见 [文件管理](FILES.md)。
 - modules/system：system.resources（cpu + memory + disk，优先展示）、system.info（主机基本字段）。collectors 为内部帮助代码，旧 split Actions 与 storage 模块已移除。
 - modules/services：services.list。
 - modules/terminal：terminal.execute（显式 user-shell 写能力），命令输入和 PTY GUI 均由面板提供。
@@ -34,3 +34,5 @@ Web 使用管理员 Cookie、权限/Origin/CSRF，敏感变更另验密码/可�
 单管理员、单 Node 进程、单机 JSON；没有分布式一致性、多管理员、第三方不可信插件沙箱或任意特权 Shell。TOTP、受限更新 Broker 和真实 MCP 部署已实现；测试不等于独立安全审计。真实手机/广泛发行版覆盖以具体验收为准。
 
 [安装](INSTALL.md) · [MCP](mcp.md) · [升级](UPGRADING.md) · [安全](security.md)
+
+模块首次启动按 manifest.navigationOrder 建立导航顺序，保存在私有状态 moduleOrder。后续新 ID 追加末尾，已有位置优先于 manifest，暂时移除的 ID 保留位置。依赖仍按拓扑顺序执行 setup，导航排序不改变依赖装载。

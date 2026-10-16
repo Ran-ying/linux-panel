@@ -66,6 +66,7 @@ try {
       await page.getByRole('button',{name,exact:true}).click();
     }
     const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
+    assert.deepEqual(names.slice(0,4).map(name=>name.trim()),['系统概览','服务浏览','终端','文件管理']);
     assert.ok(!names.some(name=>name.trim()==='磁盘使用情况'),'disk usage must not have a separate sidebar item');
     for(const name of [...names,'面板设置']){
       await navigate(name.trim());
@@ -279,6 +280,49 @@ try {
         await browser.getByText('空目录',{exact:true}).waitFor();
         await browser.getByRole('button',{name:'上一级',exact:true}).click();
         await browser.getByRole('button',{name:'note.txt',exact:true}).waitFor();
+        const fileHeaders=await browser.locator('.file-table th').allTextContents();
+        assert.ok(fileHeaders.includes('大小（MB）'));
+        assert.ok(fileHeaders.includes('权限 / 所有者'));
+        await browser.getByRole('button',{name:'新建文件',exact:true}).click();
+        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('created-'+width+'.txt');
+        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        await browser.getByText('已新建',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'created-'+width+'.txt'),'utf8'),'');
+        await browser.getByRole('button',{name:'重命名 created-'+width+'.txt',exact:true}).click();
+        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('renamed-'+width+'.txt');
+        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        await browser.getByText('已重命名',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'renamed-'+width+'.txt'),'utf8'),'');
+        page.once('dialog',dialog=>dialog.accept());
+        await browser.getByRole('button',{name:'删除 renamed-'+width+'.txt',exact:true}).click();
+        await browser.getByText('已删除',{exact:true}).waitFor();
+        await assert.rejects(readFile(join(fileFixture,'renamed-'+width+'.txt')),{code:'ENOENT'});
+        await browser.getByRole('button',{name:'新建文件夹',exact:true}).click();
+        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('new-dir-'+width);
+        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        await browser.getByText('已新建',{exact:true}).waitFor();
+        // Drop uses the browser File/DataTransfer path, not the file picker.
+        await browser.evaluate((element,width)=>{
+          const data=new DataTransfer();data.items.add(new File(['drop-fixture'],'drop-'+width+'.txt',{type:'text/plain'}));
+          element.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data}));
+        },width);
+        await browser.getByText('上传完成',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'drop-'+width+'.txt'),'utf8'),'drop-fixture');
+        await browser.getByRole('button',{name:'new-dir-'+width+'/',exact:true}).click();
+        await browser.getByRole('button',{name:'新建文件',exact:true}).click();
+        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('child.txt');
+        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        await browser.getByText('已新建',{exact:true}).waitFor();
+        await browser.getByRole('button',{name:'上一级',exact:true}).click();
+        await browser.getByRole('button',{name:'重命名 new-dir-'+width,exact:true}).click();
+        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('renamed-dir-'+width);
+        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        await browser.getByText('已重命名',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'renamed-dir-'+width,'child.txt'),'utf8'),'');
+        page.once('dialog',dialog=>dialog.accept());
+        await browser.getByRole('button',{name:'删除 renamed-dir-'+width,exact:true}).click();
+        await browser.getByText('已删除',{exact:true}).waitFor();
+        await assert.rejects(readFile(join(fileFixture,'renamed-dir-'+width,'child.txt')),{code:'ENOENT'});
         await page.screenshot({path:join(output,'file-browser-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='终端'){

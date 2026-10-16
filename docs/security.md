@@ -60,4 +60,4 @@ terminal.execute 是显式 user-shell 写能力，仅普通服务身份，拒绝
 
 ## 普通用户文件操作
 
-文件模块通过原生 fs API，以面板服务身份浏览/读写/上传，不通过 Shell 或 Broker，拒绝 UID 0。files.write/upload 为明确的 user-files 写策略，仅 Web 已认证管理员可经既有 CSRF/Origin 检查执行；MCP 暴露的 files.list/read 是已有可信个人客户端的读取能力，不是路径沙箱。文本保存检查 revision、保留权限/属主；上传创建新文件而不覆盖。大小、分页与代理边界见 [文件管理](FILES.md)。路径、内容不写审计或公开日志。
+文件模块通过原生 fs API，以面板服务身份浏览、读写、上传、新建、重命名与删除，不通过 Shell 或 Broker，拒绝 UID 0。files.write/upload/create/rename/delete 为明确的 user-files 写策略，仅 Web 已认证管理员可经既有 CSRF/Origin 检查执行；MCP 暴露的 files.list/read 是已有可信个人客户端的读取能力，不是路径沙箱。文本保存检查 revision、保留权限/属主；上传创建新文件而不覆盖。删除目录会递归删除内容，GUI 要求确认；删除链接本身不删除目标。根目录不可删除或重命名。大小、分页与代理边界见 [文件管理](FILES.md)。路径、内容不写审计或公开日志。

@@ -1,3 +1,9 @@
+# 文件管理扩展与模块顺序（2026-10-16）
+
+模块导航首次升级自动建立“系统概览 → 服务浏览 → 终端 → 文件管理”顺序，保存在私有 state.moduleOrder；后续新增 ID 追加末尾，现有顺序和暂时移除模块的位置保留。不需要手工迁移状态或修改前端。
+
+新增 files.create/rename/delete，和 write/upload 一样仅 Web、普通服务账户执行，MCP 读取清单不变。目录项增加 permissions（八进制）、owner（用户:组）、sizeComplete；size 可为 null。GUI 统一以十进制 MB 显示，目录递归统计普通文件逻辑字节，不遍历链接，预算不足或权限失败显示部分统计。支持多文件选择和拖入上传、新建文件/文件夹、同目录重命名、确认后删除文件或非空目录。详见 [文件管理](FILES.md)。
+
 # 文件管理与本地筛选（2026-10-16）
 
 基本信息关闭每 15 秒自动刷新。服务筛选改为 Web 对已读数据即时过滤，输入/选择条件不再发请求，只有刷新重新采集；API 的可选筛选参数继续兼容。
@@ -8,7 +14,7 @@
 
 services.list 新增可选 nameKeyword、active、sub 字符串输入，空值表示全部；名称按忽略大小写的字面子串匹配，两个状态精确匹配，条件同时成立。结果新增 activeStates/subStates（本次完整采集中的状态选项），count 是筛选后的记录数。原始 units 输出仍保留完整命令原文。
 
-筛选发生在同一个 Action 的解析结果中，输入不拼接进 Shell。ActionCommands 的 decode 第二参数现包含经过引擎校验的 input，已有仅使用 durations 的模块保持兼容。Web 复用面板 text/select 输入控件，输入条件后刷新数据，关键词框也可回车读取；清空条件恢复全部。
+筛选发生在同一个 Action 的解析结果中，输入不拼接进 Shell。ActionCommands 的 decode 第二参数现包含经过引擎校验的 input，已有仅使用 durations 的模块保持兼容。Web 复用面板 text/select 输入控件，条件改变立即筛选已加载数据，清空恢复全部；刷新数据重新采集。
 
 # 基本信息与 CPU 字段调整（2026-10-16）
 

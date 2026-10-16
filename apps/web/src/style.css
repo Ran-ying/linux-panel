@@ -600,3 +600,17 @@ table{min-width:500px}
 .file-editor>strong{display:block;overflow-wrap:anywhere;margin-bottom:12px}
 .file-editor-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
 @media(max-width:730px){.file-path-bar input{font-size:16px}.file-editor{padding:10px}}
+
+.file-browser{position:relative}
+.file-toolbar,.file-row-actions,.file-entry-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.file-toolbar,.file-entry-form{margin-top:12px}
+.file-entry-form{padding:12px;border:1px solid var(--border-panel);border-radius:12px;align-items:flex-end}
+.file-entry-form label{flex:1 1 180px;margin:0;font-size:.85rem}
+.file-entry-form input{display:block;width:100%;margin-top:7px;padding:9px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--text-primary);font:inherit}
+.file-table{min-width:820px}
+.file-table td{vertical-align:middle}
+.file-permissions,.file-owner{display:block;white-space:nowrap;font-family:monospace}
+.file-row-actions{flex-wrap:nowrap}
+.file-dragging{outline:2px dashed var(--accent-bg);outline-offset:6px;border-radius:8px}
+.file-drop-hint{position:absolute;inset:0;z-index:2;display:grid;place-items:center;border-radius:8px;background:var(--panel-bg);color:var(--text-primary);pointer-events:none;opacity:.95}
+@media(max-width:730px){.file-entry-form input{font-size:16px}}
