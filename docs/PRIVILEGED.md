@@ -79,11 +79,11 @@ CI 的 npm test 验证输入/未知操作/通道边界、HTTP 鉴权与 CSRF、s
 
 服务器必须实际执行安装命令，确认服务身份、socket 与根端读写结果，才能宣称已激活。仅合并 PR、普通更新 success 或根端 CI 通过不代表目标服务器已有 root 能力。最终证据记录在 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
-## Nginx 网站管理（新模块须额外安装）
+## Nginx 网站管理（固定 root Handler 与 systemd 权限）
 
 为使固定命令 nginx -t 在沙箱内验证 listen 指令，root unit 须允许 AF_INET/AF_INET6 和 CAP_NET_BIND_SERVICE；其它固定 Handler 与 Web/MCP 授权边界不因此变化。
 
-Nginx 模块使用固定 root handler `nginx.sites/read/check/apply`，只允许校验的站点名，写操作仅影响 sites-available 常规文件及同名 sites-enabled 链接。修改采用 revision、原子替换、nginx -t 验证；涉及已启用站点时再用固定 systemctl reload nginx.service，并在语法校验/重载失败时尝试恢复。Web 使用受控 root 通道，MCP 仅只读普通账户操作，不暴露特权写入。普通面板更新不自动更新 root handler，仍须操作员审查后显式重装。详见 [NGINX.md](NGINX.md)。
+Nginx 模块使用固定 root handler `nginx.sites/read/check/apply`，只允许校验的站点名，写操作仅影响 sites-available 常规文件及同名 sites-enabled 链接。修改采用 revision、原子替换、nginx -t 验证；涉及已启用站点时再用固定 systemctl reload nginx.service，并在语法校验/重载失败时尝试恢复。Web 使用受控 root 通道，MCP 仅只读普通账户操作，不暴露特权写入。完成一次性自动更新迁移后，可信 main 更新会同步固定 root Handler；**但现有 Broker 不改写 root systemd unit**。若历史安装的单元仍只允许 AF_UNIX，Nginx 校验会因地址族被拒绝而失败：此时需要在单元文件版本经过审查后执行一次 root 单元安装/激活，不是每新增一个 Handler 都要 SSH。详见 [NGINX.md](NGINX.md)。
 
 ## 托管 Cron 定时任务
 
