@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files', 'scheduled-tasks']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer', 'number']);
 
 function validateView(view,schema,actionId,depth=0) {
@@ -30,6 +30,11 @@ function validateView(view,schema,actionId,depth=0) {
         view.fields.forEach(f => checkField(f, schema));
       } else if(view.renderer==='files') {
         if(schema.path?.type!=='string' || schema.entries?.type!=='array')throw new Error('Invalid files result schema');
+      } else if (view.renderer === 'scheduled-tasks') {
+        const job=schema.tasks?.items?.properties;
+        if(schema.revision?.type!=='string' || schema.count?.type!=='integer' ||
+          !job || ['id','name','expression','command','enabled'].some(key=>!job[key]))
+          throw new Error('Invalid scheduled-tasks result schema');
       } else if (view.renderer === 'table') {
         const nested = schema[view.rowsKey]?.items?.properties;
         if (!nested || !Array.isArray(view.columns) || !view.columns.length)
@@ -129,6 +134,15 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
         for(const name of ['accounts','read','write','upload','create','rename','delete','chmod','chown']){
           const id=item.operations?.[name],target=visible.get(id);
           if(!target || !id.startsWith(module.id+'.'))throw new Error('Files operation must reference an exposed module Action');
+        }
+      }
+      if(item.renderer==='scheduled-tasks'){
+        for(const name of ['save','remove']){
+          const id=item.operations?.[name],target=visible.get(id);
+          if(typeof id!=='string' || !id.startsWith(module.id+'.') || !target ||
+            target.kind!=='write' || target.exposure?.web!==true ||
+            target.inputSchema?.properties?.revision?.type!=='string')
+            throw new Error('Scheduled task operation must reference an exposed module write Action');
         }
       }
       if(item.clientFilters!==undefined){
