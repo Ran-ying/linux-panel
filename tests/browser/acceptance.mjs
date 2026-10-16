@@ -655,5 +655,7 @@ try {
 } finally {
   await browser?.close();
   await app.close();
-  await rm(temp,{recursive:true,force:true});
+  // Worker shutdown can race with the final private-state unlink; tolerate
+  // transient ENOTEMPTY while keeping persistent cleanup failures visible.
+  await rm(temp,{recursive:true,force:true,maxRetries:8,retryDelay:125});
 }
