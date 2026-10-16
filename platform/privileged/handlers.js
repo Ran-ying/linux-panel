@@ -3,8 +3,6 @@ import {FILE_CONTRACTS} from './file-contracts.js';
 import {createFileOperations} from './file-operations.js';
 import {CRON_CONTRACTS} from './cron-contracts.js';
 import {createCronOperations} from './cron-operations.js';
-import {SCHEDULES_CONTRACTS} from './schedules-contracts.js';
-import {createSystemCronOperations} from './cron-system-operations.js';
 import {NGINX_CONTRACTS} from './nginx-contracts.js';
 import {createNginxOperations} from './nginx-operations.js';
 import {NGINX_UNIT_CONTRACT} from './nginx-unit-contracts.js';
@@ -19,10 +17,6 @@ export function createPrivilegedHandlers({privileged=true}={}){
   const cron=createCronOperations();
   for(const [name,contract] of Object.entries(CRON_CONTRACTS))
     handlers.set('cron.'+name,{validate:ajv.compile(contract.inputSchema),execute:cron[name]});
-  const schedules=createSystemCronOperations();
-  for(const [name,contract] of Object.entries(SCHEDULES_CONTRACTS))
-    handlers.set('schedules.'+name,{validate:ajv.compile(contract.inputSchema),
-      execute:name==='list'?schedules.enumerate:schedules.set});
   const nginx=createNginxOperations();
   for(const [name,contract] of Object.entries(NGINX_CONTRACTS))
     handlers.set('nginx.'+name,{validate:ajv.compile(contract.inputSchema),execute:nginx[name]});
