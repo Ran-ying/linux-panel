@@ -20,7 +20,8 @@ async function request(action,input){
 async function task(fn){
   if(busy.value)return;
   busy.value=true;error.value='';message.value='';
-  try{await fn();}catch(cause){if(cause.name!=='AbortError')error.value=cause.message;}
+  try{const notice=await fn();if(typeof notice==='string')message.value=notice;}
+  catch(cause){if(cause.name!=='AbortError')error.value=cause.message;}
   finally{busy.value=false;}
 }
 async function list(path,more=false){
@@ -42,7 +43,7 @@ function closeEditor(){
 }
 function save(){return task(async()=>{
   const result=await request(props.operations.write,{path:editor.value.path,content:content.value,revision:editor.value.revision});
-  editor.value={...editor.value,...result};dirty.value=false;message.value='已保存';await list(listing.value.path);
+  editor.value={...editor.value,...result};dirty.value=false;await list(listing.value.path);return '已保存';
 });}
 function base64(buffer){
   const bytes=new Uint8Array(buffer);let value='';
@@ -59,8 +60,8 @@ function uploadFiles(files){
         if(file.size>8*1024*1024)throw new Error(file.name+' 超过 8 MiB');
         await request(props.operations.upload,{path:join(file.name),contentBase64:base64(await file.arrayBuffer())});
       }
-      message.value='上传完成';
     }finally{await list(listing.value.path);}
+    return '上传完成';
   });
 }
 function beginCreate(type){operation.value={kind:'create',type};entryName.value='';}
@@ -76,7 +77,7 @@ function submitEntry(){return task(async()=>{
     if(editor.value && (editor.value.path===oldPath || editor.value.path.startsWith(oldPath+'/')))
       editor.value.path=newPath+editor.value.path.slice(oldPath.length);
   }
-  operation.value=null;await list(listing.value.path);message.value=current.kind==='create'?'已新建':'已重命名';
+  operation.value=null;await list(listing.value.path);return current.kind==='create'?'已新建':'已重命名';
 });}
 function remove(entry){
   const path=join(entry.name);
@@ -84,7 +85,7 @@ function remove(entry){
   return task(async()=>{
     await request(props.operations.delete,{path});
     if(editor.value && (editor.value.path===path || !entry.symlink && editor.value.path.startsWith(path+'/'))){editor.value=null;dirty.value=false;}
-    await list(listing.value.path);message.value='已删除';
+    await list(listing.value.path);return '已删除';
   });
 }
 function megabytes(entry){

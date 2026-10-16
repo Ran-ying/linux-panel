@@ -1,6 +1,6 @@
 # Linux Panel 当前状态
 
-更新：2026-10-16。[v0.5.0 已发布](https://github.com/Ran-ying/linux-panel/releases/tag/v0.5.0)，main 持续迭代。本轮基于 main 9507e0c6f933df464f52537f69c03868080bd30d（PR #107）；准确合并 SHA、CI 和部署证据统一见 [Issue #54 最新记录](https://github.com/Ran-ying/linux-panel/issues/54)。旧过程见 [历史归档](history/PROJECT-STATUS-2026-10-16.md)。
+更新：2026-10-16。[v0.5.0 已发布](https://github.com/Ran-ying/linux-panel/releases/tag/v0.5.0)，main 持续迭代。本轮基于 main 405bf13488b56ea9200e6dc9c22080c7bd43bc46（PR #108）；准确合并 SHA、CI 和部署证据统一见 [Issue #54 最新记录](https://github.com/Ran-ying/linux-panel/issues/54)。旧过程见 [历史归档](history/PROJECT-STATUS-2026-10-16.md)。
 
 ## 当前实现
 
@@ -17,7 +17,7 @@
 
 ## 验证与部署
 
-上一轮 PR #107 已修复严格 umask 下的文件权限测试假设；CI、浏览器和测试服务器成功证据见 Issue #54。该轮观察到的服务器 SHA 为上述 9507e0c，不能当作本轮新功能已部署的证据。本轮增加顺序追加回归、目录统计/链接/文件变更/API 授权测试，以及手机/桌面新建、重命名、删除和拖入上传浏览器流程。实际 CI、合并和 MCP 部署完成后须在 Issue #54 记录；queued 不等于成功。
+PR #108 的完整 CI 与手机/桌面文件操作验收通过，测试服务器已观察到 405bf13488b56ea9200e6dc9c22080c7bd43bc46 更新成功，并完成普通服务身份临时文件夹操作检查。合并后 main CI 又捕获保存成功提示早于列表刷新完成、紧接上传可能被忙碌守卫忽略的问题；本轮将成功提示集中到任务结束时发布，增加 250ms 延迟列表刷新后的即时上传回归。最终 CI 与再次部署证据见 Issue #54；本页不把旧部署或 queued 当作本轮补丁部署成功。
 
 下一步：真实 iPhone/Android QA、更多诊断模块和通用复杂输入表单。文件大目录完整统计与目录上传尚未实现，当前界面明确区分部分大小。
 
