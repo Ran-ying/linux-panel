@@ -31,6 +31,21 @@ test('module owns its actions and prevents duplicate registration', () => {
   assert.equal(registry.list('web').length, 0);
 });
 
+test('generic module reordering preserves absent IDs without hardcoded module names',async()=>{
+  const manager=new ModuleManager(resolve('modules'),new ActionRegistry());
+  await manager.loadAll(['files','missing-future-module','system','terminal','services']);
+  manager.loaded.push({id:'panel',name:'Panel'});
+  const before=manager.loaded.filter(module=>module.id!=='panel').map(module=>module.id);
+  assert.deepEqual(before,['files','system','terminal','services']);
+  const planned=manager.planOrder(['system','files','terminal','services']);
+  assert.deepEqual(planned,['system','missing-future-module','files','terminal','services']);
+  manager.applyOrder(planned);
+  assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','panel']);
+  for(const bad of [['system','files','services'],['files','files','terminal','services'],
+    ['system','files','terminal','other'],null,{}])
+    assert.throws(()=>manager.planOrder(bad),{statusCode:400});
+});
+
 test('bundled modules load after dependencies and expose expected actions', async () => {
   const registry = new ActionRegistry();
   const manager = new ModuleManager(resolve('modules'), registry);

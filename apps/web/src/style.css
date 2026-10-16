@@ -198,6 +198,14 @@ td{overflow-wrap:anywhere}
 .settings-page{display:flex;flex-direction:column;gap:17px}
 .settings-section{border:1px solid var(--border-strong);border-radius:13px;background:var(--panel-bg);padding:22px}
 .settings-section h3{margin:0 0 14px}
+.module-order-item{flex-wrap:nowrap}
+.module-order-label{display:grid;gap:3px;min-width:0;flex:1 1 auto}
+.module-order-controls{display:flex;gap:7px;flex:none}
+.module-order-controls button{
+  display:grid;place-items:center;width:38px;min-height:38px;
+  padding:4px;font-size:1.2rem;font-weight:600;line-height:1;
+}
+@media(max-width:730px){.module-order-controls button{width:44px;min-height:44px}}
 .settings-section form{max-width:520px}
 .session-row,.module-summary,.audit-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-strong);flex-wrap:wrap}
 .audit-row{font-family:monospace;font-size:.79rem;overflow-wrap:anywhere}
@@ -643,6 +651,19 @@ table{min-width:500px}
   width:100%;min-height:42px;padding:9px 11px;
   font:inherit;font-size:1rem;border:1px solid var(--input-border);
   border-radius:8px;background:var(--input-bg);color:var(--text-primary);
+}
+/* Apply the same inset arrow to every native select in the dialog. */
+.file-dialog-body label:has(> select){position:relative}
+.file-dialog-body label:has(> select)::after{
+  content:"";position:absolute;pointer-events:none;
+  right:20px;bottom:17px;width:8px;height:8px;
+  border-right:2px solid var(--text-secondary);
+  border-bottom:2px solid var(--text-secondary);
+  transform:rotate(45deg);
+}
+.file-dialog-body select{
+  appearance:none;-webkit-appearance:none;
+  padding-right:44px;
 }
 .file-dialog-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}
 .file-browser .file-primary{background:var(--accent-bg);border-color:var(--accent-bg);color:var(--button-primary-text)}

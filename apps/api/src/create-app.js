@@ -250,6 +250,20 @@ export async function createApp({
     auth.requirePermission(request.panelIdentity, 'modules:read');
     return { modules: modules.loaded };
   });
+  app.put('/api/modules/order', async request => {
+    auth.requirePermission(request.panelIdentity,'panel:write');
+    const body=request.body;
+    if(!body || typeof body!=='object' || Array.isArray(body) ||
+       Object.keys(body).length!==1 || !Object.hasOwn(body,'order'))
+      throw badRequest('Invalid module order request');
+    const order=modules.planOrder(body.order);
+    await store.mutate(state=>{
+      state.moduleOrder=order;
+      addAudit(state,'panel.modules.reordered',request.panelIdentity.user.id);
+    });
+    modules.applyOrder(order);
+    return {modules:modules.loaded};
+  });
   app.get('/api/actions', async request => {
     auth.requirePermission(request.panelIdentity, 'actions:discover');
     return { actions: registry.list('web').filter(a => {

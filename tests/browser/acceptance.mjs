@@ -315,8 +315,20 @@ try {
         await permissions.waitFor();
         await permissions.getByRole('textbox',{name:'文件权限',exact:true}).fill('0600');
         await permissions.getByRole('combobox',{name:'文件用户',exact:true}).waitFor({state:'visible'});
+        await page.waitForFunction(()=>{
+          const dialog=document.querySelector('.file-action-dialog[open]');
+          return dialog && [...dialog.querySelectorAll('select')].length===2 &&
+            [...dialog.querySelectorAll('select')].every(select=>select.options.length>1);
+        });
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户',exact:true}).locator('option').count()>1);
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户组',exact:true}).locator('option').count()>1);
+        const selectArrow=await permissions.getByRole('combobox',{name:'文件用户',exact:true}).evaluate(select=>{
+          const pseudo=getComputedStyle(select.closest('label'),'::after');
+          return {appearance:getComputedStyle(select).appearance,right:pseudo.right,bottom:pseudo.bottom};
+        });
+        assert.equal(selectArrow.appearance,'none');
+        assert.equal(selectArrow.right,'20px','select chevron should be inset from the edge');
+        assert.equal(selectArrow.bottom,'17px');
         await permissions.getByRole('button',{name:'保存',exact:true}).click();
         await browser.getByText('权限与属主已保存',{exact:true}).waitFor();
         assert.equal((await (await import('node:fs/promises')).stat(join(fileFixture,'note.txt'))).mode & 0o777,0o600);
@@ -437,6 +449,17 @@ try {
         width+' '+name+' cards must match the rounded sidebar frame');
       assert.ok(frames.gaps.every(g=>Math.abs(g-24)<1),width+' '+name+' card gaps must match sidebar gap');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
+      if(name.trim()==='面板设置' && width===1280){
+        await page.getByRole('button',{name:'下移 服务浏览'}).click();
+        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,终端,服务浏览,文件管理');
+        await page.reload();
+        await page.locator('.module-nav button').first().waitFor();
+        assert.deepEqual((await page.locator('.module-nav button').allTextContents()).map(x=>x.trim()).slice(0,4),
+          ['系统概览','终端','服务浏览','文件管理'],'saved module order survives reload');
+        await navigate('面板设置');
+        await page.getByRole('button',{name:'上移 服务浏览'}).click();
+        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,服务浏览,终端,文件管理');
+      }
     }
     if(width===1280){
       await page.locator('#session-days').fill('7');

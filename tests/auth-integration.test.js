@@ -80,6 +80,35 @@ test('account sessions and built-in settings function with zero business modules
   assert.equal((await app.inject({ url: '/api/auth/session', headers: { cookie } })).statusCode, 401);
 });
 
+test('module order is editable with Web login and persists across restart',async t=>{
+  const {app,admin,login,store}=await fixture(t,true);
+  await admin();
+  const original=(await app.inject({url:'/api/modules'}));
+  assert.equal(original.statusCode,401);
+  const {cookie,payload}=await login();
+  const headers={cookie,'x-panel-csrf':payload.csrf,origin:'http://127.0.0.1:5173'};
+  const initial=(await app.inject({url:'/api/modules',headers})).json().modules;
+  const ids=initial.filter(module=>module.id!=='panel').map(module=>module.id);
+  const order=[...ids].reverse();
+  const url='/api/modules/order';
+  assert.equal((await app.inject({method:'PUT',url,payload:{order}})).statusCode,401);
+  assert.equal((await app.inject({method:'PUT',url,headers:{cookie},payload:{order}})).statusCode,403);
+  assert.equal((await app.inject({method:'PUT',url,headers:{...headers,origin:'https://evil.example'},payload:{order}})).statusCode,403);
+  for(const invalid of [{order:[...order,order[0]]},{order:order.slice(1)},
+    {order:[...order.slice(0,-1),'unexpected']},{order,extra:true},{}]){
+    const reply=await app.inject({method:'PUT',url,headers,payload:invalid});
+    assert.equal(reply.statusCode,400,reply.body);
+  }
+  const saved=await app.inject({method:'PUT',url,headers,payload:{order}});
+  assert.equal(saved.statusCode,200,saved.body);
+  assert.deepEqual(saved.json().modules.filter(module=>module.id!=='panel').map(module=>module.id),order);
+  assert.deepEqual((await store.snapshot()).moduleOrder,order);
+  assert.deepEqual((await app.inject({url:'/api/modules',headers})).json().modules.filter(module=>module.id!=='panel').map(module=>module.id),order);
+  const reloaded=(await app.inject({url:'/api/modules',headers})).json().modules;
+  assert.deepEqual(reloaded.map(module=>module.id).slice(0,-1),order);
+  assert.equal(reloaded.at(-1).id,'panel');
+});
+
 test('login rejects forged Origin, form posts and repeated password failures', async t => {
   const { app, admin, login } = await fixture(t);
   await admin();

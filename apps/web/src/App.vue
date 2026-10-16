@@ -221,7 +221,8 @@ onMounted(async () => {
       </div>
       <SettingsPanel v-else-if="session && activePage === 'settings'" :key="'settings'"
         :csrf="session.csrf" :user="session.user" :modules="moduleDefinitions"
-        @signed-out="signOutLocally" @settings-changed="value=>settings=value" />
+        @signed-out="signOutLocally" @settings-changed="value=>settings=value"
+        @modules-changed="value=>moduleDefinitions=value" />
       <div v-else-if="activeGroup" :key="activeGroup.id" class="module-content">
         <div class="module-intro">
           <h2>{{ activeGroup.name }}</h2>
