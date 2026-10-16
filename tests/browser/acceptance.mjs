@@ -111,6 +111,23 @@ try {
             'section renderer must preserve the phone two-column metrics layout');
         }
       }
+      if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
+        const cards=page.locator('.action-card');
+        assert.equal(await cards.count(),2,'Nginx must use two actual Actions');
+        const inventory=cards.first(),checker=cards.nth(1);
+        await inventory.getByText('发现站点',{exact:true}).waitFor();
+        assert.equal(await checker.locator('.metric-card').count(),0,
+          'nginx -t must not auto-run when the module opens');
+        const response=page.waitForResponse(r=>r.url().endsWith('/api/actions/nginx.check/execute') && r.request().method()==='POST');
+        await checker.getByRole('button',{name:'刷新数据',exact:true}).click();
+        const checked=await response;
+        assert.equal(checked.status(),200);
+        const body=await checked.json();
+        assert.equal(typeof body.result.ok,'boolean');
+        assert.equal(typeof body.result.identity,'string');
+        await checker.getByText('执行身份',{exact:true}).waitFor();
+        await page.screenshot({path:join(output,'nginx-readonly-'+width+'.png'),fullPage:true});
+      }
       if([390,1280].includes(width) && ['系统概览','服务浏览'].includes(name.trim())){
         const card=name.trim()==='系统概览'?page.locator('.action-card').nth(1):page.locator('.action-card').first();
         assert.equal(await card.locator('.action-information,.info-panel,.information-heading,.read-pill').count(),0,
