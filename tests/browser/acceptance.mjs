@@ -59,6 +59,7 @@ try {
     });
     // Disposable Nginx fixture: browser exercises real controls without root writes.
     let nginxSites=[],nginxVersions=0,nginxSyntaxGood=true;
+    const nginxToggleActions=[];
     const revision=()=>String(++nginxVersions).padStart(64,'0');
     await page.route('**/api/actions/nginx.*/execute',async route=>{
       const id=new URL(route.request().url()).pathname.split('/')[3];
@@ -74,6 +75,7 @@ try {
         if(!target){status=404;data={error:'配置不存在'};}
         else data={name:target.name,content:target.content,revision:target.revision,enabled:target.enabled==='启用链接'};
       }else if(id==='nginx.apply'){
+        if(input.operation==='enable'||input.operation==='disable')nginxToggleActions.push(input.operation);
         if(input.operation==='create'){
           if(target){status=409;data={error:'站点已存在'};}
           else{nginxSites.push({name:input.name,location:'sites-available',enabled:'未启用',
@@ -151,14 +153,44 @@ try {
         await editor.getByRole('textbox',{name:'配置文件名'}).fill('fixture-site');
         await editor.getByRole('textbox',{name:'Nginx 配置内容'}).fill('server { listen 80; server_name fixture.test; }');
         await editor.getByRole('button',{name:'保存配置'}).click();
-        await manager.getByRole('cell',{name:'未启用',exact:true}).waitFor();
+        const enabled=manager.getByRole('checkbox',{name:'启用状态：fixture-site'});
+        await enabled.waitFor();
+        assert.equal(await enabled.isChecked(),false,'new Nginx site defaults to unchecked');
+        assert.equal(await manager.getByRole('button',{name:'启用 fixture-site'}).count(),0,
+          'there must be no separate enable action button');
+        assert.equal(await manager.getByRole('button',{name:'停用 fixture-site'}).count(),0,
+          'there must be no separate disable action button');
         await manager.getByRole('button',{name:'编辑 fixture-site'}).click();
         const updated=page.getByRole('dialog',{name:'编辑网站配置'});
         await updated.getByRole('textbox',{name:'Nginx 配置内容'}).fill('server { listen 8080; server_name fixture.test; }');
         await updated.getByRole('button',{name:'保存配置'}).click();
-        await manager.getByRole('button',{name:'启用 fixture-site'}).click();
-        await page.getByRole('dialog',{name:'启用网站'}).getByRole('button',{name:'确认操作'}).click();
-        await manager.getByRole('cell',{name:'启用链接',exact:true}).waitFor();
+        await enabled.click();
+        const enableConfirm=page.getByRole('dialog',{name:'启用网站'});
+        await enableConfirm.waitFor();
+        assert.equal(await enabled.isChecked(),false,'checkbox cannot switch before confirmation');
+        assert.deepEqual(nginxToggleActions,[],'opening confirmation must not submit a state change');
+        await enableConfirm.getByRole('button',{name:'取消'}).click();
+        await enableConfirm.waitFor({state:'hidden'});
+        assert.equal(await enabled.isChecked(),false,'cancel leaves the site disabled');
+        assert.deepEqual(nginxToggleActions,[],'cancel must not trigger the Nginx apply Action');
+        await enabled.click();
+        await enableConfirm.getByRole('button',{name:'确认操作'}).click();
+        await enableConfirm.waitFor({state:'hidden'});
+        assert.equal(await enabled.isChecked(),true,'confirmed enable checks the box');
+        assert.deepEqual(nginxToggleActions,['enable']);
+        await enabled.click();
+        const disableConfirm=page.getByRole('dialog',{name:'停用网站'});
+        await disableConfirm.waitFor();
+        assert.equal(await enabled.isChecked(),true,'disabled state must wait for confirmation');
+        await disableConfirm.getByRole('button',{name:'取消'}).click();
+        await disableConfirm.waitFor({state:'hidden'});
+        assert.equal(await enabled.isChecked(),true,'cancel leaves the site enabled');
+        assert.deepEqual(nginxToggleActions,['enable']);
+        await enabled.click();
+        await disableConfirm.getByRole('button',{name:'确认操作'}).click();
+        await disableConfirm.waitFor({state:'hidden'});
+        assert.equal(await enabled.isChecked(),false,'confirmed disable unchecks the box');
+        assert.deepEqual(nginxToggleActions,['enable','disable']);
         await manager.getByRole('button',{name:'检查 Nginx 配置'}).click();
         await manager.getByText('配置检查通过',{exact:true}).waitFor();
         await manager.getByRole('button',{name:'删除 fixture-site'}).click();

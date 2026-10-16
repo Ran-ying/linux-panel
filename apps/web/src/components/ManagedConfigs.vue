@@ -52,6 +52,7 @@ function openEdit(site){
 function closeEditor(){if(busy.value)return;modal.value?.close();draft.value=null;error.value='';}
 function closeConfirm(){if(busy.value)return;confirmModal.value?.close();pending.value=null;error.value='';}
 function ask(site,operation){
+  if(busy.value||!site.editable)return;
   error.value='';pending.value={site,operation};
   confirmModal.value?.showModal();
 }
@@ -113,16 +114,24 @@ function check(){
         <tbody>
           <tr v-for="site in listing.sites" :key="site.file">
             <td><strong>{{ site.name }}</strong><small class="muted config-location">{{ site.location }}</small></td>
-            <td>{{ site.enabled }}</td>
+            <td>
+              <input type="checkbox" class="config-status-checkbox"
+                :checked="site.enabled==='启用链接'||site.enabled==='启用目录'"
+                :indeterminate="site.enabled==='配置候选'"
+                :disabled="busy||!site.editable"
+                :aria-label="'启用状态：'+site.name"
+                :title="site.editable
+                  ? '勾选启用，取消勾选停用；需要二次确认'
+                  : site.enabled==='配置候选'
+                    ? '此配置的生效状态取决于 nginx.conf，不能在此启停'
+                    : '此配置不能在此启停'"
+                @click.prevent="ask(site,site.enabled==='启用链接'?'disable':'enable')" />
+            </td>
             <td>{{ site.serverNames||'—' }}</td>
             <td>{{ site.listens||'—' }}</td>
             <td>
               <div v-if="site.editable" class="config-actions">
                 <button type="button" :disabled="busy" :aria-label="'编辑 '+site.name" @click="openEdit(site)">编辑</button>
-                <button type="button" :disabled="busy" :aria-label="(site.enabled==='启用链接'?'停用 ':'启用 ')+site.name"
-                  @click="ask(site,site.enabled==='启用链接'?'disable':'enable')">
-                  {{ site.enabled==='启用链接'?'停用':'启用' }}
-                </button>
                 <button type="button" :disabled="busy" :aria-label="'删除 '+site.name" @click="ask(site,'remove')">删除</button>
               </div>
               <span v-else class="muted small">只读</span>
@@ -136,7 +145,7 @@ function check(){
       <summary>读取提示（{{ listing.warnings.length }}）</summary>
       <p v-for="(warning,i) in listing.warnings" :key="i" class="muted small">{{ warning }}</p>
     </details>
-    <p class="muted small">仅 sites-available 常规文件支持管理。启用/停用通过 sites-enabled 链接进行；conf.d 为只读候选，实际生效由 nginx.conf 决定。写入后进行语法检查，已启用的站点变更会尝试重载，失败则恢复文件。</p>
+    <p class="muted small">状态复选框：勾选为启用，未勾选为停用；切换前需要确认。仅 sites-available 常规文件支持管理。启用/停用通过 sites-enabled 链接进行；其它配置的复选框为只读（conf.d 的生效状态由 nginx.conf 决定）。写入后进行语法检查，已启用的站点变更会尝试重载，失败则恢复文件。</p>
 
     <dialog ref="modal" class="config-dialog" aria-labelledby="config-form-heading" @close="draft=null">
       <form v-if="draft" class="config-form" @submit.prevent="save">
@@ -182,6 +191,9 @@ function check(){
 .config-table th,.config-table td{vertical-align:top}
 .config-actions{gap:.3rem}
 .config-actions button{white-space:nowrap}
+.config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:.2rem .1rem;
+  vertical-align:middle;cursor:pointer;accent-color:var(--accent,#538ad7)}
+.config-status-checkbox:disabled{cursor:not-allowed;opacity:.65}
 .config-location{display:block;overflow-wrap:anywhere}
 .config-check{padding:.7rem 0}
 .config-check pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:18rem;overflow:auto}
