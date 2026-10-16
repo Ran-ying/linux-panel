@@ -9,6 +9,7 @@
 ## 功能
 
 - 无默认密码的管理员账户、本地初始化、会话、CSRF、可选 TOTP 双因素认证（一次性恢复码）和审计事件。
+- [定时任务](docs/CRON.md)：独立 Cron 模块，Web 管理五字段计划与执行命令，支持创建/编辑/启停/删除；固定 root handler 仅写面板专属配置文件，运行身份仍为 linuxpanel，需管理员显式启用。
 - [文件管理](docs/FILES.md)：目录浏览、MB 大小、权限/所有者、UTF-8 编辑、新建、重命名、删除和拖拽上传，默认使用面板服务账户权限；可选[独立 root 执行层](docs/PRIVILEGED.md)管理系统文件并修改权限/属主。
 - 两个系统 Action：资源使用情况（system.resources，含 CPU/内存/磁盘）与基本信息（system.info）；另有 services.list（名称关键词、运行状态与子状态组合筛选）。旧拆分 Action 已移除。
 - 终端模块：一个 terminal.execute Action 支持 Web/MCP 带参数命令执行；下方真实 PTY 黑色终端支持目录保持与交互，仅普通服务账户。
