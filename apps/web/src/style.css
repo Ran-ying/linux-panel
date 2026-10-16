@@ -736,3 +736,30 @@ table{min-width:500px}
 .action-card.flat-action>.result{
   border:0;margin:0;padding:0;
 }
+
+/* Generic module-heading actions: render beside the heading; the action
+   component teleports into this slot when its data is available. */
+.module-content>.module-intro{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.module-header-actions:empty{display:none}
+.module-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
+.module-header-actions button{
+  box-sizing:border-box;height:32px;min-height:32px;flex:none;
+  padding:4px 8px;border:1px solid var(--button-border);border-radius:999px;
+  background:var(--button-bg);color:var(--button-text);
+  font-family:inherit;font-size:.85rem;font-weight:500;line-height:1.25;white-space:nowrap;cursor:pointer
+}
+.module-header-actions button.panel-control-primary{
+  background:var(--accent-bg);border-color:var(--accent-bg);color:var(--button-primary-text)
+}
+.module-header-actions button:disabled{opacity:.5;cursor:not-allowed}
+/* Metadata remains a two-line text control, like date/time—not a pill. */
+:is(.file-browser,.scheduled-tasks,.managed-configs) button.file-permissions-button:not(.file-entry):not(.config-site-selector){
+  height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;
+  color:inherit;text-align:left;font:inherit;font-size:inherit;font-weight:inherit;
+  line-height:inherit;white-space:normal;cursor:pointer
+}
+.file-table .file-permissions,.file-table .file-owner{font-family:inherit}
+.file-table button.file-permissions-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+@media(max-width:730px){
+  .module-header-actions{margin-left:0}
+}

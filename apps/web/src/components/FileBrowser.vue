@@ -72,7 +72,11 @@ function uploadFiles(files){
     return '上传完成';
   });
 }
-function beginCreate(type){operation.value={kind:'create',type};entryName.value='';}
+function beginCreate(type){
+  if(busy.value||!canWrite.value)return;
+  operation.value={kind:'create',type};entryName.value='';error.value='';
+  nextTick(()=>actionDialog.value?.showModal());
+}
 function closeDialog(){
   actionDialog.value?.close();
   operation.value=null;
@@ -123,7 +127,7 @@ function submitEntry(){return task(async()=>{
     if(editor.value && (editor.value.path===oldPath || editor.value.path.startsWith(oldPath+'/')))
       editor.value.path=newPath+editor.value.path.slice(oldPath.length);
   }
-  if(current.kind==='rename')closeDialog();else operation.value=null;
+  closeDialog();
   await list(listing.value.path);return current.kind==='create'?'已新建':'已重命名';
 });}
 function confirmDelete(){return task(async()=>{
@@ -150,7 +154,7 @@ function dateParts(value){
       <input v-model="address" aria-label="目录路径" :disabled="busy" />
       <button type="submit" class="panel-control-primary" :disabled="busy">打开目录</button>
     </form>
-    <div class="file-toolbar panel-control-capsule">
+    <div class="file-toolbar">
       <button type="button" class="panel-control-primary" :disabled="busy || !canWrite" @click="uploadInput.click()">上传文件</button>
       <input ref="uploadInput" class="file-upload-input" type="file" multiple aria-label="上传文件" :disabled="busy || !canWrite" @change="upload" />
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('file')">新建文件</button>
@@ -158,15 +162,21 @@ function dateParts(value){
     </div>
     <p v-if="!canWrite" class="notice file-access-notice" role="status">{{ listing.writeAccess==='readonly'?'当前目录所在文件系统只读。':'面板服务账户没有当前目录的写入权限。' }}请打开可写目录后新建或上传文件。</p>
     <div v-if="dragging" class="file-drop-hint">松开以上传到当前目录</div>
-    <form v-if="operation?.kind==='create'" class="file-entry-form" @submit.prevent="submitEntry">
-      <label>{{ operation.type==='file'?'新建文件':'新建文件夹' }}
-        <input v-model="entryName" aria-label="名称" required :disabled="busy" /></label>
-      <button type="submit" :disabled="busy">确定</button>
-      <button type="button" :disabled="busy" @click="operation=null">取消</button>
-    </form>
-    <dialog v-if="operation && operation.kind!=='create'" ref="actionDialog" class="file-action-dialog"
+    <dialog v-if="operation" ref="actionDialog" class="file-action-dialog"
       aria-labelledby="file-dialog-title" @close="operation=null">
-      <form v-if="operation.kind==='permissions'" class="file-dialog-body" @submit.prevent="savePermissions">
+      <form v-if="operation.kind==='create'" class="file-dialog-body" @submit.prevent="submitEntry">
+        <h3 id="file-dialog-title">{{ operation.type==='file'?'新建文件':'新建文件夹' }}</h3>
+        <label>名称
+          <input v-model="entryName" aria-label="名称" required maxlength="255"
+            :disabled="busy" spellcheck="false" autofocus />
+        </label>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <div class="file-dialog-actions">
+          <button type="button" :disabled="busy" @click="closeDialog">取消</button>
+          <button type="submit" class="file-primary" :disabled="busy">确定</button>
+        </div>
+      </form>
+      <form v-else-if="operation.kind==='permissions'" class="file-dialog-body" @submit.prevent="savePermissions">
         <h3 id="file-dialog-title">修改权限与所有者</h3>
         <p class="file-dialog-target">{{ operation.entry.name }}</p>
         <label>权限（八进制）
@@ -219,7 +229,7 @@ function dateParts(value){
         </div>
       </div>
     </dialog>
-    <p v-if="error && (!operation || operation.kind==='create')" class="error" role="alert">{{ error }}</p>
+    <p v-if="error && !operation" class="error" role="alert">{{ error }}</p>
     <div v-if="message" class="file-toast" role="status">{{ message }}</div>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
     <div class="table-wrap">

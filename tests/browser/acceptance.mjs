@@ -175,14 +175,19 @@ try {
         const moduleRoot=page.locator(name.trim()==='文件管理'?'.file-browser':
           name.trim().includes('定时任务')?'.scheduled-tasks':'.managed-configs');
         await moduleRoot.waitFor();
+        const standalone=['文件管理','Nginx 网站'].includes(name.trim());
         const group=moduleRoot.locator('.panel-control-capsule').first();
-        const primary=moduleRoot.locator('.panel-control-primary').first();
-        const neutral=group.locator('button:not(.panel-control-primary)').first();
-        await group.waitFor();await neutral.waitFor();
+        const controls=name.trim()==='Nginx 网站'
+          ?page.locator('.module-header-actions'):moduleRoot;
+        const primary=controls.locator('.panel-control-primary').first();
+        const neutral=standalone?controls.locator('button:not(.panel-control-primary)').first()
+          :group.locator('button:not(.panel-control-primary)').first();
+        if(!standalone)await group.waitFor();
+        await neutral.waitFor();
         const hasPrimary=await primary.count()>0;
         if(hasPrimary)await primary.waitFor();
         const actualPrimary=hasPrimary?await appearance(primary):null,actualNeutral=await appearance(neutral),
-          actualGroup=await appearance(group);
+          actualGroup=standalone?null:await appearance(group);
         const shared=['height','borderRadius','fontSize','fontWeight','fontFamily','paddingTop','paddingLeft','lineHeight'];
         for(const key of shared){
           if(hasPrimary)assert.equal(actualPrimary[key],referenceControls.primary[key],
@@ -194,11 +199,17 @@ try {
           assert.equal(actualPrimary[key],referenceControls.primary[key],
             name+': primary '+key+' must match system overview refresh');
         }
-        for(const key of ['borderRadius','paddingTop','paddingLeft','background','borderColor','gap']){
-          assert.equal(actualGroup[key],referenceControls.capsule[key],
-            name+': grouped capsule '+key+' must match system overview');
+        if(standalone){
+          assert.equal(await controls.locator('.panel-control-capsule').count(),0,
+            name+': unrelated action commands must not look like selectable segmented controls');
+        }else{
+          for(const key of ['borderRadius','paddingTop','paddingLeft','background','borderColor','gap']){
+            assert.equal(actualGroup[key],referenceControls.capsule[key],
+              name+': grouped capsule '+key+' must match system overview');
+          }
         }
-        const buttons=await moduleRoot.locator(
+        const commandRoot=name.trim()==='Nginx 网站'?controls:moduleRoot;
+        const buttons=await commandRoot.locator(
           'button:not(.file-entry):not(.config-site-selector):not(.file-permissions-button)'
         ).evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length).map(n=>{
           const style=getComputedStyle(n),rect=n.getBoundingClientRect();
@@ -292,7 +303,28 @@ try {
           'old multi-column layout and sites-available indicator must be removed');
         assert.ok(!((await manager.innerText()).includes('状态复选框：勾选为启用')),
           'the old instructional paragraph must be removed');
-        await manager.getByRole('button',{name:'新建网站'}).click();
+        const header=page.locator('.module-content > .module-intro');
+        const headerButtons=header.locator('.module-header-actions');
+        assert.deepEqual(await headerButtons.getByRole('button').allTextContents(),
+          ['新建网站','刷新数据','检查 Nginx 配置']);
+        const headerPositions=await header.evaluate(node=>{
+          const heading=node.querySelector('h2').getBoundingClientRect();
+          const actions=node.querySelector('.module-header-actions').getBoundingClientRect();
+          return {headingTop:heading.top,headingRight:heading.right,
+            actionsTop:actions.top,actionsLeft:actions.left,actionsWidth:actions.width};
+        });
+        if(width===1280){
+          assert.ok(Math.abs(headerPositions.headingTop-headerPositions.actionsTop)<16,
+            'Nginx actions must be in the same header row');
+          assert.ok(headerPositions.actionsLeft>headerPositions.headingRight,
+            'Nginx actions must align to the right of the module heading');
+        }
+        assert.equal(await manager.locator('.config-toolbar').count(),0,
+          'action buttons should live in module header, not inside website content');
+        assert.equal(await manager.locator('.config-list-panel').evaluate(
+          node=>getComputedStyle(node).borderTopWidth),'0px',
+          'website list is not surrounded by a framed card');
+        await headerButtons.getByRole('button',{name:'新建网站'}).click();
         const editor=page.getByRole('dialog',{name:'新建网站配置'});
         await editor.getByRole('textbox',{name:'配置文件名'}).fill('fixture-site');
         await editor.getByRole('textbox',{name:'Nginx 配置内容'})
@@ -301,6 +333,16 @@ try {
         const website=manager.getByRole('button',{name:'查看网站 fixture-site'});
         const enabled=manager.getByRole('checkbox',{name:'启用状态：fixture-site'});
         await enabled.waitFor();
+        const firstRow=manager.locator('.config-site-row').first();
+        const firstRowOrder=await firstRow.locator(':scope > input,:scope > button')
+          .evaluateAll(nodes=>nodes.map(node=>node.tagName));
+        assert.deepEqual(firstRowOrder,['INPUT','BUTTON'],'the checkbox must precede the website name');
+        const listWidth=await manager.locator('.config-list-panel').evaluate(
+          node=>node.getBoundingClientRect().width);
+        if(width===1280)assert.ok(listWidth<=280,
+          'the desktop website list column should be narrow');
+        else assert.ok(listWidth<=width,
+          'mobile list should fill available viewport instead of overflowing');
         assert.equal(await enabled.isChecked(),false,'new Nginx site defaults to unchecked');
         assert.equal(await manager.locator('.config-detail-panel').count(),0,
           'new sites are listed on the left without automatically showing details');
@@ -374,11 +416,11 @@ try {
         assert.equal(await enabled.isChecked(),false,'confirmed disable unchecks the box');
         assert.deepEqual(nginxToggleActions,['enable','disable']);
         assert.equal(await details.count(),1,'selected site details remain visible after an update');
-        await manager.getByRole('button',{name:'刷新数据'}).click();
+        await headerButtons.getByRole('button',{name:'刷新数据'}).click();
         await details.waitFor();
         assert.equal(await website.getAttribute('aria-pressed'),'true',
           'refresh should not lose the selected website');
-        await manager.getByRole('button',{name:'检查 Nginx 配置'}).click();
+        await headerButtons.getByRole('button',{name:'检查 Nginx 配置'}).click();
         await manager.getByText('配置检查通过',{exact:true}).waitFor();
         await details.getByRole('button',{name:'删除 fixture-site'}).click();
         await page.getByRole('dialog',{name:'删除网站配置'})
@@ -590,6 +632,8 @@ try {
         assert.deepEqual(items.filter(i=>i.tag==='BUTTON').map(i=>i.label),['上一级','打开目录']);
         assert.ok(items.every(i=>Math.abs(i.height-items[0].height)<1 && Math.abs(i.top-items[0].top)<1),'three equal-height controls stay on one row');
         assert.deepEqual(await browser.locator('.file-toolbar>button').allTextContents(),['上传文件','新建文件','新建文件夹']);
+        assert.equal(await browser.locator('.file-toolbar.panel-control-capsule').count(),0,
+          'file creation/upload are standalone commands, not a grouped segmented capsule');
         assert.equal(await browser.getByText('可将文件拖入此处上传',{exact:true}).count(),0);
         assert.equal(await browser.getByText('文件权限：root',{exact:true}).count(),0);
         const toolbarStyle=await browser.locator('.file-path-bar>button,.file-toolbar>button').evaluateAll(nodes=>nodes.map(node=>{
@@ -625,6 +669,16 @@ try {
         await browser.getByText('空目录',{exact:true}).waitFor();
         await browser.getByRole('button',{name:'上一级',exact:true}).click();
         await browser.getByRole('button',{name:'note.txt',exact:true}).waitFor();
+        const textMetadata=await browser.getByRole('button',{name:'修改权限和属主 note.txt',exact:true})
+          .evaluate(node=>{const css=getComputedStyle(node),time=getComputedStyle(
+            node.closest('tr').querySelector('.file-date'));
+            return {border:css.borderTopWidth,background:css.backgroundColor,
+              timeBackground:time.backgroundColor,round:css.borderTopLeftRadius};
+          });
+        assert.equal(textMetadata.border,'0px','permissions display must not have a button border');
+        assert.equal(textMetadata.background,textMetadata.timeBackground,
+          'permissions should use the same transparent text appearance as modified time');
+        assert.equal(textMetadata.round,'0px','permissions should not be a pill');
         await browser.getByRole('button',{name:'修改权限和属主 note.txt',exact:true}).click();
         const permissions=browser.getByRole('dialog',{name:'修改权限与所有者'});
         await permissions.waitFor();
@@ -662,8 +716,16 @@ try {
         assert.ok(metadata.every(row=>/^(≥ )?[\d,]+\.\d{2} MB$/.test(row.size.trim())),'MB values have exactly two decimals');
         assert.ok(metadata.every(row=>/^\d{4}-\d{2}-\d{2}$/.test(row.date) && /^\d{2}:\d{2}:\d{2}$/.test(row.time) && row.timeTop>row.dateTop),'modified dates and times occupy separate lines');
         await browser.getByRole('button',{name:'新建文件',exact:true}).click();
-        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('created-'+width+'.txt');
-        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        const createFileDialog=browser.getByRole('dialog',{name:'新建文件',exact:true});
+        await createFileDialog.waitFor();
+        assert.equal(await browser.locator('.file-entry-form').count(),0,
+          'new file input must not appear inline under the toolbar');
+        await createFileDialog.getByRole('button',{name:'取消'}).click();
+        await createFileDialog.waitFor({state:'detached'});
+        await assert.rejects(readFile(join(fileFixture,'cancelled-'+width+'.txt')),{code:'ENOENT'});
+        await browser.getByRole('button',{name:'新建文件',exact:true}).click();
+        await createFileDialog.getByRole('textbox',{name:'名称',exact:true}).fill('created-'+width+'.txt');
+        await createFileDialog.getByRole('button',{name:'确定',exact:true}).click();
         await browser.getByText('已新建',{exact:true}).waitFor();
         assert.equal(await readFile(join(fileFixture,'created-'+width+'.txt'),'utf8'),'');
         await browser.getByRole('button',{name:'重命名 created-'+width+'.txt',exact:true}).click();
@@ -678,8 +740,10 @@ try {
         await browser.getByText('已删除',{exact:true}).waitFor();
         await assert.rejects(readFile(join(fileFixture,'renamed-'+width+'.txt')),{code:'ENOENT'});
         await browser.getByRole('button',{name:'新建文件夹',exact:true}).click();
-        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('new-dir-'+width);
-        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        const createDirDialog=browser.getByRole('dialog',{name:'新建文件夹',exact:true});
+        await createDirDialog.waitFor();
+        await createDirDialog.getByRole('textbox',{name:'名称',exact:true}).fill('new-dir-'+width);
+        await createDirDialog.getByRole('button',{name:'确定',exact:true}).click();
         await browser.getByText('已新建',{exact:true}).waitFor();
         // Drop uses the browser File/DataTransfer path, not the file picker.
         await browser.evaluate((element,width)=>{
@@ -690,8 +754,8 @@ try {
         assert.equal(await readFile(join(fileFixture,'drop-'+width+'.txt'),'utf8'),'drop-fixture');
         await browser.getByRole('button',{name:'new-dir-'+width+'/',exact:true}).click();
         await browser.getByRole('button',{name:'新建文件',exact:true}).click();
-        await browser.getByRole('textbox',{name:'名称',exact:true}).fill('child.txt');
-        await browser.getByRole('button',{name:'确定',exact:true}).click();
+        await browser.getByRole('dialog',{name:'新建文件',exact:true}).getByRole('textbox',{name:'名称',exact:true}).fill('child.txt');
+        await browser.getByRole('dialog',{name:'新建文件',exact:true}).getByRole('button',{name:'确定',exact:true}).click();
         await browser.getByText('已新建',{exact:true}).waitFor();
         await browser.getByRole('button',{name:'上一级',exact:true}).click();
         await browser.getByRole('button',{name:'重命名 new-dir-'+width,exact:true}).click();
