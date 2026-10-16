@@ -28,6 +28,9 @@ test('dedicated Cron file: create, edit, disable, delete, revision checks and sa
   const path=join(dir,'linux-panel'),operations=createCronOperations({path,requireRoot:false});
   const empty=await operations.list();
   assert.equal(empty.revision,blankHash);assert.deepEqual(empty.tasks,[]);
+  await assert.rejects(operations.save({revision:empty.revision,
+    task:task({name:'定'.repeat(80),command:'文'.repeat(500)})}),{statusCode:413});
+  assert.deepEqual((await operations.list()).tasks,[],'oversized Cron line must not write a file');
   const created=await operations.save({revision:empty.revision,task:task()});
   assert.match(created.id,/^[a-f0-9-]{36}$/);
   const content=await readFile(path,'utf8');
