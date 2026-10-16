@@ -267,8 +267,15 @@ try {
         await browser.getByRole('button',{name:'note.txt',exact:true}).click();
         const editor=browser.getByRole('textbox',{name:'文件内容',exact:true});
         await editor.fill('edited-file-fixture-'+width);
+        // A slow follow-up listing must finish before the completion notice:
+        // otherwise an immediate upload can be silently discarded by busy.
+        await page.route('**/api/actions/files.list/execute',async route=>{
+          await new Promise(resolve=>setTimeout(resolve,250));await route.continue();
+        });
         await browser.getByRole('button',{name:'保存文件',exact:true}).click();
         await browser.getByText('已保存',{exact:true}).waitFor();
+        assert.equal(await browser.getByRole('button',{name:'上传文件',exact:true}).isEnabled(),true);
+        await page.unroute('**/api/actions/files.list/execute');
         assert.equal(await readFile(join(fileFixture,'note.txt'),'utf8'),'edited-file-fixture-'+width);
         await browser.getByLabel('上传文件',{exact:true}).setInputFiles({
           name:'upload-'+width+'.txt',mimeType:'text/plain',buffer:Buffer.from('upload-fixture')});

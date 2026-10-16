@@ -28,6 +28,8 @@ files.write/upload/create/rename/delete 是明确批准的 user-files 写类型�
 
 面板在 files.list 的结果区加载通用 FileBrowser，operations 引用同模块已暴露的 read/write/upload/create/rename/delete Action；六个辅助 Action 声明 embedded，不单独占据卡片，但仍走同一 ActionEngine。Web presentation 校验所有引用。
 
+操作成功提示只在目录刷新完成、忙碌状态解除时发布，避免看到保存成功后紧接上传被忽略。
+
 路径框、上一级和加载更多负责导航，点击文件编辑；编辑器有未保存状态与放弃提示。新建与重命名使用面板内名称表单，行操作提供重命名/删除。支持文件选择和拖入当前目录上传，可一次上传多个文件，各文件仍限 8 MiB；前面已上传的文件不会因后续失败被回滚，界面会刷新列表并显示失败原因。不支持目录整体拖入上传。
 
 API 的 execute 路由允许最多 12 MiB JSON，以容纳 Base64 上传；其他路由保留原有请求限制，Action Schema 继续独立限制输入。反向代理也可能有自己的上传限制；如需 8 MiB 上传，代理应允许至少 12 MiB 请求，例如 Nginx client_max_body_size 12m。代理设置不会被面板擅自修改。
