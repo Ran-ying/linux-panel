@@ -151,13 +151,16 @@ function prepare({withPrivileged=false}={}){
 }
 record(){`);
  const script=join(base,'worker.sh'),log=join(base,'events.log');
+ // Fault injection lives ONLY in this throwaway copy of the immutable worker.
+ worker=swap(worker,'if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then',
+   'if [[ "${TEST_CUT_AFTER_PRIV:-0}" == 1 ]];then kill -KILL "$";fi\nif ! start_panel || ! systemctl is-active --quiet linux-panel.service;then');
  let sequence=0;
  writeFileSync(log,'');
  writeFileSync(script,worker,{mode:0o700});
  exec('bash',['-n',script]);
  return {base,root,state,status,script,log,old,target,meminfo,privRoot,
   cleanup(){rmSync(base,{recursive:true,force:true})},
-  run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false,partialJournal=false,partialResult=false,partialBackup=false}={}){
+  run({sha=target,build=false,health=false,healthEverywhere=false,rollback=false,lowDisk=false,partialJournal=false,partialResult=false,partialBackup=false,powerCut=false}={}){
    const id=(++sequence).toString(16).padStart(32,'0');
    writeFileSync(join(state,'update-trigger'),'id='+id+'\nsha='+sha+'\n');
    const process=spawnSync('bash',[script],{encoding:'utf8',timeout:20000,env:{
@@ -167,7 +170,7 @@ record(){`);
     TEST_FREE_KIB:lowDisk?'900000':'4000000',
     TEST_PARTIAL_JOURNAL:partialJournal?'1':'0',
     TEST_PARTIAL_RESULT:partialResult?'1':'0',
-    FAIL_SNAPSHOT_COPY:partialBackup?'1':'0'
+    FAIL_SNAPSHOT_COPY:partialBackup?'1':'0',TEST_CUT_AFTER_PRIV:powerCut?'1':'0'
    }});
    const result=existsSync(join(status,'result.json'))?
     JSON.parse(readFileSync(join(status,'result.json'),'utf8')):null;
@@ -376,5 +379,24 @@ test('versioned root package rolls back together with Web after health failure',
   assert.equal(out.result?.status,'rolled_back',JSON.stringify(out.process));
   assert.equal(readlinkSync(join(f.privRoot,'current')),'releases/'+f.old);
   assert.equal(out.head,f.old);
+ }finally{f.cleanup();}
+});
+
+test('SIGKILL immediately after privileged release pointer switch restores old root package and Web',()=>{
+ const f=prepare({withPrivileged:true});
+ try{
+  const crashed=f.run({powerCut:true});
+  assert.equal(crashed.process.signal,'SIGKILL');
+  assert.equal(readlinkSync(join(f.privRoot,'current')),'releases/'+f.target);
+  assert.equal(existsSync(join(f.base,'backup','active-transaction')),true);
+  const recovered=spawnSync('bash',[f.script,'--recover-only'],{
+    encoding:'utf8',timeout:20000,env:{...process.env,TEST_LOG:f.log,TEST_ROOT:f.root,
+      TEST_TARGET:f.target,FAIL_HEALTH:'0',TEST_CUT_AFTER_PRIV:'0'}
+  });
+  assert.equal(recovered.status,0,JSON.stringify(recovered));
+  assert.equal(readlinkSync(join(f.privRoot,'current')),'releases/'+f.old);
+  assert.equal(exec('git',['-C',f.root,'rev-parse','HEAD']),f.old);
+  assert.equal(JSON.parse(readFileSync(join(f.status,'result.json'),'utf8')).status,'rolled_back');
+  assert.equal(existsSync(join(f.base,'backup','active-transaction')),false);
  }finally{f.cleanup();}
 });
