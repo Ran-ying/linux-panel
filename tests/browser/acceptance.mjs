@@ -208,7 +208,8 @@ try {
               name+': grouped capsule '+key+' must match system overview');
           }
         }
-        const buttons=await moduleRoot.locator(
+        const commandRoot=name.trim()==='Nginx 网站'?controls:moduleRoot;
+        const buttons=await commandRoot.locator(
           'button:not(.file-entry):not(.config-site-selector):not(.file-permissions-button)'
         ).evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length).map(n=>{
           const style=getComputedStyle(n),rect=n.getBoundingClientRect();
