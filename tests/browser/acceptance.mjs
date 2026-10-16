@@ -833,7 +833,7 @@ try {
         const rects=nodes.map(n=>n.getBoundingClientRect());
         return {centerError:innerWidth>730?Math.abs(box.right+side.left-innerWidth):Math.abs(box.left+box.right-innerWidth),width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
           radius:getComputedStyle(sidebar).borderTopLeftRadius,
-          cards:nodes.map(n=>{const s=getComputedStyle(n);return {radius:s.borderTopLeftRadius,flat:n.classList.contains('flat-action'),
+          cards:nodes.map(n=>{const s=getComputedStyle(n);return {radius:s.borderTopLeftRadius,flat:n.classList.contains('flat-action')||n.classList.contains('unboxed-manager'),
             borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};}),
           gaps:rects.slice(1).map((r,i)=>r.top-rects[i].bottom)};
       });
