@@ -62,4 +62,4 @@ terminal.execute 是显式 user-shell 写能力，仅普通服务身份，拒绝
 
 文件模块使用原生 fs 与经结构化参数调用的固定 handlers；普通路径拒绝 UID 0，root 路径只能在独立 root executor 中工作。九个文件 Actions 共享输入输出契约；七个写 Action 只在 Web 入口经管理员/CSRF/Origin 执行，MCP 文件工具 list/read 始终走普通账户。文本保留 revision 检查、大小限制、权限/属主；上传不覆盖同名；目录删除确认、根目录禁止删除/重命名仍有效。chmod 不跟随链接，chown 修改链接自身。不记录文件内容或路径。
 
-root 服务以 root-owned 固定代码、独立 Ajv 副本和注册表执行，不允许任意 root Shell，不与更新 Broker 混用。Unix socket 目录 root:linuxpanel 0750、socket 0660；启用即信任整个 linuxpanel UID/组，不隔离同 UID 的 terminal.execute、PTY 或自定义 Shell。Web-only 仅约束 Web/MCP Action 入口，无法阻止已授权同身份终端直接调用 root 文件通道。全面系统文件编辑是一项广泛 root 管理能力，可能通过修改系统配置/代码间接获得代码执行；它不适合不可信终端用户或不可信模块。详见 [权限执行层](PRIVILEGED.md)。
+root 服务以 root-owned 固定代码、独立 Ajv 副本和注册表执行，不允许任意 root Shell，不与更新 Broker 混用。Unix socket 目录 root:linux-panel-privileged 0750、socket 0660；仅给 Web 服务配置这个专用 supplementary group，不复用 updater 的读取组。Web 的 terminal.execute、PTY 和自定义 Shell 继承该组，同 UID 不作为不可信隔离。Web-only 仅约束 Web/MCP Action 入口，无法阻止已授权同身份终端直接调用 root 文件通道。全面系统文件编辑是一项广泛 root 管理能力，可能通过修改系统配置/代码间接获得代码执行；它不适合不可信终端用户或不可信模块。详见 [权限执行层](PRIVILEGED.md)。

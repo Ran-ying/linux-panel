@@ -8,7 +8,7 @@ User=root
 Group=root
 RuntimeDirectory=linux-panel-privileged
 RuntimeDirectoryMode=0750
-ExecStartPre=/usr/bin/chgrp linuxpanel /run/linux-panel-privileged
+ExecStartPre=/usr/bin/chgrp linux-panel-privileged /run/linux-panel-privileged
 Environment=NODE_OPTIONS=
 Environment=NODE_PATH=
 ExecStart=/opt/node24/bin/node /usr/local/lib/linux-panel-privileged/server.js

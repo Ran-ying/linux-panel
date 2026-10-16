@@ -45,8 +45,8 @@ export async function startPrivilegedServer({socketPath,groupId,handlers=createP
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   if(process.getuid?.()!==0)throw Error('Privileged executor requires root');
-  const groupId=Number(process.env.PANEL_WEB_GID);
-  if(!Number.isSafeInteger(groupId)||groupId<0)throw Error('PANEL_WEB_GID is required');
+  const groupId=Number(process.env.PANEL_CLIENT_GID);
+  if(!Number.isSafeInteger(groupId)||groupId<0)throw Error('PANEL_CLIENT_GID is required');
   const server=await startPrivilegedServer({socketPath:'/run/linux-panel-privileged/executor.sock',groupId,
     audit:entry=>console.log(JSON.stringify(entry))});
   process.on('SIGTERM',()=>server.close(()=>process.exit(0)));

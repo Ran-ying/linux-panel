@@ -71,9 +71,10 @@ chmod -R go-rwx "$LP_STAGE"
 systemctl stop linux-panel-privileged.service 2>/dev/null || true
 rm -rf "$LP_DEST"
 mv "$LP_STAGE" "$LP_DEST"
-LP_GID=$(id -g linuxpanel)
+if ! getent group linux-panel-privileged >/dev/null;then groupadd --system linux-panel-privileged;fi
+LP_GID=$(getent group linux-panel-privileged | cut -d: -f3)
 sed -e "s|ExecStart=/opt/node24/bin/node |ExecStart=$LP_NODE |" \
-  -e "/Environment=NODE_PATH=/a Environment=PANEL_WEB_GID=$LP_GID" \
+  -e "/Environment=NODE_PATH=/a Environment=PANEL_CLIENT_GID=$LP_GID" \
   "$LP_ROOT/deployment/systemd/linux-panel-privileged.service" > "$LP_UNIT"
 chmod 0644 "$LP_UNIT"
 install -d -o root -g root -m 0755 /etc/systemd/system/linux-panel.service.d
@@ -84,6 +85,7 @@ After=linux-panel-privileged.service
 
 [Service]
 Environment=PANEL_PRIVILEGED_SOCKET=/run/linux-panel-privileged/executor.sock
+SupplementaryGroups=linux-panel-privileged
 EOF
 chmod 0644 "$LP_DROPIN"
 systemctl daemon-reload

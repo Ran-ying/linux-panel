@@ -26,7 +26,7 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --disable
 
 ## 明确的信任边界
 
-安装器启用的是整个 linuxpanel OS 身份的受控 root 文件能力。运行目录为 root:linuxpanel 0750，socket 为 root:linuxpanel 0660。该组以外的普通用户不能连接；同 UID 的 terminal.execute、PTY 和自定义 Shell collectors **可以直接连接**，并可构造固定 root 文件 Action 请求。
+安装器给 Web 服务增加专用 linux-panel-privileged supplementary group。运行目录 root:linux-panel-privileged 0750，socket 同组 0660；不复用 updater 构建时使用的 linuxpanel 读取组，也不把 updater 加入特权组。该组以外的普通用户不能连接；Web 子进程 terminal.execute、PTY 和自定义 Shell collectors 继承该组，**可以直接连接**并构造固定 root 文件 Action 请求。同 UID 不被当作不可信用户隔离。单独通过 runuser 验收时需显式加 -g linuxpanel -G linux-panel-privileged。
 
 因此 Web-only 是 HTTP/Action 适配器的授权边界，不是对同 UID 终端的操作系统隔离。可信 MCP 的 terminal.execute 也属于这项信任；直接 MCP 文件工具 list/read 自身仍以普通账户执行。若将来要给不可信终端或多用户使用，必须先隔离执行身份，不能依靠 JSON 的 channel 字段提供强隔离。
 
