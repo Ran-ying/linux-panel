@@ -5,6 +5,7 @@ const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
 const busy=ref(false),error=ref(''),message=ref(''),uploadInput=ref(null);
 const dragging=ref(false),operation=ref(null),entryName=ref('');
+const permissionForm=ref({mode:'',owner:'',group:''});
 const canWrite=computed(()=>listing.value.writeAccess==='allowed');
 const controller=new AbortController();
 watch(()=>props.initialData,data=>{listing.value=data;address.value=data.path;});
@@ -68,6 +69,25 @@ function uploadFiles(files){
 }
 function beginCreate(type){operation.value={kind:'create',type};entryName.value='';}
 function beginRename(entry){operation.value={kind:'rename',entry};entryName.value=entry.name;}
+function editPermissions(entry){
+  operation.value={kind:'permissions',entry};
+  const [owner,group]=entry.owner.split(':');
+  permissionForm.value={mode:entry.permissions,owner,group};
+}
+function savePermissions(){return task(async()=>{
+  const entry=operation.value.entry,path=join(entry.name),values=permissionForm.value;
+  const [owner,group]=entry.owner.split(':');
+  try{
+    const input={path};
+    if(values.owner!==owner)input.owner=values.owner.trim();
+    if(values.group!==group)input.group=values.group.trim();
+    if(Object.keys(input).length>1)await request(props.operations.chown,input);
+    // chown may clear special mode bits; set the requested mode afterwards.
+    if(!entry.symlink)await request(props.operations.chmod,{path,mode:values.mode});
+    operation.value=null;
+  }finally{await list(listing.value.path);}
+  return '权限与属主已保存';
+});}
 function submitEntry(){return task(async()=>{
   const name=entryName.value.trim();
   if(!name || name==='.' || name==='..' || name.includes('/') || name.includes('\0'))throw new Error('请输入有效名称，不能包含 /');
@@ -115,13 +135,25 @@ function dateParts(value){
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('directory')">新建文件夹</button>
       <span class="muted small">可将文件拖入此处上传</span>
     </div>
+    <p class="muted small file-access-mode">文件权限：{{ listing.accessMode==='root'?'root':'普通账户（未启用 root 执行层）' }}</p>
     <p v-if="!canWrite" class="notice file-access-notice" role="status">{{ listing.writeAccess==='readonly'?'当前目录所在文件系统只读。':'面板服务账户没有当前目录的写入权限。' }}请打开可写目录后新建或上传文件。</p>
     <div v-if="dragging" class="file-drop-hint">松开以上传到当前目录</div>
-    <form v-if="operation" class="file-entry-form" @submit.prevent="submitEntry">
+    <form v-if="operation && operation.kind!=='permissions'" class="file-entry-form" @submit.prevent="submitEntry">
       <label>{{ operation.kind==='rename'?'重命名':operation.type==='file'?'新建文件':'新建文件夹' }}
         <input v-model="entryName" aria-label="名称" required :disabled="busy" /></label>
       <button type="submit" :disabled="busy">确定</button>
       <button type="button" :disabled="busy" @click="operation=null">取消</button>
+    </form>
+    <form v-if="operation?.kind==='permissions'" class="file-permission-form" @submit.prevent="savePermissions">
+      <strong>{{ operation.entry.name }}</strong>
+      <label>权限（八进制）<input v-model="permissionForm.mode" aria-label="文件权限" pattern="[0-7]{3,4}" required :disabled="busy || operation.entry.symlink" /></label>
+      <label>用户 / UID<input v-model="permissionForm.owner" aria-label="文件用户" required maxlength="128" :disabled="busy" /></label>
+      <label>用户组 / GID<input v-model="permissionForm.group" aria-label="文件用户组" required maxlength="128" :disabled="busy" /></label>
+      <p v-if="operation.entry.symlink" class="muted small">符号链接只修改链接本身的属主；权限请进入目标后修改。</p>
+      <div class="file-editor-controls">
+        <button type="submit" :disabled="busy">保存权限</button>
+        <button type="button" :disabled="busy" @click="operation=null">取消</button>
+      </div>
     </form>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="message" class="notice success-notice" role="status">{{ message }}</p>
@@ -134,7 +166,10 @@ function dateParts(value){
             <td><button type="button" class="file-entry" :disabled="busy || entry.type==='other'" @click="open(entry)">{{ entry.name }}{{ entry.type==='directory'?'/':'' }}</button></td>
             <td>{{ entry.type==='directory'?'目录':entry.type==='file'?'文件':'其他' }}{{ entry.symlink?' · 链接':'' }}</td>
             <td :title="entry.sizeComplete?'逻辑文件大小，1 MB = 1,000,000 B':'未完整统计；可能无权限、超过扫描限额或为目录链接'">{{ megabytes(entry) }}</td>
-            <td><span class="file-permissions">{{ entry.permissions }}</span><span class="file-owner">{{ entry.owner }}</span></td>
+            <td><button type="button" class="file-permissions-button" :disabled="busy || entry.permissions==='—'"
+              :aria-label="'修改权限和属主 '+entry.name" @click="editPermissions(entry)">
+              <span class="file-permissions">{{ entry.permissions }}</span><span class="file-owner">{{ entry.owner }}</span>
+            </button></td>
             <td><time v-if="dateParts(entry.modifiedAt)" :datetime="entry.modifiedAt" class="file-modified">
               <span class="file-date">{{ dateParts(entry.modifiedAt).date }}</span>
               <span class="file-time">{{ dateParts(entry.modifiedAt).time }}</span>

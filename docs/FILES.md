@@ -1,6 +1,6 @@
 # 文件管理
 
-更新：2026-10-16。文件模块通过七个共享 Action 提供目录浏览、UTF-8 编辑、上传及文件管理，面板负责 GUI，模块没有 CSS/Vue。
+更新：2026-10-16。文件模块通过九个共享 Action 提供目录浏览、UTF-8 编辑、上传及文件管理，面板负责 GUI，模块没有 CSS/Vue。
 
 | Action | 输入 | 结果 / 行为 |
 | --- | --- | --- |
@@ -11,6 +11,8 @@
 | files.create | path、type（file / directory） | 新建空文件或文件夹，同名返回 409 |
 | files.rename | path、newPath | 同一目录内重命名，先检查目标名称冲突 |
 | files.delete | path | 删除文件、链接或目录，非空目录递归删除 |
+| files.chmod | path、mode（三或四位八进制） | 修改权限，拒绝对符号链接 chmod |
+| files.chown | path、owner（用户名/UID）、group（组名/GID） | 至少一项，修改属主/组；符号链接修改自身 |
 
 ## 目录大小与元数据
 
@@ -20,17 +22,17 @@
 
 ## 操作与权限
 
-files.list 返回 writeAccess: allowed / readonly / denied，依据当前服务身份和挂载视图检查目录的写入、搜索权限；真实写入仍以操作时的系统检查为准。GUI 在当前目录不可写时显示原因，禁用新建、上传、重命名和删除；拖入上传也检查该状态。
+files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied，按实际执行身份检查目录权限。root 执行层未配置时走普通账户（受默认 ProtectSystem/ProtectHome 限制）；显式启用后 Web 的九个文件 Actions 通过固定 root executor 访问系统目录，包括 /etc、/root。已配置但执行服务离线时返回 503，不悄悄改为普通执行。GUI 显示实际权限模式；权限/所有者列可点击，编辑 mode、用户名/UID、组名/GID。chown 先执行，随后 chmod，保存失败时刷新真实列表；两个变更并非原子事务。
 
-默认安装的 systemd 服务使用普通账户、ProtectSystem=strict、ProtectHome=true，ReadWritePaths 仅放行 /var/lib/linux-panel。大多数系统目录在服务视图内只读；/root、/home 等可能被隔离，普通账户还受 UNIX 文件权限约束。默认可以在 /var/lib/linux-panel 下新建/上传。开放其他目录需要管理员另行配置该目录的账户权限和 systemd 可写路径；本轮未改变主机授权或提升服务身份。
+七个写 Action 只在认证 Web 管道开放；MCP 文件工具 list/read 始终使用普通服务身份。启用 root socket 即信任整个 linuxpanel UID：同 UID 终端、PTY、自定义 Shell 可直接调用受控 root 文件操作。全面系统文件编辑可间接修改执行代码，不是对不可信终端的沙箱。完整安装与边界见 [权限执行层](PRIVILEGED.md)。
 
-所有路径为绝对路径。浏览与文本读取遵循服务账户文件权限；符号链接按实际目标读取，编辑保存到规范目标。非普通文件和二进制内容不能用文本编辑器打开。文件操作拒绝 UID 0，不使用 Shell、sudo 或 root Broker，也不改变服务的现有 systemd 沙箱。
+所有路径为绝对路径；文本读取/保存跟随符号链接到规范目标。二进制或非普通文件不能用文本编辑器打开。文本 revision 冲突检查、同目录临时替换、保留 mode/uid/gid、上传/新建排他创建、禁止删除或重命名 / 仍有效。删除和重命名处理链接本身；递归删除不跟随内部链接，非空目录 GUI 确认且不可撤销。重命名的预先冲突检查并非跨进程原子事务。新建模式仍受执行进程 umask 影响。chown 可清除特殊 mode 位，单独调用该 Action 时遵循系统行为。
 
-files.write/upload/create/rename/delete 是明确批准的 user-files 写类型，仅 Web Cookie + CSRF/Origin 鉴权可调用；MCP 仅暴露 list/read。保存使用同目录临时文件替换，保留权限和属主；目录无写权限或无法保留属主时会失败。上传和新建使用排他创建，不覆盖已有文件。新建模式还受服务进程 umask 影响。重命名只允许同目录，先检查名称冲突；该检查与 rename 之间不是跨进程原子事务。删除、重命名操作链接本身；删除目录不跟随内部链接，根目录禁止删除/重命名。删除非空目录无法撤销，GUI 显示路径并要求确认。文件内容与文件路径不写入审计，审计仅记 Action ID。
+普通实现拒绝 UID 0，只有独立 root handler 的显式工厂模式允许 root；所有调用走相同 fs 实现与 Schema。Web 审计/根端审计只记录 Action 等元数据，不记录路径或文件内容。没有任意 root Shell Action，更新 Broker 不被用作文件执行器。
 
 ## 面板展示契约
 
-主展示声明 chrome:minimal，隐藏通用说明/命令胶囊和操作结果、刷新、可视化/原始数据控件，保留标题及文件浏览界面。面板在 files.list 的结果区加载通用 FileBrowser，operations 引用同模块已暴露的 read/write/upload/create/rename/delete Action；六个辅助 Action 声明 embedded，不单独占据卡片，但仍走同一 ActionEngine。Web presentation 校验所有引用。
+主展示声明 chrome:minimal，隐藏通用说明/命令胶囊和操作结果、刷新、可视化/原始数据控件，保留标题及文件浏览界面。面板在 files.list 的结果区加载通用 FileBrowser，operations 引用同模块已暴露的 read/write/upload/create/rename/delete/chmod/chown Action；八个辅助 Action 声明 embedded，不单独占据卡片，但仍走同一 ActionEngine。Web presentation 校验所有引用。
 
 操作成功提示只在目录刷新完成、忙碌状态解除时发布，避免看到保存成功后紧接上传被忽略。
 

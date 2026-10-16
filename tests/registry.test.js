@@ -39,7 +39,7 @@ test('bundled modules load after dependencies and expose expected actions', asyn
   assert.deepEqual([...ids].sort(), ['files', 'services', 'system', 'terminal']);
   assert.deepEqual(ids,['system','services','terminal','files']);
   assert.deepEqual(registry.list('web').map(a => a.id).sort(),
-    ['files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','services.list','system.info','system.resources','terminal.execute']);
+    ['files.chmod','files.chown','files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','services.list','system.info','system.resources','terminal.execute']);
   for(const id of ['storage.usage','system.cpu','system.memory'])assert.equal(registry.get(id),undefined);
 });
 

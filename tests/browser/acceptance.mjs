@@ -304,6 +304,17 @@ try {
         await browser.getByText('空目录',{exact:true}).waitFor();
         await browser.getByRole('button',{name:'上一级',exact:true}).click();
         await browser.getByRole('button',{name:'note.txt',exact:true}).waitFor();
+        await browser.getByRole('button',{name:'修改权限和属主 note.txt',exact:true}).click();
+        await browser.getByRole('textbox',{name:'文件权限',exact:true}).fill('0600');
+        await browser.getByRole('button',{name:'保存权限',exact:true}).click();
+        await browser.getByText('权限与属主已保存',{exact:true}).waitFor();
+        assert.equal((await (await import('node:fs/promises')).stat(join(fileFixture,'note.txt'))).mode & 0o777,0o600);
+        await browser.getByRole('button',{name:'修改权限和属主 note.txt',exact:true}).click();
+        await browser.getByRole('textbox',{name:'文件权限',exact:true}).fill('0644');
+        await browser.getByRole('textbox',{name:'文件用户',exact:true}).fill(String(process.getuid()));
+        await browser.getByRole('textbox',{name:'文件用户组',exact:true}).fill(String(process.getgid()));
+        await browser.getByRole('button',{name:'保存权限',exact:true}).click();
+        await browser.getByText('权限与属主已保存',{exact:true}).waitFor();
         const fileHeaders=await browser.locator('.file-table th').allTextContents();
         assert.ok(fileHeaders.includes('大小（MB）'));
         assert.ok(fileHeaders.includes('权限 / 所有者'));

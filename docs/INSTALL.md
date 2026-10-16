@@ -385,3 +385,13 @@ CI 使用 `--admin-password-stdin` 从标准输入提供**一行 12–256 UTF-8 
 ### 中断与移除
 
 先区分未初始化的部分安装和已经有账号的实例；`--resume` 仅接受前者且不能覆盖状态、配置或服务。失败后保留输出，按现有诊断和 UPGRADING.md 排查，勿删除私有状态来绕过检查。移除前备份 `/var/lib/linux-panel` 和 `/etc/linux-panel`，并实际验证备份可恢复；有 Broker 的实例必须先按 UPDATER.md 禁用 watcher、检查无事务并单独移除其 root 单元。应用服务由管理员停止/禁用后再归档配置、代码和状态；本向导不自动删除数据、不改代理或其他服务。
+
+## 可选：启用系统级文件管理
+
+先将已安装面板更新到包含 Issue #111 实现的 main，再在服务器以 root/sudo 执行一次：
+
+```bash
+sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
+```
+
+它安装 root-owned 固定 handler 包与独立依赖，启用 linux-panel-privileged.service、配置 Web socket 并重启面板；Web 继续以 linuxpanel 运行，原更新 Broker不变。若 Node 位于其他受 root 保护的路径，加 --node-bin /absolute/node。启用即信任同一 linuxpanel UID 的终端/PTY/采集器调用受控 root 文件操作，不应当作不可信用户隔离。完整协议、关闭与验收见 [权限执行层](PRIVILEGED.md)。

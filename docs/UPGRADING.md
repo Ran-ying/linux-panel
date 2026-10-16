@@ -1,3 +1,9 @@
+# 可选 root 执行层与文件权限编辑（Issue #111，2026-10-16）
+
+新增独立 PrivilegedActionClient/Unix socket/root executor，以及 files.chmod/chown。普通 main 更新只部署客户端和 UI，不自动安装新 root 服务。要启用系统级文件管理，操作员在更新后执行一次 sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable。root handlers 与 Ajv 复制为 root-owned 固定包；以后新增/更新 root handler 也需重跑此安装命令，不动态加载 Web 可写源目录。
+
+文件列表新增 accessMode: root/user，writeAccess 按实际执行身份计算。Web opt-in root，未配置走普通身份，配置后通道离线返回 503；MCP 文件读取仍普通。重要：同 UID 终端/PTY/采集器属于已信任通道，能直接调用固定 root 文件操作。具体边界与关闭命令见 [权限执行层](PRIVILEGED.md)。下方普通文件模式历史说明仅描述 root 未启用时的行为。
+
 # 文件管理扩展与模块顺序（2026-10-16）
 
 模块导航首次升级自动建立“系统概览 → 服务浏览 → 终端 → 文件管理”顺序，保存在私有 state.moduleOrder；后续新增 ID 追加末尾，现有顺序和暂时移除模块的位置保留。不需要手工迁移状态或修改前端。

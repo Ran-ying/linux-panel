@@ -43,3 +43,7 @@ Token/Cookie/客户端 ID/私有主机数据和输出不入公开仓库或工件
 ## Action 参数
 
 普通工具现通过 SDK fromJsonSchema 使用 Action.inputSchema/outputSchema，工具调用转发实际参数到同一 ActionEngine；原空参数限制已修复。terminal.execute 示例与权限见 [TERMINAL.md](TERMINAL.md)，仅普通服务身份，无 root/sudo、无逐命令审批。未实现执行策略的其他 write 仍不暴露。
+
+## 可选 root 文件管理与 MCP
+
+新增 files.chmod/chown 仅 Web，直接 MCP 文件读取 list/read 始终走普通账户，清单没有新增写工具。Web root 文件调用需独立 root 服务及安装 opt-in。启用后同一 linuxpanel UID 的终端也被信任可调用受控 root 文件 socket，所以可信 MCP terminal.execute 可通过普通 Shell 调用这些固定文件操作；Web-only 不是 OS 隔离。详见 [权限执行层](PRIVILEGED.md)。

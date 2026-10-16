@@ -39,6 +39,8 @@ jobs:
         run: npm audit --omit=dev
       - name: Run unit and API integration tests
         run: npm test
+      - name: Disposable root executor acceptance
+        run: sudo env PANEL_ROOT_ACCEPTANCE=1 "$(command -v node)" --test tests/privileged-root.test.js
       - name: Check JavaScript syntax
         run: npm run check
       - name: Build production Vue frontend

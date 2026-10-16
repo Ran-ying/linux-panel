@@ -36,3 +36,7 @@ MCP 普通能力现通过 SDK fromJsonSchema 原样公布 Action.inputSchema/out
 [模块规范](MODULE-DEVELOPMENT.md) · [MCP](mcp.md) · [当前状态](PROJECT-STATUS.md)
 
 生产 HTML 为面板终端的动态样式提供每次页面独立的 CSP style nonce；脚本仍只允许 self，不使用 unsafe-inline。终端模块不提供任意样式注入接口。
+
+## 启用 root 文件通道后的同身份能力
+
+终端进程仍是普通服务账户，不提供任意 root Shell endpoint。但若操作员启用 [独立 root 执行层](PRIVILEGED.md)，整个 linuxpanel UID 被信任可连接 root Action socket，包含 terminal.execute、PTY 与自定义采集器。这些命令可直接调用固定的 root 文件操作；Web-only 文件 Action 入口不是对此同身份终端的 OS 隔离。拥有系统文件编辑能力还可能间接改变以 root 运行的代码/配置，应只给可信个人管理员使用。

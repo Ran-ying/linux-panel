@@ -40,3 +40,9 @@ No multi-user RBAC, distributed persistence, untrusted plugin isolation or indep
 ## Interactive PTY boundary
 
 The Web PTY is a panel-owned transport, bound to the creating authenticated session, with Origin/CSRF on writes and live session checks on output. Revocation/idle/absolute lifetime and app shutdown clean up sessions; buffers/connections are bounded. Commands/output stay in response or memory, not persistent history/audit payloads. Python 3 PTY and xterm provide a real terminal; arbitrary commands may still mutate service-accessible data or launch their own background processes. This is not OS isolation.
+
+## 可选 root 文件管理的信任边界（Issue #111）
+
+启用 PrivilegedActionClient 的管理员明确授予整个 linuxpanel OS 身份调用固定 root 文件 handlers 的能力。同 UID 终端/PTY/自定义 collectors 不构成隔离；可信 MCP 终端也能构造 socket 请求。文件 Web-only policy 并非操作系统权限隔离。root 系统文件编辑可间接修改运行代码、计划任务或启动配置，因此是广泛 root 管理权限，不宣称是对恶意终端的沙箱。
+
+独立 root 服务只接受注册 Action 与独立输入校验，不提供 root Shell/动态模块加载。安装包和依赖 root-only，安装命令由 root 操作员显式执行，更新 Broker 不安装或运行任意新 root 脚本。未配置 root 通道时普通模式；配置后服务不可用返回 503，不静默降级。Web 会话/CSRF/Origin、根端结构验证、未知 Action 拒绝、Unix socket OS 访问控制各自保留。根端审计只记录 Action ID、成功/错误码。

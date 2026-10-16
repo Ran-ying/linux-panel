@@ -31,14 +31,6 @@ jobs:
             --node-bin "$(command -v node)" --ref "$INSTALL_REF" \
             --admin-password-stdin < "$secret"
           sudo systemctl is-active --quiet linux-panel.service
-          # Validate root manifest + API source with the actual Web UID.
-          for file in package.json apps/api/src/server.js apps/api/src/create-app.js; do
-            sudo runuser -u linuxpanel -- test -r "/opt/linux-panel/$file" || exit 1
-            ! sudo runuser -u linuxpanel -- test -w "/opt/linux-panel/$file" || exit 1
-          done
-          (cd /opt/linux-panel && sudo runuser -u linuxpanel -- \
-            "$(command -v node)" --input-type=module \
-            -e "await import('./apps/api/src/create-app.js')")
           PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import assert from 'node:assert/strict';
@@ -61,3 +53,41 @@ jobs:
           fi
           test ! -e /etc/systemd/system/linux-panel-update.service
           sudo test "$(sudo stat -c %a /etc/linux-panel/panel.env)" = 600
+          # Explicit root opt-in on this disposable host, including fixed-package
+          # installation, the real service sandbox and authenticated Web calls.
+          sudo install -d -o root -g root -m 0755 /usr/lib/linux-panel-root-test-runtime
+          sudo install -o root -g root -m 0755 "$(command -v node)" /usr/lib/linux-panel-root-test-runtime/node
+          sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable --node-bin /usr/lib/linux-panel-root-test-runtime/node
+          test "$(systemctl show -P User linux-panel.service)" = linuxpanel
+          test "$(systemctl show -P User linux-panel-privileged.service)" = root
+          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-privileged-executor.js
+          PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {randomUUID} from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const origin='http://127.0.0.1:49331';
+          let ready;
+          for(let i=0;i<30;i++){
+            try{ready=await fetch(origin+'/api/auth/status');if(ready.ok)break;}catch{}
+            await new Promise(resolve=>setTimeout(resolve,300));
+          }
+          const login=await fetch(origin+'/api/auth/login',{method:'POST',headers:{origin,'content-type':'application/json','x-panel-client':'web'},
+            body:JSON.stringify({username:'admin',password:readFileSync(process.env.PANEL_TEST_PASSWORD_PATH,'utf8').trim()})});
+          assert.equal(login.status,200);const credentials=await login.json(),cookie=login.headers.get('set-cookie').split(';')[0];
+          const call=async(name,input)=>{
+            const response=await fetch(origin+'/api/actions/files.'+name+'/execute',{method:'POST',headers:{origin,cookie,'content-type':'application/json','x-panel-csrf':credentials.csrf},body:JSON.stringify({input})});
+            assert.equal(response.status,200,await response.clone().text());return (await response.json()).result;
+          };
+          for(const parent of ['/etc','/root']){
+            const path=parent+'/.linux-panel-web-'+randomUUID();let created=false;
+            try{
+              await call('create',{path,type:'directory'});created=true;
+              const file=path+'/file';await call('upload',{path:file,contentBase64:Buffer.from('web-root-fixture').toString('base64')});
+              const original=await call('read',{path:file});await call('write',{path:file,content:'web-edited',revision:original.revision});
+              await call('chown',{path:file,owner:'nobody',group:'nogroup'});await call('chmod',{path:file,mode:'0600'});
+              const listing=await call('list',{path});assert.equal(listing.accessMode,'root');assert.equal(listing.entries[0].permissions,'0600');
+              assert.equal(listing.entries[0].owner,'nobody:nogroup');assert.equal((await call('read',{path:file})).content,'web-edited');
+            }finally{if(created)await call('delete',{path});}
+          }
+          console.log('PASS real linuxpanel Web -> installed root service, /etc and /root file operations');
+          JS
