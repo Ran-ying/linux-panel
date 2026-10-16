@@ -99,7 +99,7 @@ function formatted(key, formatKind) {
         </svg>
         <span class="gauge-percent">{{ progress === null ? '—' : progress.toFixed(1) + '%' }}</span>
       </div>
-      <div class="gauge-quantity">{{ quantity(gaugeUsed) }} / {{ quantity(gaugeTotal) }}</div>
+      <div class="gauge-quantity"><span>{{ quantity(gaugeUsed) }}</span> / <span>{{ quantity(gaugeTotal) }}</span></div>
     </div>
 
     <div v-else-if="presentation?.renderer === 'progress'" class="progress-panel">
