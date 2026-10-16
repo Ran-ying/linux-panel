@@ -3,6 +3,7 @@ import { defineAsyncComponent, onMounted, onUnmounted, ref, computed, watch, nex
 import ResultRenderer from './ResultRenderer.vue';
 
 const FileBrowser=defineAsyncComponent(()=>import('./FileBrowser.vue'));
+const ScheduledTasks=defineAsyncComponent(()=>import('./ScheduledTasks.vue'));
 const props=defineProps({
   action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
@@ -221,6 +222,9 @@ onUnmounted(()=>{
         <FileBrowser v-if="view==='visual' && presentation?.renderer==='files'" :initial-data="response.content.result"
           :list-action="action.id" :operations="presentation.operations" :csrf="csrf"
           @path-change="filePath=$event" @listing-change="response.content.result=$event" @unauthorized="emit('unauthorized')" />
+        <ScheduledTasks v-else-if="view==='visual' && presentation?.renderer==='scheduled-tasks'"
+          :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations" :csrf="csrf"
+          @listing-change="response.content.result=$event" @unauthorized="emit('unauthorized')" />
         <ResultRenderer v-else-if="view==='visual'" :data="displayedResult" :presentation="presentation" />
         <div v-else class="raw-data">
           <template v-if="response.content.raw">
