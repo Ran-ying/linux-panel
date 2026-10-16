@@ -59,6 +59,15 @@ function formatted(key, formatKind) {
       </div>
     </div>
 
+    <div v-else-if="presentation?.renderer === 'terminal'" class="terminal-result">
+      <pre v-if="data.stdout" class="terminal-output">{{ data.stdout }}</pre>
+      <pre v-if="data.stderr" class="terminal-output terminal-stderr">{{ data.stderr }}</pre>
+      <p v-if="!data.stdout && !data.stderr" class="muted small">没有输出</p>
+      <p class="terminal-summary">退出码：{{ data.exitCode ?? '—' }} · {{ data.durationMs }} ms
+        <span v-if="data.timedOut"> · 已超时</span><span v-if="data.truncated"> · 输出已截断</span>
+      </p>
+    </div>
+
     <div v-else-if="presentation?.renderer === 'metrics'" class="metric-grid">
       <div v-for="field in fields" :key="field.key" class="metric-card">
         <div class="metric-label">{{ field.label }}</div>
