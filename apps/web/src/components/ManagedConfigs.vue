@@ -1,5 +1,5 @@
 <script setup>
-import {ref,watch,onUnmounted} from 'vue';
+import {ref,computed,watch,onUnmounted} from 'vue';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true},
@@ -8,6 +8,15 @@ const props=defineProps({
 const emit=defineEmits(['unauthorized','listing-change']);
 const listing=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref('');
 const modal=ref(null),confirmModal=ref(null),draft=ref(null),pending=ref(null),checkResult=ref(null);
+const selectedFile=ref(null);
+const selectedSite=computed(()=>(listing.value.sites??[]).find(site=>site.file===selectedFile.value)??null);
+const domains=site=>site.serverNames?.trim()
+  ?site.serverNames.split(',').map(domain=>domain.trim()).filter(Boolean)
+  :['—'];
+function selectSite(site){
+  if(busy.value)return;
+  selectedFile.value=selectedFile.value===site.file?null:site.file;
+}
 let noticeTimer;
 watch(()=>props.initialData,v=>{listing.value=v;});
 onUnmounted(()=>clearTimeout(noticeTimer));
@@ -81,6 +90,7 @@ function confirm(){
     if(current.revision!==site.revision)
       throw new Error('网站配置已被其他程序修改，请刷新后重新确认');
     await submit({name:site.name,operation,revision:site.revision},()=>{
+      if(operation==='remove' && selectedFile.value===site.file)selectedFile.value=null;
       confirmModal.value?.close();pending.value=null;
     });
   });
@@ -108,44 +118,63 @@ function check(){
       <span class="muted small">（{{ checkResult.identity }} · 退出码 {{ checkResult.exitCode??'—' }}）</span>
       <pre v-if="checkResult.output">{{ checkResult.output }}</pre>
     </div>
-    <div class="table-wrap">
-      <table class="config-table">
-        <thead><tr><th>配置名</th><th>状态</th><th>域名</th><th>监听</th><th>操作</th></tr></thead>
-        <tbody>
-          <tr v-for="site in listing.sites" :key="site.file">
-            <td><strong>{{ site.name }}</strong><small class="muted config-location">{{ site.location }}</small></td>
-            <td>
-              <input type="checkbox" class="config-status-checkbox"
-                :checked="site.enabled==='启用链接'||site.enabled==='启用目录'"
-                :indeterminate="site.enabled==='配置候选'"
-                :disabled="busy||!site.editable"
-                :aria-label="'启用状态：'+site.name"
-                :title="site.editable
-                  ? '勾选启用，取消勾选停用；需要二次确认'
-                  : site.enabled==='配置候选'
-                    ? '此配置的生效状态取决于 nginx.conf，不能在此启停'
-                    : '此配置不能在此启停'"
-                @click.prevent="ask(site,site.enabled==='启用链接'?'disable':'enable')" />
-            </td>
-            <td>{{ site.serverNames||'—' }}</td>
-            <td>{{ site.listens||'—' }}</td>
-            <td>
-              <div v-if="site.editable" class="config-actions">
-                <button type="button" :disabled="busy" :aria-label="'编辑 '+site.name" @click="openEdit(site)">编辑</button>
-                <button type="button" :disabled="busy" :aria-label="'删除 '+site.name" @click="ask(site,'remove')">删除</button>
-              </div>
-              <span v-else class="muted small">只读</span>
-            </td>
-          </tr>
-          <tr v-if="!listing.sites.length"><td colspan="5">没有找到站点配置文件</td></tr>
-        </tbody>
-      </table>
+    <div class="config-browser" :class="{'has-selection':!!selectedSite}">
+      <section class="config-list-panel" aria-label="网站列表">
+        <h3 class="config-panel-heading">网站</h3>
+        <ul v-if="listing.sites.length" class="config-site-list">
+          <li v-for="site in listing.sites" :key="site.file" class="config-site-row"
+            :class="{'is-selected':selectedFile===site.file}">
+            <button type="button" class="config-site-selector" :disabled="busy"
+              :aria-label="'查看网站 '+site.name" :aria-pressed="selectedFile===site.file"
+              @click="selectSite(site)">
+              <strong class="config-site-name">{{ site.name }}</strong>
+              <span class="config-domains">
+                <span v-for="(domain,index) in domains(site)" :key="index" class="config-domain">{{ domain }}</span>
+              </span>
+            </button>
+            <input type="checkbox" class="config-status-checkbox"
+              :checked="site.enabled==='启用链接'||site.enabled==='启用目录'"
+              :indeterminate="site.enabled==='配置候选'"
+              :disabled="busy||!site.editable"
+              :aria-label="'启用状态：'+site.name"
+              :title="site.editable
+                ? '勾选启用，取消勾选停用；需要二次确认'
+                : site.enabled==='配置候选'
+                  ? '此配置的生效状态取决于 nginx.conf，不能在此启停'
+                  : '此配置不能在此启停'"
+              @click.prevent="ask(site,site.enabled==='启用链接'?'disable':'enable')" />
+          </li>
+        </ul>
+        <p v-else class="muted config-empty">没有找到站点配置文件</p>
+      </section>
+      <section v-if="selectedSite" class="config-detail-panel" :aria-label="'网站详情：'+selectedSite.name">
+        <div class="config-detail-heading">
+          <h3>{{ selectedSite.name }}</h3>
+          <button type="button" :disabled="busy" @click="selectedFile=null">收起</button>
+        </div>
+        <div class="config-detail-section">
+          <span class="muted small">域名</span>
+          <span v-for="(domain,index) in domains(selectedSite)" :key="index"
+            class="config-domain">{{ domain }}</span>
+        </div>
+        <div class="config-detail-section">
+          <span class="muted small">状态</span>
+          <span>{{ selectedSite.enabled==='启用链接'?'已启用'
+            :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
+        </div>
+        <div v-if="selectedSite.editable" class="config-actions">
+          <button type="button" :disabled="busy" :aria-label="'编辑 '+selectedSite.name"
+            @click="openEdit(selectedSite)">编辑</button>
+          <button type="button" :disabled="busy" :aria-label="'删除 '+selectedSite.name"
+            @click="ask(selectedSite,'remove')">删除</button>
+        </div>
+        <p v-else class="muted small">此配置仅支持查看，不能直接编辑或删除。</p>
+      </section>
     </div>
     <details v-if="listing.warnings?.length" class="config-warnings">
       <summary>读取提示（{{ listing.warnings.length }}）</summary>
       <p v-for="(warning,i) in listing.warnings" :key="i" class="muted small">{{ warning }}</p>
     </details>
-    <p class="muted small">状态复选框：勾选为启用，未勾选为停用；切换前需要确认。仅 sites-available 常规文件支持管理。启用/停用通过 sites-enabled 链接进行；其它配置的复选框为只读（conf.d 的生效状态由 nginx.conf 决定）。写入后进行语法检查，已启用的站点变更会尝试重载，失败则恢复文件。</p>
 
     <dialog ref="modal" class="config-dialog" aria-labelledby="config-form-heading" @close="draft=null">
       <form v-if="draft" class="config-form" @submit.prevent="save">
@@ -187,14 +216,34 @@ function check(){
 .config-toolbar,.config-actions,.config-dialog-actions{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap}
 .config-toolbar{margin:.2rem 0 1rem}
 .config-toolbar button,.config-actions button,.config-dialog-actions button{font:inherit;min-height:2.35rem;padding:.35rem .8rem}
-.config-table{width:100%;text-align:left}
-.config-table th,.config-table td{vertical-align:top}
-.config-actions{gap:.3rem}
-.config-actions button{white-space:nowrap}
-.config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:.2rem .1rem;
-  vertical-align:middle;cursor:pointer;accent-color:var(--accent,#538ad7)}
+.config-browser{display:grid;grid-template-columns:minmax(0,25rem);align-items:start;gap:1rem;min-width:0}
+.config-browser.has-selection{grid-template-columns:minmax(0,24rem) minmax(0,1fr)}
+.config-list-panel,.config-detail-panel{border:1px solid var(--border,#8885);border-radius:10px;min-width:0;overflow:hidden}
+.config-panel-heading{font-size:1rem;margin:0;padding:.8rem 1rem;border-bottom:1px solid var(--border,#8885)}
+.config-site-list{list-style:none;margin:0;padding:0}
+.config-site-row{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--border,#8885)}
+.config-site-row:last-child{border-bottom:none}
+.config-site-row.is-selected{background:var(--surface-secondary,#8881)}
+.config-site-selector{flex:1;display:flex;flex-direction:column;gap:.25rem;min-width:0;
+  border:0;background:none;color:inherit;text-align:left;padding:.8rem 0 .8rem 1rem;
+  font:inherit;cursor:pointer}
+.config-site-selector:focus-visible{outline:2px solid var(--accent,#538ad7);outline-offset:-2px}
+.config-site-selector:disabled{cursor:wait}
+.config-site-name{font-weight:600;overflow-wrap:anywhere}
+.config-domains,.config-detail-section{display:flex;flex-direction:column;gap:.2rem;min-width:0}
+.config-domain{display:block;font-size:.87rem;color:var(--text-muted,#888);overflow-wrap:anywhere}
+.config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:0 1rem 0 .3rem;
+  cursor:pointer;accent-color:var(--accent,#538ad7)}
 .config-status-checkbox:disabled{cursor:not-allowed;opacity:.65}
-.config-location{display:block;overflow-wrap:anywhere}
+.config-empty{padding:1rem;margin:0}
+.config-detail-panel{padding:1rem;display:grid;gap:1.1rem}
+.config-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:.7rem}
+.config-detail-heading h3{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
+.config-detail-heading button{font:inherit;min-height:2.2rem;padding:.25rem .7rem}
+.config-detail-section{gap:.35rem}
+.config-detail-section .config-domain{font-size:1rem}
+.config-actions{gap:.5rem}
+.config-actions button{white-space:nowrap}
 .config-check{padding:.7rem 0}
 .config-check pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:18rem;overflow:auto}
 .config-warnings{margin:.8rem 0}
@@ -208,5 +257,9 @@ function check(){
 .config-form textarea{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
 .config-dialog-actions{justify-content:flex-end}
 .config-notice{padding:.55rem 0}
-@media(max-width:730px){.config-table{min-width:760px}.config-toolbar{align-items:stretch}}
+@media(max-width:900px){
+  .config-browser.has-selection{grid-template-columns:minmax(0,1fr)}
+  .config-browser{grid-template-columns:minmax(0,1fr)}
+  .config-toolbar{align-items:stretch}
+}
 </style>

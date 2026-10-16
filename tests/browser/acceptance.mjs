@@ -94,7 +94,7 @@ try {
         if(input.operation==='create'){
           if(target){status=409;data={error:'站点已存在'};}
           else{nginxSites.push({name:input.name,location:'sites-available',enabled:'未启用',
-            serverNames:'fixture.test',listens:'80',file:'/etc/nginx/sites-available/'+input.name,
+            serverNames:'fixture.test, www.fixture.test',listens:'80',file:'/etc/nginx/sites-available/'+input.name,
             editable:true,content:input.content,revision:revision()});}
         }else if(!target||target.revision!==input.revision){status=409;data={error:'版本冲突'};}
         else if(input.operation==='remove')nginxSites=nginxSites.filter(s=>s!==target);
@@ -193,22 +193,67 @@ try {
       }
       if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
         const manager=page.locator('.managed-configs');
+        assert.equal(await manager.locator('.config-detail-panel').count(),0,
+          'the website details pane must be absent before selecting a website');
+        assert.equal(await manager.locator('.config-site-list').count(),0,
+          'an empty site list should not render an empty row table');
+        assert.equal(await manager.locator('.config-table,.config-location').count(),0,
+          'old multi-column layout and sites-available indicator must be removed');
+        assert.ok(!((await manager.innerText()).includes('状态复选框：勾选为启用')),
+          'the old instructional paragraph must be removed');
         await manager.getByRole('button',{name:'新建网站'}).click();
         const editor=page.getByRole('dialog',{name:'新建网站配置'});
         await editor.getByRole('textbox',{name:'配置文件名'}).fill('fixture-site');
-        await editor.getByRole('textbox',{name:'Nginx 配置内容'}).fill('server { listen 80; server_name fixture.test; }');
+        await editor.getByRole('textbox',{name:'Nginx 配置内容'})
+          .fill('server { listen 80; server_name fixture.test www.fixture.test; }');
         await editor.getByRole('button',{name:'保存配置'}).click();
+        const website=manager.getByRole('button',{name:'查看网站 fixture-site'});
         const enabled=manager.getByRole('checkbox',{name:'启用状态：fixture-site'});
         await enabled.waitFor();
         assert.equal(await enabled.isChecked(),false,'new Nginx site defaults to unchecked');
-        assert.equal(await manager.getByRole('button',{name:'启用 fixture-site'}).count(),0,
-          'there must be no separate enable action button');
-        assert.equal(await manager.getByRole('button',{name:'停用 fixture-site'}).count(),0,
-          'there must be no separate disable action button');
-        await manager.getByRole('button',{name:'编辑 fixture-site'}).click();
+        assert.equal(await manager.locator('.config-detail-panel').count(),0,
+          'new sites are listed on the left without automatically showing details');
+        assert.equal(await manager.getByRole('button',{name:'编辑 fixture-site'}).count(),0,
+          'edit actions must remain hidden before selecting a website');
+        assert.equal(await manager.getByRole('button',{name:'删除 fixture-site'}).count(),0,
+          'delete actions must remain hidden before selecting a website');
+        const hostnames=await manager.locator('.config-site-row .config-domain').allTextContents();
+        assert.deepEqual(hostnames,['fixture.test','www.fixture.test'],
+          'each hostname must occupy its own line beneath the configuration name');
+        const domainPositions=await manager.locator('.config-site-row .config-domain')
+          .evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().top));
+        assert.ok(domainPositions[0]<domainPositions[1],
+          'each domain should be vertically stacked, not comma-separated on one line');
+        assert.equal(await manager.getByText('sites-available',{exact:true}).count(),0,
+          'do not display internal config directory labels');
+        assert.equal(await manager.getByRole('columnheader',{name:'监听'}).count(),0);
+        assert.equal(await manager.getByRole('columnheader',{name:'操作'}).count(),0);
+        assert.equal(await manager.getByRole('button',{name:'启用 fixture-site'}).count(),0);
+        assert.equal(await manager.getByRole('button',{name:'停用 fixture-site'}).count(),0);
+        await website.click();
+        const details=manager.locator('.config-detail-panel');
+        await details.waitFor();
+        assert.equal(await website.getAttribute('aria-pressed'),'true');
+        await details.getByRole('button',{name:'编辑 fixture-site'}).click();
         const updated=page.getByRole('dialog',{name:'编辑网站配置'});
-        await updated.getByRole('textbox',{name:'Nginx 配置内容'}).fill('server { listen 8080; server_name fixture.test; }');
+        await updated.getByRole('textbox',{name:'Nginx 配置内容'})
+          .fill('server { listen 8080; server_name fixture.test www.fixture.test; }');
         await updated.getByRole('button',{name:'保存配置'}).click();
+        await details.getByRole('button',{name:'收起'}).click();
+        await details.waitFor({state:'detached'});
+        assert.equal(await website.getAttribute('aria-pressed'),'false');
+        assert.equal(await manager.getByRole('button',{name:'编辑 fixture-site'}).count(),0);
+        await website.click();
+        await details.waitFor();
+        const browserLayout=await manager.locator('.config-browser').evaluate(node=>{
+          const list=node.querySelector('.config-list-panel').getBoundingClientRect();
+          const detail=node.querySelector('.config-detail-panel').getBoundingClientRect();
+          return {list,detail};
+        });
+        if(width===1280)assert.ok(browserLayout.detail.left>browserLayout.list.right-2,
+          'details should appear to the right of the site list on desktop');
+        else assert.ok(browserLayout.detail.top>=browserLayout.list.bottom-2,
+          'details should appear below the list on mobile');
         await enabled.click();
         const enableConfirm=page.getByRole('dialog',{name:'启用网站'});
         await enableConfirm.waitFor();
@@ -236,11 +281,18 @@ try {
         await disableConfirm.waitFor({state:'hidden'});
         assert.equal(await enabled.isChecked(),false,'confirmed disable unchecks the box');
         assert.deepEqual(nginxToggleActions,['enable','disable']);
+        assert.equal(await details.count(),1,'selected site details remain visible after an update');
+        await manager.getByRole('button',{name:'刷新数据'}).click();
+        await details.waitFor();
+        assert.equal(await website.getAttribute('aria-pressed'),'true',
+          'refresh should not lose the selected website');
         await manager.getByRole('button',{name:'检查 Nginx 配置'}).click();
         await manager.getByText('配置检查通过',{exact:true}).waitFor();
-        await manager.getByRole('button',{name:'删除 fixture-site'}).click();
-        await page.getByRole('dialog',{name:'删除网站配置'}).getByRole('button',{name:'确认操作'}).click();
+        await details.getByRole('button',{name:'删除 fixture-site'}).click();
+        await page.getByRole('dialog',{name:'删除网站配置'})
+          .getByRole('button',{name:'确认操作'}).click();
         await manager.getByText('没有找到站点配置文件').waitFor();
+        assert.equal(await details.count(),0,'removing the selected site must close the details pane');
         await page.screenshot({path:join(output,'nginx-manager-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='系统概览'){
