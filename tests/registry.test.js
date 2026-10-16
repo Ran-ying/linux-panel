@@ -36,11 +36,11 @@ test('generic module reordering preserves absent IDs without hardcoded module na
   await manager.loadAll(['files','missing-future-module','system','terminal','services']);
   manager.loaded.push({id:'panel',name:'Panel'});
   const before=manager.loaded.filter(module=>module.id!=='panel').map(module=>module.id);
-  assert.deepEqual(before,['files','system','terminal','services']);
-  const planned=manager.planOrder(['system','files','terminal','services']);
-  assert.deepEqual(planned,['system','missing-future-module','files','terminal','services']);
+  assert.deepEqual(before,['files','system','terminal','services','nginx']);
+  const planned=manager.planOrder(['system','files','terminal','services','nginx']);
+  assert.deepEqual(planned,['system','missing-future-module','files','terminal','services','nginx']);
   manager.applyOrder(planned);
-  assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','panel']);
+  assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','nginx','panel']);
   for(const bad of [['system','files','services'],['files','files','terminal','services'],
     ['system','files','terminal','other'],null,{}])
     assert.throws(()=>manager.planOrder(bad),{statusCode:400});
@@ -51,18 +51,18 @@ test('bundled modules load after dependencies and expose expected actions', asyn
   const manager = new ModuleManager(resolve('modules'), registry);
   const loaded = await manager.loadAll();
   const ids = loaded.map(m => m.id);
-  assert.deepEqual([...ids].sort(), ['files', 'services', 'system', 'terminal']);
-  assert.deepEqual(ids,['system','services','terminal','files']);
+  assert.deepEqual([...ids].sort(), ['files', 'nginx', 'services', 'system', 'terminal']);
+  assert.deepEqual(ids,['system','services','terminal','files','nginx']);
   assert.deepEqual(registry.list('web').map(a => a.id).sort(),
-    ['files.accounts','files.chmod','files.chown','files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','services.list','system.info','system.resources','terminal.execute']);
+    ['files.accounts','files.chmod','files.chown','files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','nginx.check','nginx.sites','services.list','system.info','system.resources','terminal.execute']);
   for(const id of ['storage.usage','system.cpu','system.memory'])assert.equal(registry.get(id),undefined);
 });
 
 test('saved module order survives reload and new modules append despite earlier manifest ranks',async()=>{
   const manager=new ModuleManager(resolve('modules'),new ActionRegistry());
   await manager.loadAll(['terminal','files','temporarily-disabled']);
-  assert.deepEqual(manager.loaded.map(m=>m.id),['terminal','files','system','services']);
-  assert.deepEqual(manager.order,['terminal','files','temporarily-disabled','system','services']);
+  assert.deepEqual(manager.loaded.map(m=>m.id),['terminal','files','system','services','nginx']);
+  assert.deepEqual(manager.order,['terminal','files','temporarily-disabled','system','services','nginx']);
   const again=new ModuleManager(resolve('modules'),new ActionRegistry());
   await again.loadAll(manager.order);
   assert.deepEqual(again.loaded,manager.loaded);

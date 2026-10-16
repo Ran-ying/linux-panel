@@ -27,7 +27,7 @@ test('MCP settings are session and CSRF protected; /mcp remains fail-closed', as
   const loaded=await app.inject({url:target,headers:{cookie}});
   assert.equal(loaded.statusCode,200);
   assert.equal(loaded.json().policy.enabled,false);
-  assert.equal(loaded.json().tools.length,7);
+  assert.equal(loaded.json().tools.length,9);
   assert.ok(loaded.json().tools.some(tool=>tool.id==='panel.update.status'));
   assert.equal(loaded.json().policy.tools['panel.update.status'],undefined);
   const policy={enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.resources':true}};
