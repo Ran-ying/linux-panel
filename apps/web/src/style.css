@@ -558,3 +558,6 @@ table{min-width:500px}
   .gauge-percent{font-size:1rem}
 }
 @media(prefers-reduced-motion:reduce){.gauge-fill{transition:none}}
+
+.result-sections-grid>.result-section>.rendered{height:100%}
+.gauge-quantity>span{white-space:nowrap}
