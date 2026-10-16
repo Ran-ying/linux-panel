@@ -124,8 +124,10 @@ function remove(){
       </button>
     </div>
     <div class="task-toolbar">
-      <button v-if="activeSection==='managed'" type="button" :disabled="busy" @click="openForm(null)">新建任务</button>
-      <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
+      <div class="panel-control-capsule">
+        <button v-if="activeSection==='managed'" type="button" class="panel-control-primary" :disabled="busy" @click="openForm(null)">新建任务</button>
+        <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
+      </div>
       <span v-if="activeSection==='managed'" class="muted small">面板任务 {{ listing.count }} 项</span>
       <span v-else class="muted small">系统任务 {{ listing.systemCount??0 }} 项</span>
     </div>
