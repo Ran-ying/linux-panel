@@ -196,6 +196,9 @@ try {
           const console=page.locator('.terminal-console');
           await console.getByRole('button',{name:'连接终端',exact:true}).click();
           await console.getByRole('button',{name:'断开',exact:true}).waitFor();
+          const terminalStyle=await console.locator('.xterm-rows').evaluate(node=>getComputedStyle(node).color);
+          assert.equal(terminalStyle,'rgb(229, 231, 235)','terminal text must stay readable under the production CSP');
+          assert.ok(await page.locator('meta[name="panel-style-nonce"]').getAttribute('content'));
           await console.getByRole('textbox',{name:'终端输入',exact:true}).fill("cd /tmp; printf '\\160\\164\\171\\055\\142\\162\\157\\167\\163\\145\\162\\012'; pwd");
           await console.getByRole('button',{name:'发送',exact:true}).click();
           await page.waitForFunction(()=>document.querySelector('.terminal-screen')?.textContent.includes('pty-browser'));
