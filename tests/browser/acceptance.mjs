@@ -248,7 +248,8 @@ try {
         const browserLayout=await manager.locator('.config-browser').evaluate(node=>{
           const list=node.querySelector('.config-list-panel').getBoundingClientRect();
           const detail=node.querySelector('.config-detail-panel').getBoundingClientRect();
-          return {list,detail};
+          return {list:{right:list.right,bottom:list.bottom},
+            detail:{left:detail.left,top:detail.top}};
         });
         if(width===1280)assert.ok(browserLayout.detail.left>browserLayout.list.right-2,
           'details should appear to the right of the site list on desktop');
