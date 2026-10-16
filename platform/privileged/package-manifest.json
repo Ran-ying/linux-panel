@@ -11,8 +11,7 @@
     "nginx-operations.js",
     "nginx-unit-contracts.js",
     "nginx-unit-operations.js",
-    "cron-system-operations.js",
-    "schedules-contracts.js"
+    "cron-system-operations.js"
   ],
   "dependencies": [
     "ajv",

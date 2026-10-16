@@ -10,14 +10,6 @@ const client=new PrivilegedActionClient({socketPath:'/run/linux-panel-privileged
 const call=(name,input)=>client.execute({id:'cron.'+name,privileged:{channels:['web']}},input,
   {authenticated:true,userId:'disposable-cron-acceptance',channel:'web'});
 const blank=createHash('sha256').update('').digest('hex');
-const system=await client.execute({id:'schedules.list',privileged:{channels:['web']}},{},
-  {authenticated:true,userId:'disposable-cron-acceptance',channel:'web'});
-assert.ok(Array.isArray(system.systemTasks));
-assert.equal(system.systemCount,system.systemTasks.length);
-assert.ok(Array.isArray(system.systemWarnings));
-await assert.rejects(client.execute({id:'schedules.set',privileged:{channels:['web']}},
-  {id:'0'.repeat(64),revision:'0'.repeat(64),operation:'disable'},
-  {authenticated:true,userId:'disposable-cron-acceptance',channel:'web'}),{statusCode:404});
 const initial=await call('list',{});
 assert.ok(Array.isArray(initial.systemTasks),'reviewed root handler must expose system-wide inventory');
 assert.ok(Array.isArray(initial.systemWarnings));

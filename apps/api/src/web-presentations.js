@@ -36,17 +36,10 @@ function validateView(view,schema,actionId,depth=0) {
           !site || ['name','location','enabled','serverNames','listens','file','editable'].some(key=>!site[key]))
           throw new Error('Invalid managed-configs result schema');
       } else if (view.renderer === 'scheduled-tasks') {
-        if(view.section==='managed'){
-          const job=schema.tasks?.items?.properties;
-          if(schema.revision?.type!=='string' || schema.count?.type!=='integer' ||
-            !job || ['id','name','expression','command','enabled'].some(key=>!job[key]))
-            throw new Error('Invalid managed scheduled-tasks result schema');
-        }else if(view.section==='system'){
-          const job=schema.systemTasks?.items?.properties;
-          if(schema.systemCount?.type!=='integer' || schema.systemWarnings?.type!=='array' ||
-            !job || ['id','revision','sourceType','source','owner','enabled','control'].some(key=>!job[key]))
-            throw new Error('Invalid system scheduled-tasks result schema');
-        }else throw new Error('Scheduled tasks requires managed or system section');
+        const job=schema.tasks?.items?.properties;
+        if(schema.revision?.type!=='string' || schema.count?.type!=='integer' ||
+          !job || ['id','name','expression','command','enabled'].some(key=>!job[key]))
+          throw new Error('Invalid scheduled-tasks result schema');
       } else if (view.renderer === 'table') {
         const nested = schema[view.rowsKey]?.items?.properties;
         if (!nested || !Array.isArray(view.columns) || !view.columns.length)
@@ -159,11 +152,8 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
           throw new Error('Invalid managed config labels');
       }
       if(item.renderer==='scheduled-tasks'){
-        const expected=item.section==='managed'?['save','remove']:['systemSet'];
-        if(!item.operations || Object.keys(item.operations).sort().join(',')!==expected.sort().join(','))
-          throw new Error('Scheduled tasks must declare only its section operations');
-        for(const name of expected){
-          const id=item.operations[name],target=visible.get(id);
+        for(const name of ['save','remove']){
+          const id=item.operations?.[name],target=visible.get(id);
           if(typeof id!=='string' || !id.startsWith(module.id+'.') || !target ||
             target.kind!=='write' ||
             target.inputSchema?.properties?.revision?.type!=='string')

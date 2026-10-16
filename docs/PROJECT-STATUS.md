@@ -2,13 +2,9 @@
 
 更新：2026-10-16。v0.5.0 已发布，main 持续迭代。root 执行层已由 PR #112 合并进 main 697ff4698607008aa672c7db1164a39b9c4242b5，本轮补齐首次安装可选启用入口，关联 [Issue #111](https://github.com/Ran-ying/linux-panel/issues/111)。准确 CI、合并、普通 Web 部署与 root 激活证据统一见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
-## 定时任务双模块拆分（PR #127）
+## 定时任务模块布局（2026-10-16）
 
-2026-10-16：系统计划任务功能拆分为两个真实业务模块（非同页两张表）：
-`cron` → **Linux Panel 托管的定时任务**，`schedules` → **系统现有定时任务**。
-前者保留独立 `/etc/cron.d/linux-panel` 的创建、编辑、启停、删除，后者独立读取系统 Cron、用户 crontab、周期脚本与 systemd timers，保留来源/用户/状态本地筛选和按来源受控操作。两个页面使用通用 `scheduled-tasks` renderer 的受校验 `section` 声明，不在模块导航写业务特判。
-
-`schedules.list/set` 通过现有固定、版本化 root 包注册，重用已审核的系统调度收集/执行实现；不触碰或迁移任何生产计划任务。此 PR 的源码、CI、最终合并及 VPS 更新应分别记录，准确的已部署版本和只读验收见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+纠正之前将 Cron 拆为两个侧边栏模块的实现：**仅一个「定时任务」模块**，内部使用「Linux Panel 托管的定时任务」与「系统现有定时任务」两个互斥页签。两个页签仍使用原先受控 `cron.list/save/remove/systemSet` Actions、同一份数据，切换仅为客户端显示；保留系统任务来源/用户/状态筛选，未迁移任何 Cron 文件。有关合并与生产验收，以 Issue #54 记录为准。
 
 ## 当前实现
 
