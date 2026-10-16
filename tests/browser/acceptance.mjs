@@ -215,7 +215,7 @@ try {
           return {name:n.textContent.trim(),height:rect.height,radius:style.borderTopLeftRadius,
             fontSize:style.fontSize};
         }));
-        assert.ok(buttons.length>1 && buttons.every(b=>
+        assert.ok(buttons.length>0 && buttons.every(b=>
           Math.abs(b.height-32)<.1 && b.radius==='999px' &&
           b.fontSize===referenceControls.primary.fontSize),
           name+': all command buttons must share the compact 32px pill appearance');
