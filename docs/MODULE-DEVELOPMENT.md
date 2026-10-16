@@ -119,7 +119,7 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象；可选 layout:'grid' 并排展示 |
 | files | path/entries 输出，operations:{accounts,read,write,upload,create,rename,delete,chmod,chown} 引用同模块 Web Action |
 | managed-configs | sites[]、count/启用数；operations:{read,apply,check} 引用相同模块的读/写 Actions，面板提供通用配置编辑和确认弹窗 |
-| scheduled-tasks | tasks[]、revision、count；可选 systemTasks[]、systemCount、systemWarnings；operations:{save,remove,systemSet} 引用同模块已暴露的写 Action，Web 面板在单个模块中用两个互斥页签显示托管与系统任务，并按受控类型提供编辑/启停/删除确认 |
+| scheduled-tasks | tasks[]、revision、count；可选 systemTasks[]、systemCount、systemWarnings；operations:{save,remove,systemSet} 引用同模块已暴露的写 Action，Web 面板在单个模块中将托管与系统任务上下独立、无遮盖/无额外圆角容器地展开，并按受控类型提供编辑/启停/删除确认 |
 | terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 
 format 只支持 bytes/duration/milliseconds/integer/number；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度百分比必须声明为 number；圆环数量字段可为 number/integer，未给 usedKey 时用百分比 × 总量计算等效用量；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。
@@ -171,3 +171,5 @@ renderer:'terminal' 复用面板黑色 stdout/stderr 结果视图；console:'ter
 真正提权还需要在 platform/privileged/handlers.js 静态注册已审查 handler 与独立输入 validator，再由操作员重跑安装器，把固定文件及其可信依赖安装到 root-only 包。不要动态 import modules 目录或任何 linuxpanel 可写路径；不要接收任意 Shell。文件模块共享 file-contracts.js 与 file-operations.js，新增模块同样复用客户端、IPC、校验调度和安装流程，只增加已审查的根端实现/必要能力。首版根端只接受 web 通道，扩展 MCP 需同步根端授权设计。
 
 启用后同 UID 的终端/PTY/自定义 collectors 也能调用受控 root socket，不能宣称 Web-only 是 OS 隔离。参见 [权限执行层及扩展示例](PRIVILEGED.md)。
+
+展示类 Action 可以设置通用 `chrome:'flat'`，由面板去掉 ActionCard 的外层边框、背景、圆角、内边距和重复标题；保留普通 Action 授权/加载/错误机制。`scheduled-tasks` 用此模式让两个常显区块紧贴各自的标题、工具栏、内容，而不是增加 tab 或卡片。
