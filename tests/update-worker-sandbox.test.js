@@ -14,7 +14,7 @@ const exec=(cmd,args,options={})=>{
 };
 const swap=(s,a,b)=>{
  assert.equal(s.split(a).length,2,'Expected unique worker anchor: '+a);
- return s.replace(a,b);
+ return s.replace(a,()=>b); // Treat replacement as literal, preserving Bash $ and  return s.replace(a,b);.
 };
 function prepare({withPrivileged=false}={}){
  const base=mkdtempSync(join(tmpdir(),'lp-updater-stage-'));
