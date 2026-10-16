@@ -16,9 +16,10 @@ async function fixture(t){
   '# Maintained by packages\nSHELL=/bin/sh\n*/5 * * * * root /usr/bin/true\n0 1 * * 1 daemon /bin/echo weekday\n');
  const user=join(spool,'alice');
  await fs.writeFile(user,'MAILTO=alice\n0 2 * * * /bin/echo hi\n');
+ await fs.writeFile(join(etc,'anacrontab'),'SHELL=/bin/sh\n7 5 weekly-backup /bin/true\n');
  const daily=join(etc,'cron.daily','logrotate');
  await fs.writeFile(daily,'#!/bin/sh\nexit 0\n',{mode:0o755});
- let timerState='enabled';
+ let timerState='enabled',atAvailable=true;
  const calls=[];
  const execute=async(binary,args)=>{
    calls.push([binary,...args]);
@@ -28,7 +29,8 @@ async function fixture(t){
        {unit_file:'apt-daily.timer',state:timerState},{unit_file:'static@.timer',state:'static'}]);
      if(['enable','disable'].includes(args[0])){timerState=args[0]==='enable'?'enabled':'disabled';return '';}
    }
-   if(binary==='/usr/bin/atq')return '';
+   if(binary==='/usr/bin/atq')return atAvailable?'7\tFri Oct 16 21:00:00 2026 a alice\n':'';
+   if(binary==='/usr/bin/atrm'){atAvailable=false;return '';}
    if(binary==='/usr/bin/crontab'){
      const content=await fs.readFile(args[2],'utf8');
      await fs.writeFile(user,content);
@@ -43,9 +45,9 @@ test('inventory covers classic system Cron, user spool, run-parts and systemd ti
  const f=await fixture(t);
  const result=await f.system.enumerate();
  assert.deepEqual(result.systemWarnings,[]);
- assert.equal(result.systemCount,6);
+ assert.equal(result.systemCount,8);
  assert.deepEqual([...new Set(result.systemTasks.map(x=>x.sourceType))].sort(),
-   ['cron.d','periodic','systemd-timer','user-crontab']);
+   ['anacron','at-job','cron.d','periodic','systemd-timer','user-crontab']);
  const rootJob=result.systemTasks.find(x=>x.owner==='root');
  assert.equal(rootJob.control,'cron');
  assert.equal(rootJob.expression,'*/5 * * * *');
@@ -113,4 +115,14 @@ test('malformed or symlinked unmanaged Cron files are not edited',async t=>{
  await fs.writeFile(f.cron,'# external change\n');
  await assert.rejects(f.system.set({id:job.id,revision:job.revision,operation:'disable'}),{statusCode:404});
  assert.equal(await fs.readFile(f.cron,'utf8'),'# external change\n');
+});
+
+test('one-shot at queue jobs are listed and only removed by exact fixed atrm',async t=>{
+ const f=await fixture(t);
+ const job=(await f.system.enumerate()).systemTasks.find(x=>x.sourceType==='at-job');
+ assert.equal(job.control,'at');
+ await assert.rejects(f.system.set({id:job.id,revision:job.revision,operation:'disable'}),{statusCode:400});
+ await f.system.set({id:job.id,revision:job.revision,operation:'remove'});
+ assert.ok(f.calls.some(x=>x.join(' ')==='/usr/bin/atrm 7'));
+ assert.equal((await f.system.enumerate()).systemTasks.some(x=>x.sourceType==='at-job'),false);
 });
