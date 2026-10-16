@@ -72,8 +72,31 @@ record(){
 PRIV_ROOT=/usr/local/lib/linux-panel-privileged
 PRIV_RELEASES="$PRIV_ROOT/releases"
 PRIV_CURRENT="$PRIV_ROOT/current"
-PRIV_FILES=(server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js)
-PRIV_DEPS=(ajv fast-deep-equal fast-uri json-schema-traverse require-from-string)
+# Only committed JSON, parsed by the immutable root-owned Python interpreter,
+# may enumerate known relative .js file basenames; no arbitrary root paths.
+priv_manifest(){
+  local src="$1" dst="$2"
+  /usr/bin/python3 -I - "$src" > "$dst" <<'PY'
+import json,re,sys
+with open(sys.argv[1],encoding='utf-8') as f:
+    m=json.load(f)
+if set(m)!={'version','files','dependencies'} or m['version']!=1:
+    raise SystemExit('Unsupported root package manifest')
+files,deps=m['files'],m['dependencies']
+if not isinstance(files,list) or not 2<=len(files)<=40 or len(set(files))!=len(files) or \
+   not {'server.js','handlers.js'}.issubset(files):
+    raise SystemExit('Invalid root package source list')
+if not isinstance(deps,list) or not 1<=len(deps)<=20 or len(set(deps))!=len(deps):
+    raise SystemExit('Invalid root package dependencies')
+if any(not isinstance(f,str) or not re.fullmatch(r'[a-z][a-z0-9-]*\.js',f) for f in files):
+    raise SystemExit('Unsafe root source basename')
+if any(not isinstance(d,str) or not re.fullmatch(r'[a-z][a-z0-9-]*',d) for d in deps):
+    raise SystemExit('Unsafe root dependency basename')
+for f in files:print('file '+f)
+for d in deps:print('dep '+d)
+PY
+}
+
 priv_present(){
   [[ -d "$PRIV_ROOT" && ! -L "$PRIV_ROOT" ]]
 }
@@ -110,14 +133,18 @@ priv_stage(){
     rm -rf -- "$pkg" || return 1
   fi
   (umask 077; mkdir -- "$pkg" && mkdir -- "$pkg/node_modules") || return 1
-  for file in "${PRIV_FILES[@]}";do
+  as_updater git -C "$ROOT" show "$sha:platform/privileged/package-manifest.json" > "$pkg/manifest.json" || return 1
+  priv_manifest "$pkg/manifest.json" "$pkg/.entries" || return 1
+  while read -r kind file;do
+    [[ "$kind" == file ]] || continue
     # Read bytes from the pinned Git object, not potentially mutated
     # files in the working tree after npm install/test lifecycle hooks.
     as_updater git -C "$ROOT" show "$sha:platform/privileged/$file" > "$pkg/$file" || return 1
     chmod 0600 "$pkg/$file" || return 1
-  done
+  done < "$pkg/.entries"
   printf '{"type":"module"}\n' > "$pkg/package.json" || return 1
-  for file in "${PRIV_DEPS[@]}";do
+  while read -r kind file;do
+    [[ "$kind" == dep ]] || continue
     source="$ROOT/node_modules/$file"
     target="$pkg/node_modules/$file"
     [[ -d "$source" && ! -L "$source" &&
@@ -125,7 +152,7 @@ priv_stage(){
     # Never dereference symlinked npm package trees as root.
     [[ -z "$(find "$source" -type l -print -quit)" ]] || return 1
     cp -R -- "$source" "$target" || return 1
-  done
+  done < "$pkg/.entries"
   chown -R root:root "$pkg" || return 1
   chmod -R go-rwx "$pkg" || return 1
   /opt/node24/bin/node --input-type=module -e '
