@@ -141,7 +141,7 @@ function remove(){
             <td>{{ record.enabled?'已启用':'已停用' }}</td>
             <td><div class="task-row-actions">
               <button v-if="record.control==='cron'&&record.editable" type="button" :disabled="busy" @click="openSystemEdit(record)">编辑</button>
-              <button v-if="record.control!=='none'" type="button" :disabled="busy" @click="beginSystemAction(record,record.enabled?'disable':'enable')">{{ record.enabled?'停用':'启用' }}</button>
+              <button v-if="record.control==='cron'||record.control==='timer'" type="button" :disabled="busy" @click="beginSystemAction(record,record.enabled?'disable':'enable')">{{ record.enabled?'停用':'启用' }}</button>
               <button v-if="record.control==='cron'||record.control==='at'" type="button" :disabled="busy" @click="beginSystemAction(record,'remove')">删除</button>
               <span v-if="record.control==='none'" class="muted small" :title="record.detail">只读</span>
             </div></td>
