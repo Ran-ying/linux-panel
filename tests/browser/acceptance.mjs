@@ -273,6 +273,7 @@ try {
           name:'upload-'+width+'.txt',mimeType:'text/plain',buffer:Buffer.from('upload-fixture')});
         await browser.getByText('上传完成',{exact:true}).waitFor();
         assert.equal(await readFile(join(fileFixture,'upload-'+width+'.txt'),'utf8'),'upload-fixture');
+        await page.screenshot({path:join(output,'file-editor-'+width+'.png'),fullPage:true});
         await browser.getByRole('button',{name:'关闭编辑',exact:true}).click();
         await browser.getByRole('button',{name:'child/',exact:true}).click();
         await browser.getByText('空目录',{exact:true}).waitFor();
