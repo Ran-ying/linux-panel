@@ -175,10 +175,12 @@ try {
         const moduleRoot=page.locator(name.trim()==='文件管理'?'.file-browser':
           name.trim().includes('定时任务')?'.scheduled-tasks':'.managed-configs');
         await moduleRoot.waitFor();
-        const standalone=['文件管理','Nginx 网站'].includes(name.trim());
+        const standalone=true;
         const group=moduleRoot.locator('.panel-control-capsule').first();
         const controls=name.trim()==='Nginx 网站'
-          ?page.locator('.module-header-actions'):moduleRoot;
+          ?page.locator('.module-header-actions')
+          :name.trim()==='定时任务'
+            ?moduleRoot.locator('.managed-task-group .task-heading-actions'):moduleRoot;
         const primary=controls.locator('.panel-control-primary').first();
         const neutral=standalone?controls.locator('button:not(.panel-control-primary)').first()
           :group.locator('button:not(.panel-control-primary)').first();
@@ -228,7 +230,7 @@ try {
         const system=schedule.locator('.system-task-group');
         await system.getByRole('heading',{name:'系统现有定时任务'}).waitFor();
         assert.equal(await schedule.getByRole('tab').count(),0,'the two sections are not tabs');
-        assert.deepEqual(await schedule.locator(':scope > .task-group > h3').allTextContents(),
+        assert.deepEqual(await schedule.locator(':scope > .task-group > .task-group-heading > h3').allTextContents(),
           ['Linux Panel 托管的定时任务','系统现有定时任务'],
           'managed section must be above existing system schedules');
         assert.equal(await schedule.locator(':scope > .task-group').count(),2,
@@ -248,6 +250,31 @@ try {
           'two independent cards must have a visible gap, not just a divider');
         assert.equal(await schedule.locator('.task-group .task-group').count(),0,
           'neither task card may contain an extra nested task card');
+        for(const [group,label,expected] of [
+          [managed,'Linux Panel 托管的定时任务',['新建任务','刷新数据']],
+          [system,'系统现有定时任务',['刷新数据']]
+        ]){
+          const heading=group.locator(':scope > .task-group-heading');
+          const actions=heading.locator(':scope > .task-heading-actions');
+          assert.deepEqual(await actions.getByRole('button').allTextContents(),expected,
+            label+': controls belong in the section header');
+          assert.equal(await group.locator('.panel-control-capsule').count(),0,
+            label+': independent commands are not segmented capsules');
+          const geometry=await heading.evaluate(node=>{
+            const a=node.querySelector('.task-heading-actions').getBoundingClientRect();
+            const group=node.parentElement.getBoundingClientRect();
+            const title=node.querySelector('h3').getBoundingClientRect();
+            return {rightGap:group.right-a.right,titleTop:title.top,controlsTop:a.top,
+              actionsTop:a.top,actionsBottom:a.bottom,groupTop:group.top,
+              headingBottom:node.getBoundingClientRect().bottom};
+          });
+          assert.ok(geometry.rightGap>=8 && geometry.rightGap<=40,
+            label+': controls are right-aligned within their own rounded card');
+          assert.ok(geometry.actionsTop<geometry.headingBottom+1,
+            label+': actions must be within the heading row');
+          if(width===1280)assert.ok(Math.abs(geometry.titleTop-geometry.controlsTop)<16,
+            label+': desktop actions should share the title line');
+        }
         const chrome=await schedule.locator('xpath=ancestor::section[contains(@class,"action-card")]').evaluate(node=>{
           const style=getComputedStyle(node);
           return {minimal:node.classList.contains('minimal-action'),
@@ -370,6 +397,13 @@ try {
         const firstRowOrder=await firstRow.locator(':scope > input,:scope > button')
           .evaluateAll(nodes=>nodes.map(node=>node.tagName));
         assert.deepEqual(firstRowOrder,['INPUT','BUTTON'],'the checkbox must precede the website name');
+        const checkboxInset=await firstRow.evaluate(node=>{
+          const outer=node.closest('.config-list-panel').getBoundingClientRect();
+          const checkbox=node.querySelector('.config-status-checkbox').getBoundingClientRect();
+          return checkbox.left-outer.left;
+        });
+        assert.ok(checkboxInset>=10,
+          'Nginx site status checkbox must have visible left padding inside the list border');
         const listWidth=await manager.locator('.config-list-panel').evaluate(
           node=>node.getBoundingClientRect().width);
         if(width===1280)assert.ok(listWidth<=280,
@@ -834,7 +868,22 @@ try {
           return r.left < -1 || r.right > innerWidth+1;
         }).map(n=>n.className));
       assert.deepEqual(outside,[],width+' '+name+' container overflow');
-      if(width<=730) await page.waitForFunction(()=>{
+      if(width<=730) {
+        const mobileHeader=await page.locator('.module-sidebar').evaluate(node=>{
+          const r=node.getBoundingClientRect(),style=getComputedStyle(node);
+          return {left:r.left,right:r.right,top:r.top,width:r.width,
+            radius:style.borderTopLeftRadius,borderLeft:style.borderLeftWidth,
+            borderRight:style.borderRightWidth,borderTop:style.borderTopWidth,
+            color:style.backgroundColor,viewport:innerWidth};
+        });
+        assert.ok(mobileHeader.left>=14 && mobileHeader.viewport-mobileHeader.right>=14,
+          width+': the mobile information header must have left/right outer gutters');
+        assert.ok(mobileHeader.top>=15,
+          width+': the mobile information header must have an upper gutter');
+        assert.ok(parseFloat(mobileHeader.radius)>=12 &&
+          [mobileHeader.borderLeft,mobileHeader.borderRight,mobileHeader.borderTop].every(x=>x==='1px'),
+          width+': the mobile information header must have its rounded outer border');
+        await page.waitForFunction(()=>{
         const header=document.querySelector('.module-sidebar').getBoundingClientRect();
         return Math.abs(document.querySelector('.module-content').getBoundingClientRect().top-header.bottom-24)<1;
       }).catch(async cause=>{
@@ -842,6 +891,7 @@ try {
         await page.screenshot({path:join(output,'header-gap-failure.png'),fullPage:true});
         throw cause;
       });
+      }
       const frames=await page.locator('.module-content').evaluate(content=>{
         const sidebar=document.querySelector('.module-sidebar');
         const side=sidebar.getBoundingClientRect(), box=content.getBoundingClientRect();
