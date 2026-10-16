@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,stat,chmod,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {promisify} from 'node:util';
+import {execFile} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {createV2RayOperations} from '../platform/privileged/v2ray-operations.js';
 import {createPrivilegedHandlers} from '../platform/privileged/handlers.js';
 import {ActionRegistry} from '../core/action-registry.js';
@@ -97,4 +101,70 @@ test('Ordinary ActionEngine rejects V2Ray service writes without privileged exec
   const engine=new ActionEngine(registry);
   await assert.rejects(engine.run('v2ray.save',{content:initial,revision:'a'.repeat(64)},
     'web',{authenticated:true,userId:'owner',channel:'web'}),{statusCode:503});
+});
+
+
+async function archiveFixture(t){
+  const root=await mkdtemp(join(tmpdir(),'lp-v2ray-install-fixture-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const payload=join(root,'payload');await mkdir(payload);
+  for(const name of ['v2ray','geoip.dat','geosite.dat'])await writeFile(join(payload,name),'synthetic asset: '+name);
+  const zip=join(root,'archive.zip');
+  execFileSync('python3',['-c',
+    'import zipfile,os,sys\nwith zipfile.ZipFile(sys.argv[1],"w") as z:\n for n in ["v2ray","geoip.dat","geosite.dat"]:z.write(os.path.join(sys.argv[2],n),arcname=n)',
+    zip,payload]);
+  const digest=createHash('sha256').update(await readFile(zip)).digest('hex');
+  const destination=join(root,'destination');await mkdir(destination);
+  const unitPath=join(root,'units/v2ray.service');
+  let rejectStart=false;
+  const commands=[];
+  const runner=async(command,args,options)=>{
+    commands.push([command,...args]);
+    if(command==='/usr/bin/unzip'){
+      try{const {stdout='',stderr=''}=await promisify(execFile)(command,args,options);
+        return {ok:true,output:String(stdout||stderr)};
+      }catch(e){return {ok:false,output:String(e.message)};}
+    }
+    if(args[0]==='version')return {ok:true,output:'V2Ray 5.47.0'};
+    if(args[0]==='show')return {ok:true,output:'not-found'};
+    if(args[0]==='enable'&&rejectStart)return {ok:false,output:'synthetic start failure'};
+    return {ok:true,output:''};
+  };
+  const ops=createV2RayOperations({requireRoot:false,root:destination,unitPath,
+    assetUrl:'https://fixture.invalid/archive.zip',assetSha:digest,runner,
+    download:async(_url,path)=>{await import('node:fs/promises').then(fs=>fs.copyFile(zip,path));}});
+  return {root,destination,unitPath,ops,commands,failStart:()=>{rejectStart=true;},archive:zip};
+}
+test('Uninstalled V2Ray requires explicit confirmation, verified release digest and loopback bootstrap',async t=>{
+  const {destination,unitPath,ops,commands}=await archiveFixture(t);
+  assert.equal((await ops.status()).installed,false);
+  await assert.rejects(ops.install({confirm:false}),{statusCode:400});
+  const installed=await ops.install({confirm:true});
+  assert.equal(installed.ok,true);
+  const info=await ops.status();assert.equal(info.installed,true);
+  const cfg=JSON.parse((await ops.read()).content);
+  assert.equal(cfg.inbounds[0].listen,'127.0.0.1');
+  assert.equal(cfg.inbounds[0].port,10808);
+  assert.equal(cfg.inbounds[0].protocol,'socks');
+  assert.ok(commands.some(parts=>parts[1]==='enable'&&parts.includes('v2ray.service')));
+  assert.equal((await stat(join(destination,'bin/v2ray'))).mode&0o777,0o755);
+  assert.equal((await stat(join(destination,'etc/v2ray/config.json'))).mode&0o777,0o644);
+  assert.equal((await stat(join(destination,'etc/v2ray'))).mode&0o777,0o755);
+  assert.equal((await stat(unitPath)).mode&0o777,0o644);
+  await assert.rejects(ops.install({confirm:true}),{statusCode:409});
+});
+test('Failed V2Ray bootstrap rolls back installed files and fails closed on hash mismatch',async t=>{
+  const one=await archiveFixture(t);
+  one.failStart();
+  await assert.rejects(one.ops.install({confirm:true}),{statusCode:503});
+  await assert.rejects(stat(join(one.destination,'bin/v2ray')),{code:'ENOENT'});
+  await assert.rejects(stat(join(one.destination,'etc/v2ray/config.json')),{code:'ENOENT'});
+  await assert.rejects(stat(one.unitPath),{code:'ENOENT'});
+  assert.ok(one.commands.some(parts=>parts[1]==='daemon-reload'));
+  const another=await archiveFixture(t);
+  const bad=createV2RayOperations({requireRoot:false,root:another.destination,unitPath:another.unitPath,
+    assetSha:'0'.repeat(64),assetUrl:'https://fixture.invalid/archive.zip',
+    download:async(_url,path)=>{await import('node:fs/promises').then(fs=>fs.copyFile(another.archive,path));}});
+  await assert.rejects(bad.install({confirm:true}),{statusCode:503});
+  await assert.rejects(stat(join(another.destination,'bin/v2ray')),{code:'ENOENT'});
 });
