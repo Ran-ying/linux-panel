@@ -36,12 +36,14 @@ function parseConfig(content){
 /** Fixed filesystem and executable allowlist. Alternate roots are for disposable tests only. */
 export function createV2RayOperations({
   requireRoot=true,root='/usr/local',systemctl='/bin/systemctl',runner=execSafe,
-  download=null,assetUrl=ASSET_URL,assetSha=PINNED_SHA256
+  download=null,assetUrl=ASSET_URL,assetSha=PINNED_SHA256,
+  unitPath='/etc/systemd/system/v2ray.service'
 }={}){
-  if(requireRoot&&(root!=='/usr/local'||systemctl!=='/bin/systemctl'||assetUrl!==ASSET_URL||assetSha!==PINNED_SHA256))
+  if(requireRoot&&(root!=='/usr/local'||systemctl!=='/bin/systemctl'||assetUrl!==ASSET_URL||
+    assetSha!==PINNED_SHA256||unitPath!=='/etc/systemd/system/v2ray.service'))
     throw Error('Privileged V2Ray paths/installer are fixed');
   const localBin=join(root,'bin/v2ray'),localConfig=join(root,'etc/v2ray/config.json');
-  const localAsset=join(root,'share/v2ray'),serviceFile='/etc/systemd/system/v2ray.service';
+  const localAsset=join(root,'share/v2ray'),serviceFile=unitPath;
   const alternativeBin=requireRoot?'/usr/bin/v2ray':join(root,'bin/v2ray-apt');
   const alternativeConfig=requireRoot?'/etc/v2ray/config.json':join(root,'etc/v2ray/config-apt.json');
   const guard=()=>{if(requireRoot && process.getuid?.()!==0)throw error('需要已启用的 V2Ray root Action 执行器',503);};
@@ -190,6 +192,10 @@ export function createV2RayOperations({
     const existing=await which();
     if(existing.binary || await exists(localConfig) || await exists(serviceFile))
       throw error('发现 V2Ray 程序、配置或同名服务，拒绝覆盖；请手动确认现有安装',409);
+    // Also refuse a systemd unit in /lib or /usr/lib instead of shadowing it.
+    const unit=await runner(systemctl,['show','--property=LoadState','--value','v2ray.service']);
+    if(unit.ok && unit.output.trim()!=='' && unit.output.trim()!=='not-found')
+      throw error('发现已有 v2ray.service，拒绝覆盖',409);
     if(requireRoot && !await exists('/usr/bin/unzip'))throw error('缺少 unzip，无法解压官方包',503);
     const folder=await fs.mkdtemp(join(tmpdir(),'lp-v2ray-install-')),zip=join(folder,'release.zip'),out=join(folder,'unpacked');
     const added=[];
