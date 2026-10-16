@@ -136,6 +136,16 @@ try {
         const raw=JSON.parse(await card.locator('.raw-json .raw-output').innerText());
         assert.ok(Object.values(raw).every(fields=>Object.values(fields).every(output=>typeof output.stdout==='string' && typeof output.stderr==='string' && output.exitCode===0)));
         await card.getByRole('button',{name:'可视化',exact:true}).click();
+        if(name.trim()==='系统概览'){
+          const resource=page.locator('.action-card').nth(1);
+          await resource.getByRole('button',{name:'原始数据',exact:true}).click();
+          await resource.locator('.raw-command-table').first().waitFor();
+          assert.equal(await resource.locator('.raw-command-table tbody tr').count(),4,'CPU and memory must retain all original command keys');
+          await resource.getByRole('button',{name:'可视化',exact:true}).click();
+        }
+        await card.getByRole('button',{name:'原始数据',exact:true}).click();
+        await page.screenshot({path:join(output,'raw-commands-'+width+'-'+name.trim()+'.png'),fullPage:true});
+        await card.getByRole('button',{name:'可视化',exact:true}).click();
         const sizes=await card.locator('.result-controls button').evaluateAll(nodes=>nodes.map(n=>{
           const s=getComputedStyle(n),r=n.getBoundingClientRect();
           return [r.height,s.fontSize,s.fontWeight,s.lineHeight,s.padding,s.borderRadius];
@@ -167,6 +177,8 @@ try {
         });
         assert.equal(controls,true,'refresh must precede visual/JSON controls in result section');
       }
+      // Editing and opening the raw JSON disclosure can scroll the page; measure the initial header gutter at the top.
+      await page.evaluate(()=>window.scrollTo(0,0));
       // All module containers must fit; tables/nav may scroll internally.
       const outside=await page.locator('.module-content, .action-card, .settings-section, .sidebar-brand, .module-nav, .sidebar-settings')
         .evaluateAll(nodes=>nodes.filter(n=>{
