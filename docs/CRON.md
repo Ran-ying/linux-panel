@@ -11,6 +11,8 @@ Linux Panel 统一展示常见 Linux 系统调度来源，而不是只列出它�
 | `/var/spool/cron/crontabs/*`（各用户的 crontab） | 是 | 标准五字段逐项编辑/启用/停用/删除，通过正式 `crontab -u` 安装，绝不直接写 spool |
 | `/etc/cron.hourly,daily,weekly,monthly` | 是：实际周期脚本及可执行状态 | 只读；修改请用文件管理 |
 | 系统范围 `*.timer` | 是：运行状态、对应服务、下次执行时间 | 能启停的 timer 通过固定 `systemctl enable/disable --now` 操作；静态/特殊 timer 只读 |
+| `/etc/anacrontab` | 是：Anacron 任务 | 只读；使用系统配置编辑 |
+| `atq`（若已安装） | 是：单次计划任务 | 只读 |
 | Linux Panel 自有 `/etc/cron.d/linux-panel` | 是：单独分组 | 新建、编辑、启停、删除，执行用户固定 `linuxpanel` |
 
 此范围不声称涵盖所有第三方计划任务系统或每个用户独立 session 的 systemd --user timer；不计算不存在的下次执行时间。面板只管理已识别的条目；复杂宏规则、包维护的周期脚本、静态 timer 为只读。避免混淆系统已有任务与 Linux Panel 自己创建的任务。
