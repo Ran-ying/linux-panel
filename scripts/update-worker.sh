@@ -66,6 +66,133 @@ record(){
   mv -fT -- "$tmp" "$RESULT" || { rm -f -- "$tmp"; return 1; }
   durable_sync dir "$result_dir"
 }
+# Fixed root-owned privileged package release management. This logic runs
+# exclusively in the immutable installed Broker; NEVER execute a Shell script
+# or JavaScript helper from the mutable Git checkout as root.
+PRIV_ROOT=/usr/local/lib/linux-panel-privileged
+PRIV_RELEASES="$PRIV_ROOT/releases"
+PRIV_CURRENT="$PRIV_ROOT/current"
+# Only committed JSON, parsed by the immutable root-owned Python interpreter,
+# may enumerate known relative .js file basenames; no arbitrary root paths.
+priv_manifest(){
+  local src="$1" dst="$2"
+  /usr/bin/python3 -I - "$src" > "$dst" <<'PY'
+import json,re,sys
+with open(sys.argv[1],encoding='utf-8') as f:
+    m=json.load(f)
+if set(m)!={'version','files','dependencies'} or m['version']!=1:
+    raise SystemExit('Unsupported root package manifest')
+files,deps=m['files'],m['dependencies']
+if not isinstance(files,list) or not 2<=len(files)<=40 or len(set(files))!=len(files) or \
+   not {'server.js','handlers.js'}.issubset(files):
+    raise SystemExit('Invalid root package source list')
+if not isinstance(deps,list) or not 1<=len(deps)<=20 or len(set(deps))!=len(deps):
+    raise SystemExit('Invalid root package dependencies')
+if any(not isinstance(f,str) or not re.fullmatch(r'[a-z][a-z0-9-]*\.js',f) for f in files):
+    raise SystemExit('Unsafe root source basename')
+if any(not isinstance(d,str) or not re.fullmatch(r'[a-z][a-z0-9-]*',d) for d in deps):
+    raise SystemExit('Unsafe root dependency basename')
+for f in files:print('file '+f)
+for d in deps:print('dep '+d)
+PY
+}
+
+priv_present(){
+  [[ -d "$PRIV_ROOT" && ! -L "$PRIV_ROOT" ]]
+}
+priv_release(){
+  local sha="$1"
+  [[ "$sha" =~ ^[a-f0-9]{40}$ && -d "$PRIV_RELEASES/$sha" &&
+     ! -L "$PRIV_RELEASES/$sha" &&
+     -f "$PRIV_RELEASES/$sha/.ready" &&
+     ! -L "$PRIV_RELEASES/$sha/.ready" &&
+     "$(cat "$PRIV_RELEASES/$sha/.ready")" == "$sha" ]]
+}
+priv_current_is(){
+  [[ -L "$PRIV_CURRENT" && "$(readlink "$PRIV_CURRENT")" == "releases/$1" ]]
+}
+priv_preflight(){
+  if ! priv_present;then
+    [[ ! -e "$PRIV_ROOT" && ! -L "$PRIV_ROOT" ]]
+    return
+  fi
+  [[ "$(stat -c %u "$PRIV_ROOT")" -eq 0 &&
+     -d "$PRIV_RELEASES" && ! -L "$PRIV_RELEASES" &&
+     "$(stat -c %u "$PRIV_RELEASES")" -eq 0 &&
+     -L "$PRIV_CURRENT" ]] || return 1
+  priv_current_is "$OLD" && priv_release "$OLD"
+}
+priv_stage(){
+  local sha="$1" pkg file source target
+  priv_present || return 0
+  [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || return 1
+  pkg="$PRIV_RELEASES/$sha"
+  [[ ! -L "$pkg" ]] || return 1
+  if [[ -d "$pkg" ]];then
+    [[ "$(stat -c %u "$pkg")" -eq 0 ]] || return 1
+    rm -rf -- "$pkg" || return 1
+  fi
+  (umask 077; mkdir -- "$pkg" && mkdir -- "$pkg/node_modules") || return 1
+  as_updater git -C "$ROOT" show "$sha:platform/privileged/package-manifest.json" > "$pkg/manifest.json" || return 1
+  priv_manifest "$pkg/manifest.json" "$pkg/.entries" || return 1
+  while read -r kind file;do
+    [[ "$kind" == file ]] || continue
+    # Read bytes from the pinned Git object, not potentially mutated
+    # files in the working tree after npm install/test lifecycle hooks.
+    as_updater git -C "$ROOT" show "$sha:platform/privileged/$file" > "$pkg/$file" || return 1
+    chmod 0600 "$pkg/$file" || return 1
+  done < "$pkg/.entries"
+  printf '{"type":"module"}\n' > "$pkg/package.json" || return 1
+  while read -r kind file;do
+    [[ "$kind" == dep ]] || continue
+    source="$ROOT/node_modules/$file"
+    target="$pkg/node_modules/$file"
+    [[ -d "$source" && ! -L "$source" &&
+       "$(stat -c %U "$source")" == "$USER" ]] || return 1
+    # Never dereference symlinked npm package trees as root.
+    [[ -z "$(find "$source" -type l -print -quit)" ]] || return 1
+    cp -R -- "$source" "$target" || return 1
+  done < "$pkg/.entries"
+  chown -R root:root "$pkg" || return 1
+  chmod -R go-rwx "$pkg" || return 1
+  /opt/node24/bin/node --input-type=module -e '
+    const h=await import(process.argv[1]);
+    const map=h.createPrivilegedHandlers();
+    if(!(map instanceof Map) || map.size<1) process.exit(1);
+  ' "file://$pkg/handlers.js" || return 1
+  printf '%s\n' "$sha" > "$pkg/.ready" || return 1
+  chmod 0600 "$pkg/.ready" || return 1
+  # Persist the complete release BEFORE publishing its symlink.
+  sync -f "$pkg" || return 1
+  durable_sync dir "$PRIV_RELEASES"
+}
+priv_switch(){
+  local sha="$1" tmp
+  priv_present || return 0
+  priv_release "$sha" || return 1
+  if ! priv_current_is "$sha";then
+    systemctl stop linux-panel-privileged.service || return 1
+    tmp="$PRIV_ROOT/.current.$sha"
+    [[ ! -e "$tmp" && ! -L "$tmp" ]] || return 1
+    ln -s "releases/$sha" "$tmp" || return 1
+    mv -fT -- "$tmp" "$PRIV_CURRENT" || return 1
+    durable_sync dir "$PRIV_ROOT" || return 1
+  fi
+  systemctl restart linux-panel-privileged.service &&
+    systemctl is-active --quiet linux-panel-privileged.service &&
+    [[ -S /run/linux-panel-privileged/executor.sock ]]
+}
+priv_recover_old(){
+  priv_present || return 0
+  priv_switch "$OLD"
+}
+priv_verify_target(){
+  priv_present || return 0
+  priv_current_is "$TARGET" && priv_release "$TARGET" &&
+    systemctl is-active --quiet linux-panel-privileged.service &&
+    [[ -S /run/linux-panel-privileged/executor.sock ]]
+}
+
 MODE=normal
 if [[ "$#" -eq 1 && "$1" == --recover-only ]];then MODE=recover
 elif [[ "$#" -ne 0 ]];then exit 2;fi
@@ -274,7 +401,8 @@ recover(){
     # A durable success result is not proof Web can start after reboot.
     # The recovery unit has no Before=Web ordering; the journal guard blocks
     # untrusted starts, and only this root worker grants a temporary permit.
-    if ensure_web_read_access && start_panel &&
+    if priv_switch "$TARGET" && priv_verify_target &&
+       ensure_web_read_access && start_panel &&
        systemctl is-active --quiet linux-panel.service && panel_healthy;then
       finish_transaction || return 1
       log "Previously committed healthy deployment $ID cleaned up"
@@ -317,6 +445,9 @@ recover(){
   fi
   # Never request a start if Git, dependencies or private state failed
   # recovery: serving a partially restored app would hide a failed rollback.
+  if ((restored==1));then
+    if ! priv_recover_old;then restored=0;fi
+  fi
   if ((restored==1));then
     # No ordering edge to Web: the root journal ConditionPathExists guard
     # denies ordinary boot and this worker alone grants the volatile permit.
@@ -370,6 +501,11 @@ EXPECTED="$(cat "$EXPECTED_REMOTE")"
 [[ -z "$(as_updater git -C "$ROOT" status --porcelain)" ]] || { record failed;exit 2; }
 OLD="$(as_updater git -C "$ROOT" rev-parse HEAD)"
 [[ "$OLD" =~ ^[a-f0-9]{40}$ ]] || { record failed;exit 2; }
+if ! priv_preflight;then
+  log "Installed root package is not versioned at old SHA; explicit operator bootstrap required"
+  record failed
+  exit 2
+fi
 log "Fetch pinned origin/main commit $TARGET"
 as_updater git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
 REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
@@ -459,11 +595,16 @@ build(){
 rollback(){ recover; }
 if ! build;then rollback;exit 1;fi
 if ! ensure_web_read_access;then rollback;exit 1;fi
+# Only the immutable root worker copies the pinned/reviewed handler set. A
+# failed privileged package swap must roll back the app and package together.
+if ! priv_stage "$TARGET" || ! priv_switch "$TARGET";then
+  rollback;exit 1
+fi
 if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then
   rollback
   exit 1
 fi
-if ! panel_healthy;then
+if ! panel_healthy || ! priv_verify_target;then
   rollback
   exit 1
 fi
