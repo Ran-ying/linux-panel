@@ -6,7 +6,7 @@
 
 Web 设置开启 MCP、按需开启客户端注册；OAuth Authorization Code + PKCE S256，管理员登录批准整个连接。有效 grant 可使用全部 exposure.mcp 的 read Action；更新申请/直接执行另有全局策略。不逐客户端/逐工具分配 Scope 或白名单。撤销整个 grant、关闭 MCP 或相应更新策略立即生效；新全局暴露 Action 对已有有效客户端可见。
 
-资源受众绑定、Bearer/refresh、offline_access、注册与撤销由适配器处理。旧 system:read/storage:read 等 Scope 兼容保留，不代表当前逐工具访问控制。
+资源受众绑定、Bearer/refresh、offline_access、注册与撤销由适配器处理。旧 Scope 可存在于历史授权/发现元数据中，不代表当前逐工具访问控制；新授权页面以当前全局能力为准，不应请求已退役模块的 Scope。
 
 ## 当前业务工具
 
