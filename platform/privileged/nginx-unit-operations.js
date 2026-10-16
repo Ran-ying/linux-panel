@@ -44,7 +44,7 @@ export function createNginxUnitOperations({
     const raw=await fs.readFile(unitPath,'utf8');
     for(const assertion of [
       /^User=root$/m,/^Group=root$/m,
-      /^ExecStart=\/[A-Za-z0-9._/-]*\/node \/usr\/local\/lib\/linux-panel-privileged\/current\/server\.js$/m,
+      /^ExecStart=(?:\/[A-Za-z0-9._-]+)+\/node \/usr\/local\/lib\/linux-panel-privileged\/current\/server\.js$/m,
       /^NoNewPrivileges=true$/m,
       /^RestrictAddressFamilies=AF_UNIX(?: AF_INET AF_INET6)?$/m,
       /^CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_FSETID(?: CAP_NET_BIND_SERVICE)?$/m
