@@ -128,7 +128,7 @@ export function createSystemCronOperations({etc='/etc',spool='/var/spool/cron/cr
         if(!match)continue;
         tasks.push({id:sha('at\0'+match[1]),revision:sha(data),sourceType:'at-job',
           source:'atq',name:'at #'+match[1],owner:match[4],expression:match[2],
-          command:'',enabled:true,editable:false,control:'none',nextRun:'',
+          command:'',enabled:true,editable:false,control:'at',nextRun:'',
           detail:'单次 at 任务；目前只读',line:0,raw:''});
       }
     }catch(e){if(e.code!=='ENOENT')addWarning('atq',e);}
@@ -172,6 +172,13 @@ export function createSystemCronOperations({etc='/etc',spool='/var/spool/cron/cr
       if(!record)throw fail('任务已不存在，请刷新',404);
       if(revision!==record.revision)throw fail('定时任务已变化，请刷新',409);
       if(!['enable','disable','edit','remove'].includes(operation))throw fail('不支持的操作');
+      if(record.control==='at'){
+        if(operation!=='remove')throw fail('at 一次性任务仅支持删除',400);
+        const number=/^at #([0-9]+)$/.exec(record.name)?.[1];
+        if(!number)throw fail('at 任务 ID 无效');
+        await execute('/usr/bin/atrm',[number]);
+        return {id,revision};
+      }
       if(record.control==='timer'){
         if(operation!=='enable'&&operation!=='disable')throw fail('systemd timer 仅提供启停，请使用 systemd 单元配置编辑调度',400);
         if(operation==='enable'&&record.enabled||operation==='disable'&&!record.enabled)
