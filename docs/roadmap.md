@@ -6,6 +6,10 @@
 
 ActionEngine/可信模块/schema；Web/MCP 共享执行；管理员/TOTP/可配置 30 天会话；可信个人 MCP 全局策略；受限 main SHA 更新/Broker/回滚恢复；响应式 PWA/固定移动导航/浅色 Auto 深色；可编辑普通用户命令与原始输出；真正合并的系统 Action、通用 sections renderer、面板优先模块规范。
 
+## 已记录的协议缺口
+
+普通 MCP 读取工具尚未把 Action.inputSchema 映射到工具输入，也未转发实际参数，目前仅能无参数调用。优先补齐 schema 映射和参数转发，并测试必填/可选/嵌套/数组、非法参数拒绝及 Web/MCP 一致性；更新工具的专用参数适配不算通用实现。此项仅记录，尚未修复。
+
 ## 后续
 
 1. 按真实使用反馈做手机设备 QA，浏览器截图不替代 iPhone/Android。

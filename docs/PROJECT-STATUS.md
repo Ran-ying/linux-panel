@@ -20,6 +20,12 @@
 
 部署结果只在 [Issue #54 最新记录](https://github.com/Ran-ying/linux-panel/issues/54) 维护一份，运行中的准确 SHA 由 MCP panel.update.status 返回。本页不反复缓存会过时的“当前服务器版本”，也不以 PR 合并或 queued 推断部署成功。每次部署必须核对持久化 SHA/status 和服务健康，再更新交接记录。
 
+## 已知不足：MCP 读取工具的输入参数映射（已记录，未实现）
+
+普通读取工具目前在 extensions/mcp/index.js 使用空的严格输入 Schema，并把 {} 传给 ActionEngine，没有自动使用 Action.inputSchema，也没有转发调用参数。无参数 Action 正常；带可选参数的读取无法传参，带必填参数的 Action 即使进入工具清单也无法完成正常调用。更新申请/直接更新是独立手写参数适配，不代表通用映射已经实现。
+
+后续工作：定义并验证 Action JSON Schema 到 MCP 工具输入的映射、将实际参数传给同一 ActionEngine，覆盖必填/可选/嵌套/数组/边界/未知字段和 Web/MCP 一致性测试。暂不扩展执行权限或新增写策略。在补齐前，模块作者不要宣称带参数读取已获得完整 MCP 支持。
+
 ## 下一步
 
 真实 iPhone/Android QA、更多诊断模块、通用复杂输入表单。业务写操作需独立策略。未实现不可信插件沙箱、多管理员/分布式状态，未做独立安全审计。历史 v0.5 计划的待办不代表当前仍未发布。
