@@ -140,7 +140,7 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
         for(const name of ['save','remove']){
           const id=item.operations?.[name],target=visible.get(id);
           if(typeof id!=='string' || !id.startsWith(module.id+'.') || !target ||
-            target.kind!=='write' || target.exposure?.web!==true ||
+            target.kind!=='write' ||
             target.inputSchema?.properties?.revision?.type!=='string')
             throw new Error('Scheduled task operation must reference an exposed module write Action');
         }
