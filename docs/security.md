@@ -44,7 +44,7 @@
 
 管理员可以在 Action 的“信息 → 命令”中修改命令 value。key 由模块定义，保持输出契约稳定。保存只更新私有状态，后续 Web 刷新和已授权 MCP 读取使用相同配置；修改命令本身不执行命令。该配置入口只提供给已登录 Web 管理员，检查 Origin、CSRF、Action 暴露及权限，审计只记录 Action ID，不记录命令文本。
 
-Linux 的 system.info（含磁盘）、system.resources（含 CPU/内存）、services.list 默认使用终端命令，通过 `/bin/sh -c` 执行；每个命令限制 5 秒、输出 128 KiB，超时由 coreutils timeout 终止。执行拒绝 UID 0，不使用 sudo，不经过 root Broker，也不增加服务账户权限。“读取”是 Action 的用途分类，不是对自定义命令的只读沙箱保证：管理员保存的命令可以修改服务账户权限内的数据。其他平台保留原生读取方式，命令编辑器显示不可编辑。
+Linux 的 system.info（基本信息）、system.resources（含 CPU/内存/磁盘）、services.list 默认使用终端命令，通过 `/bin/sh -c` 执行；每个命令限制 5 秒、输出 128 KiB，超时由 coreutils timeout 终止。执行拒绝 UID 0，不使用 sudo，不经过 root Broker，也不增加服务账户权限。“读取”是 Action 的用途分类，不是对自定义命令的只读沙箱保证：管理员保存的命令可以修改服务账户权限内的数据。其他平台保留原生读取方式，命令编辑器显示不可编辑。
 
 命令输出仍经模块解析及 Action 输出 schema 校验；格式错误会在刷新时报告。配置位于私有状态文件的 actionCommands 中，随已有状态备份/恢复；普通面板设置不会覆盖它。命令内容可能包含管理员自己的敏感参数，不应复制到公开日志或 Issue。
 
