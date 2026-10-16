@@ -1,0 +1,7 @@
+{
+  "id": "v2ray",
+  "name": "V2Ray",
+  "version": "0.1.0",
+  "entry": "./index.js",
+  "dependencies": []
+}

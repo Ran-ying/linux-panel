@@ -30,6 +30,9 @@ export async function startPrivilegedServer({socketPath,groupId,handlers=createP
       let action='invalid';
       try{
         const request=JSON.parse(buffer.slice(0,end));action=request.action;
+        // The one fixed official-release installation can take longer than a
+        // filesystem Action; it is still a schema-checked root handler.
+        if(request.action==='v2ray.install')socket.setTimeout(180000,()=>socket.destroy());
         const result=await dispatchPrivileged(request,handlers);
         audit({event:'privileged.execute',action,ok:true});socket.end(JSON.stringify({ok:true,result})+'\n');
       }catch(error){

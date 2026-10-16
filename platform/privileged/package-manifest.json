@@ -11,7 +11,9 @@
     "nginx-operations.js",
     "nginx-unit-contracts.js",
     "nginx-unit-operations.js",
-    "cron-system-operations.js"
+    "cron-system-operations.js",
+    "v2ray-contracts.js",
+    "v2ray-operations.js"
   ],
   "dependencies": [
     "ajv",
