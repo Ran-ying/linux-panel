@@ -11,7 +11,7 @@ Usage: sudo bash scripts/install-privileged-executor.sh --enable [--node-bin /op
        sudo bash scripts/install-privileged-executor.sh --disable
        bash scripts/install-privileged-executor.sh --help
 
-Enables reviewed root file operations for Web and the trusted linuxpanel OS
+Enables reviewed root file and managed Cron operations for Web and the trusted linuxpanel OS
 identity. Terminal/PTY and editable collectors share that UID and can call the
 same fixed root file Actions directly; Web-only is NOT an OS isolation boundary.
 System file administration is a broad root capability. No root Shell endpoint.
@@ -37,7 +37,7 @@ if [[ "$LP_MODE" == --disable ]];then
   rm -f "$LP_DROPIN"
   systemctl daemon-reload
   systemctl restart linux-panel.service
-  echo 'Root Action channel disabled; file Actions use the ordinary service identity.'
+  echo 'Root Action channel disabled; file Actions use the ordinary service identity and managed Cron is unavailable.'
   exit 0
 fi
 id linuxpanel >/dev/null
@@ -57,7 +57,7 @@ PY
 install -d -o root -g root -m 0755 /usr/local/lib
 LP_STAGE=$(mktemp -d /usr/local/lib/.linux-panel-privileged.XXXXXX)
 trap 'rm -rf "$LP_STAGE"' EXIT
-for file in server.js handlers.js file-contracts.js file-operations.js;do
+for file in server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js;do
   install -o root -g root -m 0600 "$LP_ROOT/platform/privileged/$file" "$LP_STAGE/$file"
 done
 printf '{"type":"module"}\n' > "$LP_STAGE/package.json"
@@ -105,4 +105,4 @@ if(result.accessMode!=="root")process.exit(1);
 ' "file://$LP_ROOT/platform/privileged/client.js"
 systemctl restart linux-panel.service
 systemctl is-active --quiet linux-panel.service
-echo 'Enabled reviewed root Actions; Web remains linuxpanel. The same UID terminal is trusted to use these file operations.'
+echo 'Enabled reviewed root Actions; Web remains linuxpanel. The same UID terminal is trusted to use these controlled operations.'
