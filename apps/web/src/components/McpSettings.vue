@@ -87,7 +87,7 @@ onMounted(load);
         允许 MCP 直接执行受限面板更新（无需每次 Web 审批）
       </label>
       <p class="muted small">直接更新还需生产 Broker 已启用。开启后所有已登录 MCP 客户端，包括以前连接的客户端，都能使用直接更新工具；关闭后立即禁止。更新仍只接受受信任的 Git 提交，并经过 Broker 验证。</p>
-      <p class="muted small">系统等只读 Action 按模块的 MCP 暴露声明自动可用，无需逐项勾选。</p>
+      <p class="muted small">模块声明的读取工具和终端命令能力对已授权客户端自动可用，无需逐项勾选。</p>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="message" class="notice success-notice" role="status">{{ message }}</p>
       <button class="form-button primary" :disabled="busy" type="button" @click="save">保存 MCP 设置</button>
