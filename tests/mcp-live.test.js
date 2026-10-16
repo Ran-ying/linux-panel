@@ -62,7 +62,7 @@ test('real HTTP MCP: global read tools even with legacy narrow grant, revoke who
   assert.ok(found.data.result?.tools, JSON.stringify(found.data));
   const exposed=found.data.result.tools.map(x=>x.name);
   assert.ok(exposed.includes('system.info'));
-  assert.ok(exposed.includes('storage.usage'),'legacy checkbox cannot hide an MCP-exposed read Action');
+  assert.ok(exposed.includes('system.resources'),'legacy checkbox cannot hide an MCP-exposed read Action');
   assert.ok(exposed.includes('services.list'),'old system-only OAuth grant cannot hide new tools');
   const result=await rpc({method:'tools/call',params:{name:'system.info',arguments:{}}});
   assert.equal(result.status,200,JSON.stringify(result.data));
