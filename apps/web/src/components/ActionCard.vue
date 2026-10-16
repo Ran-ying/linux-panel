@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
 import ResultRenderer from './ResultRenderer.vue';
 
 const props=defineProps({
@@ -25,14 +25,14 @@ function fitCommand(node) {
 const vAutoHeight={
   mounted(node) {
     const fit=()=>fitCommand(node);
-    let width=node.clientWidth;
+    let width=-1;
     const observer=new ResizeObserver(()=>{
       if(node.clientWidth!==width){width=node.clientWidth;fit();}
     });
     autoHeightState.set(node,{fit,observer});
     node.addEventListener('input',fit);
     observer.observe(node);
-    fit();
+    nextTick(()=>{if(node.isConnected)fit();});
   },
   updated:fitCommand,
   beforeUnmount(node) {
