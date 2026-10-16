@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addAudit } from '../../platform/state-store.js';
-import { mcpPolicy, exposedReadActions } from '../../platform/mcp-policy.js';
+import { mcpPolicy, exposedMcpActions } from '../../platform/mcp-policy.js';
 
 export const hash = value => createHash('sha256').update(value).digest('hex');
 export const secret = () => randomBytes(32).toString('base64url');
@@ -19,7 +19,7 @@ export function allowedScopes(registry, state) {
   if (!mcpPolicy(state).enabled) return [];
   // Scopes describe the server-wide capability set, not per-client entitlements.
   // All authenticated owner-approved MCP clients get all currently exposed Actions.
-  const scopes = [...new Set(exposedReadActions(registry).map(a => a.permission))];
+  const scopes = [...new Set(exposedMcpActions(registry).map(a => a.permission))];
   if (mcpPolicy(state).allowUpdates === true) scopes.push('panel:update');
   // A distinct high-impact scope is never implied by panel:update and is
   // available only when the privileged Broker has been explicitly activated.
