@@ -27,6 +27,10 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
 - 每次变更后检查 Nginx 语法；失败即恢复原文件与链接。影响启用站点的操作成功通过 \`nginx -t\` 后才调用固定 \`systemctl reload nginx.service\`。重载失败会恢复文件，尝试重新加载原配置并报告状态。
 - 重载失败、进程崩溃或系统断电不能保证恢复系统运行状态；**这是同步操作中的最佳努力恢复，并非持久化恢复日志或真正的跨进程事务**。务必事先了解主机恢复渠道。
 
+## systemd 权限
+
+`nginx -t` 会在检查已有 listen 指令时创建 AF_INET/AF_INET6 socket，即使它不会对公网启动新的 Nginx master。root executor 因而允许 `AF_UNIX AF_INET AF_INET6` 和 `CAP_NET_BIND_SERVICE`，保留其它 systemd 沙箱约束；这项扩大需单独审查并由操作员显式重新安装固定 root handler + unit 生效。未启动任意 TCP 服务，业务 Action 不接受网络地址参数。
+
 ## 重要限制
 
 目录清单是有限的文件扫描：每目录上限 200 项、每配置文件 64 KiB。解析出 \`server_name\`、\`listen\` 的字符串**仅为摘要**，并非完整 Nginx parser 或 \`nginx -T\` 生效配置。尤其 conf.d 仅是配置候选，需看 nginx.conf include。启用的站点还可能因 include 或其它复杂条件实际不生效。

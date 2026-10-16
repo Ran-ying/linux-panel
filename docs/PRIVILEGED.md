@@ -81,6 +81,8 @@ CI 的 npm test 验证输入/未知操作/通道边界、HTTP 鉴权与 CSRF、s
 
 ## Nginx 网站管理（新模块须额外安装）
 
+为使固定命令 nginx -t 在沙箱内验证 listen 指令，root unit 须允许 AF_INET/AF_INET6 和 CAP_NET_BIND_SERVICE；其它固定 Handler 与 Web/MCP 授权边界不因此变化。
+
 Nginx 模块使用固定 root handler `nginx.sites/read/check/apply`，只允许校验的站点名，写操作仅影响 sites-available 常规文件及同名 sites-enabled 链接。修改采用 revision、原子替换、nginx -t 验证；涉及已启用站点时再用固定 systemctl reload nginx.service，并在语法校验/重载失败时尝试恢复。Web 使用受控 root 通道，MCP 仅只读普通账户操作，不暴露特权写入。普通面板更新不自动更新 root handler，仍须操作员审查后显式重装。详见 [NGINX.md](NGINX.md)。
 
 ## 托管 Cron 定时任务
