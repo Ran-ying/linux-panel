@@ -3,14 +3,19 @@ import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
 import ResultRenderer from './ResultRenderer.vue';
 
 const props=defineProps({
-  action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
+  action:{type:Object,required:true},displayTitle:{type:String,default:''},companions:{type:Array,default:()=>[]},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
+const entries=computed(()=>[{action:props.action,presentation:props.presentation},...props.companions]);
+const title=computed(()=>props.displayTitle || props.action.title);
+const rawData=computed(()=>Object.fromEntries((response.value?.parts ?? [])
+  .filter(part=>part.content.raw).map(part=>[part.action.id,part.content.raw])));
+const editableIds=ref([]);
 const emit=defineEmits(['unauthorized']);
 const inputText=ref('{}'),response=ref(null),error=ref(''),busy=ref(false);
 const view=ref('visual'),autoRefresh=ref(false),infoTab=ref(null);
 const fields=ref([]),commandsLoaded=ref(false),commandsEditable=ref(false);
 const commandBusy=ref(false),commandError=ref(''),commandMessage=ref('');
-const refreshSeconds=computed(()=>(props.presentation?.refreshIntervalMs ?? 0)/1000);
+const refreshSeconds=computed(()=>Math.max(...entries.value.map(entry=>entry.presentation?.refreshIntervalMs ?? 0))/1000);
 const hasInputFields=computed(()=>Object.keys(props.action.inputSchema?.properties ?? {}).length>0);
 let refreshTimer,controller,commandController;
 let generation=0,disposed=false;
@@ -43,12 +48,11 @@ const vAutoHeight={
   }
 };
 
-async function commandRequest(method='GET') {
-  commandController=new AbortController();
-  const reply=await fetch('/api/actions/'+encodeURIComponent(props.action.id)+'/commands',{
+async function commandRequest(method='GET', action=props.action) {
+  const reply=await fetch('/api/actions/'+encodeURIComponent(action.id)+'/commands',{
     method,signal:commandController.signal,
     headers:method==='PUT'?{'Content-Type':'application/json','X-Panel-CSRF':props.csrf}:{},
-    ...(method==='PUT'?{body:JSON.stringify({commands:Object.fromEntries(fields.value.map(field=>[field.key,field.value]))})}:{})
+    ...(method==='PUT'?{body:JSON.stringify({commands:Object.fromEntries(fields.value.filter(field=>field.actionId===action.id).map(field=>[field.key,field.value]))})}:{})
   });
   const payload=await reply.json();
   if(reply.status===401)emit('unauthorized');
@@ -58,21 +62,29 @@ async function commandRequest(method='GET') {
 async function selectInfo(tab) {
   infoTab.value=infoTab.value===tab?null:tab;
   if(infoTab.value!=='commands' || commandsLoaded.value || commandBusy.value)return;
+  commandController=new AbortController();
   commandBusy.value=true;commandError.value='';
   try {
-    const config=await commandRequest();
+    const configs=await Promise.all(entries.value.map(async ({action})=>({action,config:await commandRequest('GET',action)})));
     if(disposed)return;
-    fields.value=config.fields;commandsEditable.value=config.editable;commandsLoaded.value=true;
+    editableIds.value=configs.filter(item=>item.config.editable).map(item=>item.action.id);
+    fields.value=configs.flatMap(({action,config})=>config.fields.map(field=>({...field,actionId:action.id,sourceTitle:action.title})));
+    commandsEditable.value=editableIds.value.length>0;commandsLoaded.value=true;
   } catch(cause) {
     if(!disposed && cause.name!=='AbortError')commandError.value=cause.message;
   } finally {if(!disposed)commandBusy.value=false;}
 }
 async function saveCommands() {
   if(commandBusy.value)return;
+  commandController=new AbortController();
   commandBusy.value=true;commandError.value='';commandMessage.value='';
   try {
-    const config=await commandRequest('PUT');
-    if(!disposed){fields.value=config.fields;commandMessage.value='已保存，刷新数据后生效';}
+    const configs=await Promise.all(entries.value.filter(({action})=>editableIds.value.includes(action.id))
+      .map(async ({action})=>({action,config:await commandRequest('PUT',action)})));
+    if(!disposed){
+      fields.value=configs.flatMap(({action,config})=>config.fields.map(field=>({...field,actionId:action.id,sourceTitle:action.title})));
+      commandMessage.value='已保存';
+    }
   } catch(cause) {
     if(!disposed && cause.name!=='AbortError')commandError.value=cause.message;
   } finally {if(!disposed)commandBusy.value=false;}
@@ -83,15 +95,18 @@ async function run(operation,refresh=false) {
   busy.value=true;error.value='';
   controller=new AbortController();
   try {
-    const reply=await fetch('/api/actions/'+encodeURIComponent(props.action.id)+'/'+operation,{
-      method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
-      body:JSON.stringify({input:JSON.parse(inputText.value)}),signal:controller.signal
-    });
-    const payload=await reply.json();
-    if(reply.status===401)emit('unauthorized');
-    if(!reply.ok)throw new Error(payload.error || 'HTTP '+reply.status);
+    const parts=await Promise.all(entries.value.map(async entry=>{
+      const reply=await fetch('/api/actions/'+encodeURIComponent(entry.action.id)+'/'+operation,{
+        method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
+        body:JSON.stringify({input:JSON.parse(inputText.value)}),signal:controller.signal
+      });
+      const payload=await reply.json();
+      if(reply.status===401)emit('unauthorized');
+      if(!reply.ok)throw new Error(payload.error || 'HTTP '+reply.status);
+      return {...entry,content:payload};
+    }));
     if(disposed || generation!==requestId)return;
-    response.value={operation,content:payload};
+    response.value={operation,content:parts[0].content,parts};
     if(!refresh)view.value='visual';
   } catch(cause) {
     if(disposed || generation!==requestId || cause.name==='AbortError')return;
@@ -104,7 +119,7 @@ async function run(operation,refresh=false) {
 watch([autoRefresh,refreshSeconds],()=>{
   if(refreshTimer)clearInterval(refreshTimer);
   refreshTimer=undefined;
-  const interval=props.presentation?.refreshIntervalMs ?? 0;
+  const interval=refreshSeconds.value*1000;
   if(!autoRefresh.value || interval<3000)return;
   refreshTimer=setInterval(()=>{
     if(document.visibilityState==='visible' && !busy.value && response.value?.operation==='execute')
@@ -124,9 +139,9 @@ onUnmounted(()=>{
 </script>
 
 <template>
-  <section class="action-card" :aria-label="action.title">
+  <section class="action-card" :aria-label="title">
     <div class="card-heading">
-      <h3>{{ action.title }}</h3>
+      <h3>{{ title }}</h3>
       <span class="read-pill">{{ action.kind === 'read' ? '数据读取' : '需授权' }}</span>
     </div>
     <div class="action-information">
@@ -143,8 +158,10 @@ onUnmounted(()=>{
       </div>
       <div v-if="infoTab==='description'" class="info-panel description-panel" role="tabpanel"
         :id="'description-'+action.id" :aria-labelledby="'description-tab-'+action.id">
-        <p>{{ action.description }}</p>
-        <p v-if="action.explain">{{ action.explain }}</p>
+        <div v-for="entry in entries" :key="entry.action.id">
+          <h4 v-if="entries.length>1">{{ entry.action.title }}</h4>
+          <p>{{ entry.action.description }}</p><p v-if="entry.action.explain">{{ entry.action.explain }}</p>
+        </div>
       </div>
       <div v-if="infoTab==='commands'" class="info-panel commands-panel" role="tabpanel"
         :id="'commands-'+action.id" :aria-labelledby="'commands-tab-'+action.id">
@@ -152,10 +169,10 @@ onUnmounted(()=>{
         <p v-if="commandError" class="error" role="alert">{{ commandError }}</p>
         <template v-if="commandsLoaded">
           <form v-if="commandsEditable" @submit.prevent="saveCommands">
-            <p class="muted small">命令以面板普通用户执行；保存后由后续刷新使用。</p>
-            <table class="command-table">
+            <table class="command-table" v-for="entry in entries.filter(item=>editableIds.includes(item.action.id))" :key="entry.action.id">
+              <caption v-if="entries.length>1">{{ entry.action.title }}</caption>
               <thead><tr><th>key</th><th>value（终端命令）</th></tr></thead>
-              <tbody><tr v-for="field in fields" :key="field.key">
+              <tbody><tr v-for="field in fields.filter(item=>item.actionId===entry.action.id)" :key="field.key">
                 <td><code>{{ field.key }}</code></td>
                 <td><textarea v-auto-height v-model="field.value" :aria-label="'命令 '+field.key"
                   required maxlength="2048" rows="1" spellcheck="false" :disabled="commandBusy" /></td>
@@ -181,7 +198,7 @@ onUnmounted(()=>{
           </button>
           <div v-if="response" class="view-switch" aria-label="结果查看模式">
             <button type="button" :class="{active:view==='visual'}" @click="view='visual'">可视化</button>
-            <button type="button" :class="{active:view==='json'}" @click="view='json'">原始 JSON</button>
+            <button type="button" :class="{active:view==='json'}" @click="view='json'">原始数据</button>
           </div>
         </div>
       </div>
@@ -191,8 +208,30 @@ onUnmounted(()=>{
         <span class="muted">（默认关闭）</span>
       </label>
       <template v-if="response">
-        <ResultRenderer v-if="view==='visual'" :data="response.content.result" :presentation="presentation" />
-        <pre v-else class="raw-output">{{ JSON.stringify(response.content,null,2) }}</pre>
+        <div v-if="view==='visual'" class="combined-results">
+          <section v-for="part in response.parts" :key="part.action.id">
+            <ResultRenderer :data="part.content.result" :presentation="part.presentation" />
+          </section>
+        </div>
+        <div v-else class="raw-data">
+          <template v-for="part in response.parts" :key="part.action.id">
+            <table v-if="part.content.raw" class="command-table raw-command-table">
+              <caption v-if="response.parts.length>1">{{ part.action.title }}</caption>
+              <thead><tr><th>key</th><th>value（原始输出）</th></tr></thead>
+              <tbody><tr v-for="(output,key) in part.content.raw" :key="key">
+                <td><code>{{ key }}</code></td>
+                <td><pre class="command-stdout">{{ output.stdout }}</pre>
+                  <template v-if="output.stderr"><strong>stderr</strong><pre class="command-stdout">{{ output.stderr }}</pre></template>
+                  <small class="muted">退出码：{{ output.exitCode }}</small>
+                </td>
+              </tr></tbody>
+            </table>
+            <p v-else class="muted small">此操作未执行终端命令，没有终端原始输出。</p>
+          </template>
+          <details v-if="Object.keys(rawData).length" class="raw-json">
+            <summary>原始 JSON</summary><pre class="raw-output">{{ JSON.stringify(rawData,null,2) }}</pre>
+          </details>
+        </div>
       </template>
       <p v-else-if="busy && !error" class="empty-state" role="status">正在读取实时数据…</p>
       <p v-else-if="!error" class="empty-state">{{ action.kind === 'write' ? '此操作只生成待批准的更新申请，不会立即部署。' : '尚未读取数据，可点击“刷新数据”。' }}</p>

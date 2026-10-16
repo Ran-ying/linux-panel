@@ -68,8 +68,12 @@ try {
     for(const name of [...names,'面板设置']){
       await navigate(name.trim());
       await page.locator('.module-content').waitFor();
-      if(name.trim()==='系统概览')
-        await page.getByRole('heading',{name:'根文件系统磁盘占用',exact:true}).waitFor();
+      if(name.trim()==='系统概览'){
+        await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor();
+        await page.getByRole('heading',{name:'资源使用情况',exact:true}).waitFor();
+        assert.equal(await page.locator('.action-card').count(),2,'overview should combine four collectors into two cards');
+        await page.locator('.action-card').first().getByRole('progressbar',{name:'根文件系统',exact:true}).waitFor();
+      }
       if([390,1280].includes(width) && ['系统概览','服务浏览'].includes(name.trim())){
         const card=page.locator('.action-card').first();
         assert.equal(await card.locator('.info-panel').count(),0,'information must start hidden');
@@ -79,12 +83,12 @@ try {
         await card.getByRole('tab',{name:'说明',exact:true}).click();
         assert.equal(await card.locator('.info-panel').count(),0,'click selected tab to hide information');
         await card.getByRole('tab',{name:'命令',exact:true}).click();
-        await card.locator('.command-table').waitFor();
+        await card.locator('.command-table').first().waitFor();
         assert.equal(await card.locator('.result').count(),1);
         if(name.trim()==='服务浏览')
           assert.equal(await card.getByRole('textbox',{name:'命令 units',exact:true}).inputValue(),'systemctl list-units --type=service --all --no-pager --no-legend --plain');
         else {
-          assert.equal(await card.locator('.command-table tbody tr').count(),9);
+          assert.equal(await card.locator('.command-table tbody tr').count(),10);
           const hostname=card.getByRole('textbox',{name:'命令 hostname',exact:true});
           assert.equal(await hostname.inputValue(),'hostname');
           const shortHeight=await hostname.evaluate(n=>n.getBoundingClientRect().height);
@@ -99,13 +103,15 @@ try {
           const clipped=await card.locator('.command-table textarea').evaluateAll(nodes=>nodes.some(n=>n.scrollHeight>n.clientHeight+1));
           assert.equal(clipped,false,'loaded and reopened command inputs must fit wrapped values');
           if(width===1280){
-            await hostname.fill('printf panel-command-test');
+            await hostname.fill("printf 'panel-command-test\\n'; printf 'fixture-stderr\\n' >&2");
             let saved=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/commands') && r.request().method()==='PUT');
             await card.getByRole('button',{name:'保存',exact:true}).click();
             assert.equal((await saved).status(),200);
             let executed=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/execute') && r.request().method()==='POST');
             await card.getByRole('button',{name:'刷新数据',exact:true}).click();
-            assert.equal((await (await executed).json()).result.hostname,'panel-command-test','saved command must really drive execution');
+            const payload=await (await executed).json();
+            assert.equal(payload.result.hostname,'panel-command-test','saved command must really drive execution');
+            assert.deepEqual(payload.raw.hostname,{stdout:'panel-command-test\n',stderr:'fixture-stderr\n',exitCode:0});
             await hostname.fill('hostname');
             saved=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/commands') && r.request().method()==='PUT');
             await card.getByRole('button',{name:'保存',exact:true}).click();
@@ -115,6 +121,31 @@ try {
             await executed;
           }
         }
+        const editorLayout=await card.locator('.commands-panel').evaluate(n=>{
+          const save=n.querySelector('.command-save'),form=n.querySelector('form');
+          return {full:Math.abs(save.getBoundingClientRect().width-form.getBoundingClientRect().width)<1,
+            aligned:[...n.querySelectorAll('tbody td:first-child')].every(td=>getComputedStyle(td).verticalAlign==='middle'),
+            tableMargin:getComputedStyle(n.querySelector('table')).marginTop};
+        });
+        assert.deepEqual(editorLayout,{full:true,aligned:true,tableMargin:'0px'});
+        assert.ok(!(await card.locator('.commands-panel').innerText()).includes('命令以面板普通用户执行'));
+        await card.getByRole('button',{name:'原始数据',exact:true}).click();
+        await card.locator('.raw-command-table').first().waitFor();
+        assert.equal(await card.locator('.raw-command-table tbody tr').count(),name.trim()==='系统概览'?10:1);
+        await card.locator('.raw-json summary').click();
+        const raw=JSON.parse(await card.locator('.raw-json .raw-output').innerText());
+        assert.ok(Object.values(raw).every(fields=>Object.values(fields).every(output=>typeof output.stdout==='string' && typeof output.stderr==='string' && output.exitCode===0)));
+        await card.getByRole('button',{name:'可视化',exact:true}).click();
+        if(name.trim()==='系统概览'){
+          const resource=page.locator('.action-card').nth(1);
+          await resource.getByRole('button',{name:'原始数据',exact:true}).click();
+          await resource.locator('.raw-command-table').first().waitFor();
+          assert.equal(await resource.locator('.raw-command-table tbody tr').count(),4,'CPU and memory must retain all original command keys');
+          await resource.getByRole('button',{name:'可视化',exact:true}).click();
+        }
+        await card.getByRole('button',{name:'原始数据',exact:true}).click();
+        await page.screenshot({path:join(output,'raw-commands-'+width+'-'+name.trim()+'.png'),fullPage:true});
+        await card.getByRole('button',{name:'可视化',exact:true}).click();
         const sizes=await card.locator('.result-controls button').evaluateAll(nodes=>nodes.map(n=>{
           const s=getComputedStyle(n),r=n.getBoundingClientRect();
           return [r.height,s.fontSize,s.fontWeight,s.lineHeight,s.padding,s.borderRadius];
@@ -146,6 +177,8 @@ try {
         });
         assert.equal(controls,true,'refresh must precede visual/JSON controls in result section');
       }
+      // Editing and opening the raw JSON disclosure can scroll the page; measure the initial header gutter at the top.
+      await page.evaluate(()=>window.scrollTo(0,0));
       // All module containers must fit; tables/nav may scroll internally.
       const outside=await page.locator('.module-content, .action-card, .settings-section, .sidebar-brand, .module-nav, .sidebar-settings')
         .evaluateAll(nodes=>nodes.filter(n=>{

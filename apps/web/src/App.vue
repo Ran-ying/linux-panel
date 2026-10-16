@@ -69,6 +69,23 @@ async function selectPage(id) {
 const moduleGroups = computed(() => buildModuleNavigation(moduleDefinitions.value, actions.value));
 const businessGroups = computed(() => moduleGroups.value.filter(group => group.id !== 'panel'));
 const panelGroups = computed(() => moduleGroups.value.filter(group => group.id === 'panel'));
+const activeCards = computed(() => {
+  const all=activeGroup.value?.actions ?? [];
+  const consumed=new Set();
+  const cards=[];
+  for(const id of ['system.info','system.cpu']) {
+    const action=all.find(a=>a.id===id);
+    if(!action)continue;
+    const related=id==='system.info'?['storage.usage']:['system.memory'];
+    const companions=all.filter(a=>related.includes(a.id)).map(action=>({action,presentation:presentations.value[action.id]}));
+    [action,...companions.map(item=>item.action)].forEach(a=>consumed.add(a.id));
+    cards.push({action,companions,title:id==='system.info'?'基本信息':'资源使用情况'});
+  }
+  for(const action of all.filter(a=>!consumed.has(a.id) && (activeGroup.value.id!=='panel' ||
+    !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))))
+    cards.push({action,companions:[],title:action.title});
+  return cards;
+});
 const activeGroup = computed(() => moduleGroups.value.find(group => group.id === activePage.value));
 
 async function getJSON(url) {
@@ -231,8 +248,9 @@ onMounted(async () => {
           @unauthorized="signOutLocally" />
         <div v-if="activeGroup.actions.some(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))"
           class="action-flow">
-          <ActionCard v-for="action in activeGroup.actions.filter(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))"
-            :key="action.id" :action="action" :presentation="presentations[action.id] ?? null"
+          <ActionCard v-for="card in activeCards"
+            :key="card.action.id" :action="card.action" :display-title="card.title" :companions="card.companions"
+            :presentation="presentations[card.action.id] ?? null"
             :csrf="session.csrf" @unauthorized="signOutLocally" />
         </div>
         <section v-else-if="activeGroup.id !== 'panel'" class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>

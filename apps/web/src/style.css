@@ -508,3 +508,15 @@ table{min-width:500px}
   .result-controls{gap:8px}
   .command-table th,.command-table td{padding:6px}
 }
+
+/* Command keys align with their value; raw output shares the same table. */
+.command-table td:first-child{vertical-align:middle}
+.command-save{width:100%}
+.commands-panel .command-table{margin:0 0 12px}
+.command-table caption{text-align:left;padding:0 0 8px;color:var(--text-secondary);font-size:.85rem}
+.command-table+.command-table{margin-top:16px}
+.combined-results>section+section{margin-top:20px}
+.combined-results h4{margin:0 0 12px}
+.command-stdout{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+.raw-json{margin-top:16px}
+.raw-json summary{cursor:pointer}
