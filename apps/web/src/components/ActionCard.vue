@@ -166,11 +166,18 @@ onUnmounted(()=>{
       </div>
     </div>
 
-    <div v-if="presentation?.inputs" class="action-inputs">
-      <strong>输入</strong>
+    <div v-if="presentation?.inputs" class="action-inputs" :class="{ 'compact-inputs': presentation.inputs.every(field => field.type !== 'textarea') }">
+      <strong>{{ presentation.inputsLabel ?? '输入' }}</strong>
       <label v-for="field in presentation.inputs" :key="field.key" :for="'field-'+action.id+'-'+field.key">
         <span>{{ field.label }}</span>
-        <textarea :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]" rows="4"
+        <select v-if="field.type==='select'" :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]" :disabled="busy">
+          <option value="">全部</option>
+          <option v-for="option in response?.content.result?.[field.optionsKey] ?? []" :key="option" :value="option">{{ option }}</option>
+        </select>
+        <input v-else-if="field.type==='text'" :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]"
+          type="text" :placeholder="field.placeholder" :maxlength="action.inputSchema.properties[field.key].maxLength"
+          :required="action.inputSchema.required?.includes(field.key)" :disabled="busy" @keydown.enter.prevent="run('execute')" />
+        <textarea v-else :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]" rows="4"
           :placeholder="field.placeholder" :maxlength="action.inputSchema.properties[field.key].maxLength"
           :required="action.inputSchema.required?.includes(field.key)" :disabled="busy" spellcheck="false" />
       </label>

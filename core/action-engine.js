@@ -62,7 +62,7 @@ export class ActionEngine {
   async run(id, input = {}, channel = 'web', context = {}) {
     const action = this.#resolve(id, channel, input, context);
     const terminal = this.commands?.supports(action)
-      ? await this.commands.executeWithRaw(action) : null;
+      ? await this.commands.executeWithRaw(action,input) : null;
     const result = terminal ? terminal.result : await action.execute(input, context);
     if (action.outputSchema) {
       let validate = this.outputValidators.get(action);

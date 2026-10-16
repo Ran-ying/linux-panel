@@ -101,16 +101,23 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       validateView(item,schema,item.actionId);
       if(item.console!==undefined && (item.console!=='terminal' || !isUserShellAction(registry.get(item.actionId))))
         throw new Error('Interactive terminal requires an approved user-shell Action');
+      if(item.inputsLabel!==undefined && (typeof item.inputsLabel!=='string' || item.inputsLabel.length>100))
+        throw new Error('Invalid input section label');
       if(item.inputs!==undefined){
         if(!Array.isArray(item.inputs) || !item.inputs.length || item.inputs.length>12)throw new Error('Invalid input descriptors');
         const keys=new Set();
         for(const field of item.inputs){
           const property=action.inputSchema?.properties?.[field.key];
           if(!field || typeof field.key!=='string' || keys.has(field.key) || !property ||
-            property.type!=='string' || field.type!=='textarea' ||
+            property.type!=='string' || !['textarea','text','select'].includes(field.type) ||
             typeof field.label!=='string' || field.label.length>100 ||
             field.placeholder!==undefined && typeof field.placeholder!=='string')
             throw new Error('Invalid input descriptor');
+          if(field.type==='select'){
+            const options=schema[field.optionsKey];
+            if(typeof field.optionsKey!=='string' || options?.type!=='array' || options.items?.type!=='string')
+              throw new Error('Select options must reference a string array result field');
+          }
           keys.add(field.key);
         }
       }

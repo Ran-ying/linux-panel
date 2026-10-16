@@ -23,6 +23,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.deepEqual(registry.list('web').filter(a=>a.moduleId==='system').map(a=>a.id),
     ['system.resources','system.info']);
   assert.equal(configured.get('services.list').renderer, 'table');
+  assert.deepEqual(configured.get('services.list').inputs.map(f=>f.type),['text','select','select']);
   const cpu=configured.get('system.resources').sections[0];
   assert.equal(cpu.totalKey,undefined);
   assert.ok(cpu.details.some(f=>f.key==='availableParallelism'));
@@ -140,4 +141,20 @@ test('gauge and grid declarations reject unsupported quantities and layouts',asy
     await assert.rejects(loadWebPresentations(folder,[{id:'demo'}],registry),
       /Gauge requires|Invalid gauge|Invalid sections layout/);
   }
+});
+
+
+test('select inputs cannot reference result fields outside their string-array contract',async t=>{
+  const folder=await mkdtemp(join(tmpdir(),'panel-invalid-options-'));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  await mkdir(join(folder,'demo','ui'),{recursive:true});
+  await writeFile(join(folder,'package.json'),'{"type":"module"}');
+  await writeFile(join(folder,'demo','ui','presentations.js'),
+    "export default [{actionId:'demo.read',renderer:'metrics',fields:[{key:'count',label:'Count'}],inputs:[{key:'state',label:'State',type:'select',optionsKey:'count'}]}];");
+  const registry=new ActionRegistry();
+  registry.register('demo',{id:'demo.read',kind:'read',exposure:{web:true},
+    inputSchema:{type:'object',properties:{state:{type:'string'}}},
+    outputSchema:{type:'object',properties:{count:{type:'integer'}}},
+    execute:async()=>({count:0})});
+  await assert.rejects(loadWebPresentations(folder,[{id:'demo'}],registry),/Select options must reference/);
 });

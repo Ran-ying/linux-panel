@@ -90,7 +90,7 @@ export default [{
 
 ## 可编辑终端命令与原始输出
 
-terminal 可选；Linux read Action 同时提供 fields/decode 才使用统一终端执行器，否则调用 execute。fields 是固定 key → 默认 Shell；decode 接收修剪首尾空白后的字符串及第二参数 {durations}（命令耗时毫秒）。原始 key 与 raw 列表一致，decode 中不再执行命令。
+terminal 可选；Linux read Action 同时提供 fields/decode 才使用统一终端执行器，否则调用 execute。fields 是固定 key → 默认 Shell；decode 接收修剪首尾空白后的字符串及第二参数 {durations,input}（命令耗时毫秒与经过 Schema 校验的 Action 输入）。原始 key 与 raw 列表一致，decode 中不再执行命令。
 
 GET/PUT /api/actions/:id/commands 由面板统一提供，Web 管理员入口检查权限/Origin/CSRF。保存不执行；只接受字段集合精确匹配、非空、无 NUL、每值最多 2048 字符。存储在私有 state.actionCommands；审计只记 Action ID。
 
@@ -130,13 +130,13 @@ format 只支持 bytes/duration/milliseconds/integer/number；省略按文本显
 }
 ```
 
-loadOnEnter 仅允许无需必填参数的 read；自动刷新默认关闭，由用户开启。refreshIntervalMs 为 0 或 3000–60000 整数。输入目前支持声明式 string textarea；其他字段仍可使用 JSON 编辑器。复杂表单有需求先扩展面板，不另建绕过引擎的业务 API。
+loadOnEnter 仅允许无需必填参数的 read；自动刷新默认关闭，由用户开启。refreshIntervalMs 为 0 或 3000–60000 整数。输入支持声明式 string textarea、text 和 select；select.optionsKey 指向当前 Action 输出中的 string 数组，面板补充空值“全部”选项；其他字段仍可使用 JSON 编辑器。复杂表单有需求先扩展面板，不另建绕过引擎的业务 API。
 
 ## MCP 参数映射与输入控件
 
 MCP 工具通过 SDK fromJsonSchema 公布模块 Action.inputSchema/outputSchema，实际参数传给同一 ActionEngine；必填/可选/嵌套对象/数组/边界和未知字段由 schema 校验，已补齐原空参数缺口。
 
-presentation.inputs 可声明 [{key,label,type:'textarea',placeholder?}]，字段必须存在于 inputSchema 且为 string；面板在信息区下方渲染输入。未声明时仍使用通用 JSON 编辑器。只对无需输入的 read 自动加载，不因有展示配置就自动执行写操作。
+presentation.inputs 可声明 [{key,label,type:'textarea'|'text'|'select',placeholder?,optionsKey?}]，字段必须存在于 inputSchema 且为 string；select 的 optionsKey 必须对应 outputSchema 中 string 数组，inputsLabel 可声明输入区标题；面板在信息区下方渲染输入。未声明时仍使用通用 JSON 编辑器。只对无需输入的 read 自动加载，不因有展示配置就自动执行写操作。
 
 renderer:'terminal' 复用面板黑色 stdout/stderr 结果视图；console:'terminal' 在 Action 卡片下方提供通用真实 PTY 组件，仅适用于已批准的普通用户 Shell 能力。模块不附带 CSS/Vue，具体参考 [终端规范](TERMINAL.md)。
 

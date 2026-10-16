@@ -213,6 +213,43 @@ try {
         });
         assert.equal(controls,true,'refresh must precede visual/JSON controls in result section');
       }
+
+      if(name.trim()==='服务浏览' && [390,1280].includes(width)){
+        const card=page.locator('.action-card').first();
+        const units=card.getByRole('textbox',{name:'命令 units',exact:true});
+        const original=await units.inputValue();
+        await units.fill("printf '%s\\n' 'nginx.service loaded active running Fixture web' 'nginx-worker.service loaded inactive dead Fixture worker' 'redis.service loaded failed failed Fixture cache'");
+        const save=async()=>{
+          const pending=page.waitForResponse(r=>r.url().endsWith('/api/actions/services.list/commands') && r.request().method()==='PUT');
+          await card.getByRole('button',{name:'保存',exact:true}).click();assert.equal((await pending).status(),200);
+        };
+        const read=async()=>{
+          const pending=page.waitForResponse(r=>r.url().endsWith('/api/actions/services.list/execute') && r.request().method()==='POST');
+          await card.getByRole('button',{name:'刷新数据',exact:true}).click();
+          const response=await pending;assert.equal(response.status(),200);
+          return response.json();
+        };
+        await save();await read();
+        const keyword=card.getByRole('textbox',{name:'服务名称关键词',exact:true});
+        const active=card.getByRole('combobox',{name:'运行状态',exact:true});
+        const sub=card.getByRole('combobox',{name:'子状态',exact:true});
+        await keyword.fill('NGINX');await active.selectOption('active');await sub.selectOption('running');
+        const filtered=await read();
+        assert.deepEqual(filtered.result.services.map(s=>s.name),['nginx.service']);
+        assert.equal(filtered.result.count,1);
+        assert.ok(filtered.result.subStates.includes('dead'),'choices must survive filtering');
+        await page.waitForFunction(()=>document.querySelector('.table-wrap tbody')?.textContent.includes('nginx.service'));
+        assert.equal(await card.locator('.table-wrap tbody tr').count(),1);
+        await card.getByRole('tab',{name:'命令',exact:true}).click();
+        await page.screenshot({path:join(output,'service-filters-'+width+'.png'),fullPage:true});
+        await keyword.fill('no-match-fixture');
+        assert.equal((await read()).result.count,0);
+        await keyword.fill('');await active.selectOption('');await sub.selectOption('');
+        assert.equal((await read()).result.count,3);
+        await card.getByRole('tab',{name:'命令',exact:true}).click();
+        await units.fill(original);await save();await read();
+        await card.getByRole('tab',{name:'命令',exact:true}).click();
+      }
       if(name.trim()==='终端'){
         const card=page.locator('.action-card').first();
         await page.locator('.terminal-console').waitFor();
