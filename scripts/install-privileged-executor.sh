@@ -60,7 +60,35 @@ LP_SHA="$(git -c safe.directory="$LP_ROOT" -C "$LP_ROOT" rev-parse HEAD)"
 [[ "$LP_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
 LP_STAGE=$(mktemp -d /usr/local/lib/.linux-panel-privileged.XXXXXX)
 LP_PREVIOUS=''
-trap 'rm -rf -- "$LP_STAGE"' EXIT
+LP_UNIT_BEFORE=''
+LP_DEPLOYING=0
+LP_COMPLETED=0
+if [[ -f "$LP_UNIT" ]];then
+  LP_UNIT_BEFORE="$(mktemp /etc/systemd/system/.linux-panel-privileged-unit.XXXXXX)"
+  cp -- "$LP_UNIT" "$LP_UNIT_BEFORE"
+fi
+cleanup_install(){
+  local rc=$?
+  if ((rc!=0)) && ((LP_DEPLOYING));then
+    systemctl stop linux-panel-privileged.service 2>/dev/null || true
+    if [[ -n "$LP_PREVIOUS" && -d "$LP_PREVIOUS" ]];then
+      rm -rf -- "$LP_DEST" 2>/dev/null || true
+      mv -T "$LP_PREVIOUS" "$LP_DEST" || true
+    fi
+    if [[ -n "$LP_UNIT_BEFORE" && -f "$LP_UNIT_BEFORE" ]];then
+      install -o root -g root -m 0644 "$LP_UNIT_BEFORE" "$LP_UNIT" || true
+    fi
+    systemctl daemon-reload || true
+    if [[ -d "$LP_DEST" ]];then systemctl start linux-panel-privileged.service || true;fi
+    systemctl restart linux-panel.service || true
+  fi
+  rm -rf -- "$LP_STAGE"
+  if ((rc==0 && LP_COMPLETED));then
+    if [[ -n "$LP_PREVIOUS" ]];then rm -rf -- "$LP_PREVIOUS";fi
+  fi
+  if [[ -n "$LP_UNIT_BEFORE" ]];then rm -f -- "$LP_UNIT_BEFORE";fi
+}
+trap cleanup_install EXIT
 mkdir -m 0700 "$LP_STAGE/releases"
 mkdir -m 0700 "$LP_STAGE/releases/$LP_SHA"
 LP_PACKAGE="$LP_STAGE/releases/$LP_SHA"
@@ -106,6 +134,7 @@ if [[ -e "$LP_DEST" ]];then
   rmdir "$LP_PREVIOUS"
   mv -T "$LP_DEST" "$LP_PREVIOUS"
 fi
+LP_DEPLOYING=1
 mv -T "$LP_STAGE" "$LP_DEST"
 if ! getent group linux-panel-privileged >/dev/null;then groupadd --system linux-panel-privileged;fi
 LP_GID=$(getent group linux-panel-privileged | cut -d: -f3)
@@ -141,5 +170,5 @@ if(result.accessMode!=="root")process.exit(1);
 ' "file://$LP_ROOT/platform/privileged/client.js"
 systemctl restart linux-panel.service
 systemctl is-active --quiet linux-panel.service
-if [[ -n "$LP_PREVIOUS" ]];then rm -rf -- "$LP_PREVIOUS";fi
+LP_COMPLETED=1
 echo 'Enabled versioned root Actions; Web remains linuxpanel.'
