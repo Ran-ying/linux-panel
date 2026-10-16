@@ -20,7 +20,7 @@ test('saved command configuration persists and is shared by preview and actual A
   const values={hostname:'fixture',platform:'linux',release:'test',arch:'x86_64',cpuCount:'2',
     totalMemoryBytes:'1024',freeMemoryBytes:'512',uptimeSeconds:'60',nodeVersion:'v24.0.0'};
   const output=new Map(Object.entries(info.terminal.fields).map(([key,command])=>[command,values[key]]));
-  output.set('printf changed','changed');
+  output.set('printf changed',{stdout:'changed\n\n',stderr:'fixture warning\n',exitCode:0});
   let runs=0;
   const commands=new ActionCommands(store,{run:async command=>{runs++;return output.get(command);}});
   const registry=new ActionRegistry();registry.register('system',info);
@@ -33,6 +33,8 @@ test('saved command configuration persists and is shared by preview and actual A
   const result=await engine.run('system.info');
   assert.equal(result.result.hostname,'changed');
   assert.equal(result.result.cpuCount,2);
+  assert.deepEqual(result.raw.hostname,{stdout:'changed\n\n',stderr:'fixture warning\n',exitCode:0});
+  assert.equal(result.raw.cpuCount.stdout,'2','raw values must stay strings, before numeric decoding');
   const reopened=new ActionCommands(new StateStore(store.filePath));
   assert.equal((await reopened.config(info)).fields[0].value,'printf changed');
   const audit=(await store.snapshot()).audit.at(-1);
@@ -51,7 +53,7 @@ test('terminal commands run without root and have a process timeout',async t=>{
     await assert.rejects(runTerminalCommand('id'),{statusCode:503});
     return;
   }
-  assert.equal(await runTerminalCommand('printf terminal-ok'),'terminal-ok');
+  assert.deepEqual(await runTerminalCommand("printf 'terminal-ok\\n'; printf 'warning\\n' >&2"),{stdout:'terminal-ok\n',stderr:'warning\n',exitCode:0});
   await assert.rejects(runTerminalCommand('sleep 2',{timeoutSeconds:0.05}));
 });
 
