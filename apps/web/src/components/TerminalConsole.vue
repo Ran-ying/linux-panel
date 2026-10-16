@@ -64,9 +64,23 @@ async function disconnect(){
   const id=sessionId;sessionId=undefined;connected.value=false;
   if(id)try{await request('/'+id,'DELETE');}catch(cause){if(!disposed)error.value=cause.message;}
 }
+function terminalDocument(){
+  const nonce=document.querySelector('meta[name="panel-style-nonce"]')?.content;
+  if(!nonce)return document;
+  // xterm creates two dynamic style elements; authorize only this panel-owned renderer.
+  return new Proxy(document,{get(target,key){
+    if(key==='createElement')return (name,options)=>{
+      const node=target.createElement(name,options);
+      if(name.toLowerCase()==='style')node.nonce=nonce;
+      return node;
+    };
+    const value=Reflect.get(target,key,target);
+    return typeof value==='function'?value.bind(target):value;
+  }});
+}
 onMounted(()=>{
   window.addEventListener('pagehide',disconnect);
-  term=new Terminal({cursorBlink:true,screenReaderMode:true,fontSize:14,scrollback:3000,theme:{background:'#080b10',foreground:'#e5e7eb'}});
+  term=new Terminal({documentOverride:terminalDocument(),cursorBlink:true,screenReaderMode:true,fontSize:14,scrollback:3000,theme:{background:'#080b10',foreground:'#e5e7eb'}});
   fit=new FitAddon();term.loadAddon(fit);term.open(screen.value);fit.fit();
   term.writeln('点击“连接终端”开始。');
   term.onData(send);
