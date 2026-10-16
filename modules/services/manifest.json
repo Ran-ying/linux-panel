@@ -1,7 +1,10 @@
 {
   "id": "services",
   "name": "服务浏览",
-  "version": "0.3.0",
+  "version": "0.2.0",
   "entry": "./index.js",
-  "dependencies": ["system"]
+  "dependencies": [
+    "system"
+  ],
+  "navigationOrder": 20
 }

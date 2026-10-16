@@ -30,6 +30,8 @@ modules/example/
 
 manifest.id 必须等于目录名，entry 必须为 ./index.js；dependencies 为现有模块 ID，加载器检查缺失和循环依赖。setup 只接收 {actions,moduleId}，不能假设有数据库或 root 能力的注入。
 
+可选 manifest.navigationOrder 为有限数字，仅用于首次初始化导航顺序。面板将顺序保存在私有状态 moduleOrder；之后发现的新模块无论该值如何都追加末尾。不要通过模块名称、Action ID 或 Vue 特判控制导航；依赖装载顺序与显示顺序独立。
+
 manifest.json：
 ```json
 {"id":"example","name":"示例监控","version":"0.1.0","entry":"./index.js","dependencies":[]}
@@ -115,7 +117,7 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | gauge | title、百分比 valueKey；totalKey 或非空 details 至少提供一种；可选 usedKey、quantityFormat（bytes/number）、unit |
 | table | rowsKey 指向对象数组；非空 columns:[{key,label,format?}] |
 | sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象；可选 layout:'grid' 并排展示 |
-| files | path/entries 输出，operations:{read,write,upload} 引用同模块 Web Action |
+| files | path/entries 输出，operations:{read,write,upload,create,rename,delete} 引用同模块 Web Action |
 | terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 
 format 只支持 bytes/duration/milliseconds/integer/number；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度百分比必须声明为 number；圆环数量字段可为 number/integer，未给 usedKey 时用百分比 × 总量计算等效用量；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。

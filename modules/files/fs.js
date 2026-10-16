@@ -14,17 +14,51 @@ function ordinaryUser(){
 }
 const revision=buffer=>createHash('sha256').update(buffer).digest('hex');
 async function target(path){ordinaryUser();return fs.realpath(filePath(path));}
+async function accounts(){
+  const parse=async path=>new Map((await fs.readFile(path,'utf8').catch(()=>''))
+    .split('\n').filter(line=>line && !line.startsWith('#')).map(line=>{const fields=line.split(':');return [Number(fields[2]),fields[0]];}));
+  return {users:await parse('/etc/passwd'),groups:await parse('/etc/group')};
+}
+// Logical regular-file bytes; never traverse links or special devices. One
+// shared budget bounds a listing even on /proc, deep trees or large disks.
+async function directorySize(path,budget){
+  let size=0,complete=true;
+  const pending=[path];
+  while(pending.length){
+    if(budget.remaining<=0 || Date.now()>budget.deadline){complete=false;break;}
+    let entries;
+    try{entries=await fs.readdir(pending.pop(),{withFileTypes:true});}
+    catch{complete=false;continue;}
+    for(const entry of entries){
+      if(--budget.remaining<0 || Date.now()>budget.deadline){complete=false;break;}
+      const child=join(entry.parentPath,entry.name);
+      if(entry.isDirectory())pending.push(child);
+      else if(entry.isFile()){
+        try{const stats=await fs.lstat(child);if(stats.isFile())size+=stats.size;else complete=false;}
+        catch{complete=false;}
+      }
+    }
+  }
+  return {size,sizeComplete:complete};
+}
 async function listFilesImpl({path='/',offset=0,limit=200}={}){
   path=await target(path);
   const names=await fs.readdir(path,{withFileTypes:true});
   names.sort((a,b)=>Number(b.isDirectory())-Number(a.isDirectory()) || a.name.localeCompare(b.name));
-  const entries=await Promise.all(names.slice(offset,offset+limit).map(async entry=>{
+  const {users,groups}=await accounts(),budget={remaining:10000,deadline:Date.now()+1500},entries=[];
+  for(const entry of names.slice(offset,offset+limit)){
     try{
-      const stats=await fs.stat(join(path,entry.name));
-      return {name:entry.name,type:stats.isDirectory()?'directory':stats.isFile()?'file':'other',
-        symlink:entry.isSymbolicLink(),size:stats.size,modifiedAt:stats.mtime.toISOString()};
-    }catch{return {name:entry.name,type:'other',symlink:entry.isSymbolicLink(),size:0,modifiedAt:''};}
-  }));
+      const full=join(path,entry.name),stats=await fs.lstat(full);
+      const resolved=stats.isSymbolicLink()?await fs.stat(full).catch(()=>stats):stats;
+      const type=resolved.isDirectory()?'directory':resolved.isFile()?'file':'other';
+      const bytes=stats.isDirectory()?await directorySize(full,budget):
+        {size:stats.isSymbolicLink() && type==='directory'?null:resolved.size,sizeComplete:!(stats.isSymbolicLink() && type==='directory')};
+      entries.push({name:entry.name,type,symlink:stats.isSymbolicLink(),...bytes,
+        permissions:(stats.mode & 0o7777).toString(8).padStart(4,'0'),
+        owner:(users.get(stats.uid) ?? String(stats.uid))+':'+(groups.get(stats.gid) ?? String(stats.gid)),
+        modifiedAt:stats.mtime.toISOString()});
+    }catch{entries.push({name:entry.name,type:'other',symlink:entry.isSymbolicLink(),size:null,sizeComplete:false,permissions:'—',owner:'—',modifiedAt:''});}
+  }
   return {path,parent:path==='/'?null:dirname(path),entries,total:names.length,
     nextOffset:offset+entries.length<names.length?offset+entries.length:null};
 }
@@ -75,6 +109,35 @@ async function uploadFileImpl({path,contentBase64}){
   return {path,size:buffer.length};
 }
 
+async function createEntryImpl({path,type}){
+  ordinaryUser();path=filePath(path);
+  if(type==='directory')await fs.mkdir(path,{mode:0o755});
+  else if(type==='file')await fs.writeFile(path,'',{flag:'wx',mode:0o644});
+  else throw fail('只能新建文件或目录');
+  return {path};
+}
+function mutablePath(path){
+  ordinaryUser();path=filePath(path);
+  if(path==='/')throw fail('不能删除或重命名根目录',403);
+  return path;
+}
+async function renameEntryImpl({path,newPath}){
+  path=mutablePath(path);newPath=mutablePath(newPath);
+  // Keep rename within the same directory, and refuse an existing destination.
+  if(dirname(path)!==dirname(newPath))throw fail('重命名必须位于同一目录');
+  try{await fs.lstat(newPath);throw fail('同名文件或目录已存在',409);}
+  catch(error){if(error.code!=='ENOENT')throw error;}
+  await fs.rename(path,newPath);
+  return {path:newPath};
+}
+async function deleteEntryImpl({path}){
+  path=mutablePath(path);
+  const stats=await fs.lstat(path);
+  if(stats.isDirectory())await fs.rm(path,{recursive:true,force:false});
+  else await fs.unlink(path);
+  return {path};
+}
+
 function expose(operation){
   return async input=>{
     try{return await operation(input);}
@@ -82,11 +145,13 @@ function expose(operation){
       if(error.statusCode)throw error;
       const codes={ENOENT:[404,'文件或目录不存在'],ENOTDIR:[400,'路径不是目录'],EISDIR:[400,'路径指向目录'],
         EACCES:[403,'没有访问此文件或目录的权限'],EPERM:[403,'没有执行此文件操作的权限'],
-        EROFS:[403,'文件系统只读'],ENOSPC:[507,'磁盘空间不足'],ELOOP:[400,'无法解析符号链接']};
+        EROFS:[403,'文件系统只读'],ENOSPC:[507,'磁盘空间不足'],ELOOP:[400,'无法解析符号链接'],
+        EEXIST:[409,'同名文件或目录已存在'],ENOTEMPTY:[409,'目标目录不是空目录']};
       const [status,message]=codes[error.code] ?? [500,'文件操作失败'];
       throw fail(message,status);
     }
   };
 }
 export const listFiles=expose(listFilesImpl),readText=expose(readTextImpl),
-  writeText=expose(writeTextImpl),uploadFile=expose(uploadFileImpl);
+  writeText=expose(writeTextImpl),uploadFile=expose(uploadFileImpl),
+  createEntry=expose(createEntryImpl),renameEntry=expose(renameEntryImpl),deleteEntry=expose(deleteEntryImpl);

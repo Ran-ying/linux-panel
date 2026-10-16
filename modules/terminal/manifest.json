@@ -1,1 +1,8 @@
-{"id":"terminal","name":"终端","version":"0.1.0","entry":"./index.js","dependencies":[]}
+{
+  "id": "terminal",
+  "name": "终端",
+  "version": "0.1.0",
+  "entry": "./index.js",
+  "dependencies": [],
+  "navigationOrder": 30
+}

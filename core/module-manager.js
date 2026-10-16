@@ -10,7 +10,7 @@ export class ModuleManager {
     this.loaded = [];
   }
 
-  async loadAll() {
+  async loadAll(savedOrder) {
     // Removing all optional business modules must not disable Auth or Panel Settings.
     let entries;
     try { entries = await readdir(this.directory, { withFileTypes: true }); }
@@ -26,6 +26,8 @@ export class ModuleManager {
         throw new Error(`Invalid bundled module manifest: ${item.name}`);
       }
       if (definitions.has(manifest.id)) throw new Error(`Duplicate module: ${manifest.id}`);
+      if (manifest.navigationOrder !== undefined && !Number.isFinite(manifest.navigationOrder))
+        throw new Error(`Invalid navigationOrder: ${manifest.id}`);
       definitions.set(manifest.id, { manifest, folder });
     }
 
@@ -51,6 +53,15 @@ export class ModuleManager {
       this.loaded.push({ id, name: def.manifest.name, version: def.manifest.version });
     };
     for (const id of definitions.keys()) await visit(id);
+    // Persisted order wins. A newly discovered module always appends, even when
+    // its manifest requests an earlier bootstrap position. Keep missing IDs in
+    // the saved list so temporarily disabled modules retain their position.
+    const initial=[...definitions.keys()].sort((a,b)=>
+      (definitions.get(a).manifest.navigationOrder ?? Number.MAX_SAFE_INTEGER)-
+      (definitions.get(b).manifest.navigationOrder ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b));
+    this.order=Array.isArray(savedOrder)?[...new Set(savedOrder.filter(id=>typeof id==='string'))]:initial;
+    for(const id of initial)if(!this.order.includes(id))this.order.push(id);
+    this.loaded.sort((a,b)=>this.order.indexOf(a.id)-this.order.indexOf(b.id));
     return this.loaded;
   }
 }

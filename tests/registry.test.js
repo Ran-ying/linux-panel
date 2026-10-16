@@ -37,9 +37,20 @@ test('bundled modules load after dependencies and expose expected actions', asyn
   const loaded = await manager.loadAll();
   const ids = loaded.map(m => m.id);
   assert.deepEqual([...ids].sort(), ['files', 'services', 'system', 'terminal']);
+  assert.deepEqual(ids,['system','services','terminal','files']);
   assert.deepEqual(registry.list('web').map(a => a.id).sort(),
-    ['files.list','files.read','files.upload','files.write','services.list','system.info','system.resources','terminal.execute']);
+    ['files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','services.list','system.info','system.resources','terminal.execute']);
   for(const id of ['storage.usage','system.cpu','system.memory'])assert.equal(registry.get(id),undefined);
+});
+
+test('saved module order survives reload and new modules append despite earlier manifest ranks',async()=>{
+  const manager=new ModuleManager(resolve('modules'),new ActionRegistry());
+  await manager.loadAll(['terminal','files','temporarily-disabled']);
+  assert.deepEqual(manager.loaded.map(m=>m.id),['terminal','files','system','services']);
+  assert.deepEqual(manager.order,['terminal','files','temporarily-disabled','system','services']);
+  const again=new ModuleManager(resolve('modules'),new ActionRegistry());
+  await again.loadAll(manager.order);
+  assert.deepEqual(again.loaded,manager.loaded);
 });
 
 test('engine validates inputs and returned data', async () => {
