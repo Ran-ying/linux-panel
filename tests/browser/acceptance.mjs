@@ -263,6 +263,7 @@ try {
       if(name.trim()==='文件管理' && [390,1280].includes(width)){
         assert.equal(await page.locator('.action-card').count(),1,'helper Actions belong inside the file browser');
         const browser=page.locator('.file-browser');
+        await browser.waitFor();
         const card=page.locator('.action-card');
         assert.equal(await card.locator('.action-info-tabs,.result-header').count(),0,'file browser owns its controls');
         assert.equal(await browser.getByText('目录路径',{exact:true}).count(),0,'path input retains only its accessible label');
