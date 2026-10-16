@@ -1,3 +1,15 @@
+# Grouped system cards and actual terminal output — 2026-10-16
+
+System Overview now displays two shared-control cards: Basic information combines system.info and storage.usage; Resource usage combines system.cpu and system.memory. Underlying Actions, module ownership, permissions and individual Web/MCP endpoints remain available. Each combined card loads, edits and refreshes its constituent Actions; command keys retain their original names in source-labelled tables.
+
+Command table keys are vertically centered, Save spans the form width, the routine execution hint is removed, and table top margin is zero to match the surrounding side padding. Raw Data replaces the former JSON switch: it lists original command keys and actual stdout/stderr/exitCode, plus a bottom JSON disclosure of those outputs. Native non-terminal Actions explicitly report no terminal output instead of labelling processed data as raw.
+
+The terminal runner preserves stdout/stderr exactly, including whitespace. ActionCommands trims a separate copy for existing decoders and exposes executeWithRaw; ActionEngine validates the processed result and adds raw outputs beside it, shared by Web/MCP. Output limits, ordinary-user execution and existing authorization remain. Raw values are response-only, not audit or persistent execution history.
+
+Local Vue build and targeted tests passed (9 passed, 1 ordinary-Linux test skipped under root). Tests now assert preserved newlines/stderr and string raw values before numeric decoding; browser checks cover the two-card grouping, command editor layout, save/execute/raw data/JSON and existing responsive controls. Full CI, screenshots and MCP test deployment pending.
+
+Base / last confirmed test deployment: `b2432fa88f705916044e44e0b1b258783de529d6` (PR #96), transaction `264f5eef6a882fdc60cff5cfcf53792c`, success 2026-10-16T00:28:24Z, panel active/running. Final evidence follows in Issue #54.
+
 # Equal Action section spacing — 2026-10-16
 
 Information and Operation result now share the same section frame: 16px top margin, 1px divider and 12px top padding. This gives Information the same visual separation from the Action title that results already have from the preceding content. Pill controls and command input behavior are unchanged.
