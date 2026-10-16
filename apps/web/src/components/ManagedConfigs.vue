@@ -105,9 +105,11 @@ function check(){
 <template>
   <section class="managed-configs">
     <div class="config-toolbar">
-      <button type="button" :disabled="busy" @click="openNew">{{ labels.create||'新建配置' }}</button>
+      <div class="panel-control-capsule">
+        <button type="button" class="panel-control-primary" :disabled="busy" @click="openNew">{{ labels.create||'新建配置' }}</button>
       <button type="button" :disabled="busy" @click="work(refresh)">刷新数据</button>
       <button type="button" :disabled="busy" @click="check">{{ labels.check||'检查配置' }}</button>
+      </div>
       <span class="muted small">{{ listing.count }} 项 · {{ listing.enabledCount }} 项启用或待确认</span>
     </div>
     <p v-if="notice" role="status" class="config-notice">{{ notice }}</p>

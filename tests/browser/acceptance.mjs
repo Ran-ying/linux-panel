@@ -157,9 +157,69 @@ try {
     const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
     assert.deepEqual(names.slice(0,4).map(name=>name.trim()),['系统概览','服务浏览','终端','文件管理']);
     assert.ok(!names.some(name=>name.trim()==='磁盘使用情况'),'disk usage must not have a separate sidebar item');
+    let referenceControls;
+    const appearance=locator=>locator.evaluate(node=>{
+      const style=getComputedStyle(node),rect=node.getBoundingClientRect();
+      return {height:Math.round(rect.height*100)/100,borderRadius:style.borderTopLeftRadius,
+        fontSize:style.fontSize,fontWeight:style.fontWeight,fontFamily:style.fontFamily,
+        paddingTop:style.paddingTop,paddingLeft:style.paddingLeft,lineHeight:style.lineHeight,
+        color:style.color,background:style.backgroundColor,borderColor:style.borderTopColor,
+        gap:style.gap};
+    });
     for(const name of [...names,'面板设置']){
       await navigate(name.trim());
       await page.locator('.module-content').waitFor();
+      if(name.trim()==='系统概览'){
+        const refresh=page.locator('.action-card .result-controls button.action-refresh').first();
+        const switchButton=page.locator('.action-card .view-switch button').first();
+        const capsule=page.locator('.action-card .view-switch').first();
+        await refresh.waitFor();await switchButton.waitFor();
+        referenceControls={
+          primary:await appearance(refresh),
+          neutral:await appearance(switchButton),
+          capsule:await appearance(capsule)
+        };
+      }
+      if([390,1280].includes(width) && ['文件管理','Linux Panel 托管的定时任务','系统现有定时任务','Nginx 网站'].includes(name.trim())){
+        assert.ok(referenceControls,'system overview must establish the canonical button design first');
+        const moduleRoot=page.locator(name.trim()==='文件管理'?'.file-browser':
+          name.trim()==='定时任务'?'.scheduled-tasks':'.managed-configs');
+        await moduleRoot.waitFor();
+        const group=moduleRoot.locator('.panel-control-capsule').first();
+        const primary=moduleRoot.locator('.panel-control-primary').first();
+        const neutral=group.locator('button:not(.panel-control-primary)').first();
+        await group.waitFor();await neutral.waitFor();
+        const hasPrimary=await primary.count()>0;
+        if(hasPrimary)await primary.waitFor();
+        const actualPrimary=hasPrimary?await appearance(primary):null,actualNeutral=await appearance(neutral),
+          actualGroup=await appearance(group);
+        const shared=['height','borderRadius','fontSize','fontWeight','fontFamily','paddingTop','paddingLeft','lineHeight'];
+        for(const key of shared){
+          if(hasPrimary)assert.equal(actualPrimary[key],referenceControls.primary[key],
+            name+': primary '+key+' must match system overview refresh');
+          assert.equal(actualNeutral[key],referenceControls.neutral[key],
+            name+': capsule option '+key+' must match system overview');
+        }
+        if(hasPrimary)for(const key of ['background','color','borderColor']){
+          assert.equal(actualPrimary[key],referenceControls.primary[key],
+            name+': primary '+key+' must match system overview refresh');
+        }
+        for(const key of ['borderRadius','paddingTop','paddingLeft','background','borderColor','gap']){
+          assert.equal(actualGroup[key],referenceControls.capsule[key],
+            name+': grouped capsule '+key+' must match system overview');
+        }
+        const buttons=await moduleRoot.locator(
+          'button:not(.file-entry):not(.config-site-selector):not(.file-permissions-button)'
+        ).evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length).map(n=>{
+          const style=getComputedStyle(n),rect=n.getBoundingClientRect();
+          return {name:n.textContent.trim(),height:rect.height,radius:style.borderTopLeftRadius,
+            fontSize:style.fontSize};
+        }));
+        assert.ok(buttons.length>1 && buttons.every(b=>
+          Math.abs(b.height-32)<.1 && b.radius==='999px' &&
+          b.fontSize===referenceControls.primary.fontSize),
+          name+': all command buttons must share the compact 32px pill appearance');
+      }
       if(name.trim()==='Linux Panel 托管的定时任务' && [390,1280].includes(width)){
         const schedule=page.locator('.scheduled-tasks');
         await schedule.getByRole('button',{name:'新建任务'}).waitFor();
