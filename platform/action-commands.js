@@ -28,8 +28,12 @@ export class ActionCommands {
     const all=(await this.store.snapshot()).actionCommands ?? {};
     const saved=all[action.id] ?? {};
     const legacy=action.terminal.migrateFrom ?? {};
+    const migratedValue=key=>{
+      const candidates=legacy[key]===undefined?[]:Array.isArray(legacy[key])?legacy[key]:[legacy[key]];
+      return candidates.map(source=>all[source.actionId]?.[source.key]).find(value=>value!==undefined && value!==null);
+    };
     return {editable:true,fields:Object.entries(action.terminal.fields).map(([key,value])=>({
-      key,value:saved[key] ?? all[legacy[key]?.actionId]?.[legacy[key]?.key] ?? value,defaultValue:value
+      key,value:saved[key] ?? migratedValue(key) ?? value,defaultValue:value
     }))};
   }
   async save(action, input, actor) {

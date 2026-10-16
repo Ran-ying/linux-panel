@@ -4,9 +4,9 @@
 
 ## 本次实现
 
-- 真正的 system.info（基本信息 + disk）与 system.resources（cpu + memory）。原 system.cpu/system.memory/storage.usage 和独立 storage 模块删除，无隐藏 Action 别名。
-- 命令按 terminal.migrateFrom 声明迁移，当前保存值优先；保存写当前 Action，保留旧私有条目。
-- 面板通用 sections 按嵌套 outputSchema 校验。App.vue/导航无系统 Action ID 合并；模块仅提供数据/schema/说明/presentation，无 CSS/Vue。
+- 真正的 system.resources（cpu + memory + disk，排在最前）与 system.info（基本信息）。原 system.cpu/system.memory/storage.usage 和独立 storage 模块删除，无隐藏 Action 别名。
+- 磁盘采集、命令、raw、Schema 实际迁入 resources；filesystem 配置优先当前 resources，其次旧 info、旧 storage。命令按 terminal.migrateFrom 声明迁移，支持有序候选，当前保存值优先；保存写当前 Action，保留旧私有条目。
+- 面板通用 sections 按嵌套 outputSchema 校验；新增 grid 布局和 gauge 圆环卡片（名称、占用圆环/百分比、已用/总量），复用基本信息的圆角样式。App.vue/导航无系统 Action ID 合并；模块仅提供数据/schema/说明/presentation，无 CSS/Vue。
 - 单 Action → 单卡片、单保存、单执行请求、原始 key 列表/JSON。raw 是当次成功终端的 stdout/stderr/exitCode；result 单独解析校验。MCP 当前只返回 result。
 - [模块规范](MODULE-DEVELOPMENT.md) 含完整复制示例、职责/展示/命令/权限契约及 AI 交付清单。README/架构/MCP/升级/安全/路线图已同步。
 

@@ -19,6 +19,15 @@ const progress = computed(() => {
     : null;
 });
 
+const gaugeTotal = computed(() => props.data?.[props.presentation?.totalKey]);
+const gaugeUsed = computed(() => props.presentation?.usedKey
+  ? props.data?.[props.presentation.usedKey]
+  : progress.value === null ? null : gaugeTotal.value * progress.value / 100);
+function quantity(value) {
+  return format(value, props.presentation?.quantityFormat ?? 'bytes') +
+    (props.presentation?.unit ? ' ' + props.presentation.unit : '');
+}
+
 function format(value, kind) {
   if (value === null || value === undefined) return '—';
   if (kind === 'bytes' && typeof value === 'number') {
@@ -26,6 +35,8 @@ function format(value, kind) {
     const index = Math.min(5, Math.max(0, Math.floor(Math.log(Math.abs(value)) / Math.log(1024))));
     return `${(value / 1024 ** index).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} ${['B','KiB','MiB','GiB','TiB','PiB'][index]}`;
   }
+  if (kind === 'number' && typeof value === 'number')
+    return value.toLocaleString('zh-CN', {maximumFractionDigits:2});
   if (kind === 'duration' && typeof value === 'number') {
     const secs = Math.floor(value);
     const days = Math.floor(secs / 86400);
@@ -53,7 +64,7 @@ function formatted(key, formatKind) {
       当前系统使用 Node.js 空闲内存估算，可能与系统监控工具的口径不同。
     </p>
 
-    <div v-if="presentation?.renderer === 'sections'" class="result-sections">
+    <div v-if="presentation?.renderer === 'sections'" class="result-sections" :class="{ 'result-sections-grid': presentation.layout === 'grid' }">
       <div v-for="(section,index) in presentation.sections" :key="index" class="result-section">
         <ResultRenderer :data="section.key === undefined ? data : data[section.key]" :presentation="section" />
       </div>
@@ -73,6 +84,22 @@ function formatted(key, formatKind) {
         <div class="metric-label">{{ field.label }}</div>
         <div class="metric-value">{{ formatted(field.key, field.format) }}</div>
       </div>
+    </div>
+
+    <div v-else-if="presentation?.renderer === 'gauge'" class="metric-card gauge-card">
+      <div class="metric-label">{{ presentation.title }}</div>
+      <div class="gauge-ring" role="progressbar" :aria-label="presentation.title"
+        :aria-valuenow="progress ?? undefined" aria-valuemin="0" aria-valuemax="100"
+        :aria-valuetext="progress === null ? '暂无数据' : progress.toFixed(1) + '%，' + quantity(gaugeUsed) + ' / ' + quantity(gaugeTotal)">
+        <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+          <circle class="gauge-track" cx="50" cy="50" r="43" />
+          <circle class="gauge-fill" :class="{ critical: progress !== null && progress >= 90 }"
+            cx="50" cy="50" r="43" pathLength="100"
+            :stroke-dasharray="(progress ?? 0) + ' 100'" />
+        </svg>
+        <span class="gauge-percent">{{ progress === null ? '—' : progress.toFixed(1) + '%' }}</span>
+      </div>
+      <div class="gauge-quantity"><span>{{ quantity(gaugeUsed) }}</span> / <span>{{ quantity(gaugeTotal) }}</span></div>
     </div>
 
     <div v-else-if="presentation?.renderer === 'progress'" class="progress-panel">

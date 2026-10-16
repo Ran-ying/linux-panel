@@ -6,11 +6,11 @@
 
 - platform：管理员、会话/TOTP、CSRF/Origin、私有状态、MCP 全局策略、可编辑命令、更新/监听配置。
 - core：可信随仓库模块发现与依赖、注册、JSON Schema、默认拒绝新写类型。
-- modules/system：system.info（主机信息 + disk）、system.resources（cpu + memory）。collectors 为内部帮助代码，旧 split Actions 与 storage 模块已移除。
+- modules/system：system.resources（cpu + memory + disk，优先展示）、system.info（主机基本字段）。collectors 为内部帮助代码，旧 split Actions 与 storage 模块已移除。
 - modules/services：services.list。
 - modules/terminal：terminal.execute（显式 user-shell 写能力），命令输入和 PTY GUI 均由面板提供。
 - apps/api：Fastify、业务 API、数据型 presentation 校验。配置不能携带样式/脚本。
-- apps/web：布局、主题、固定导航、卡片、命令编辑保存、刷新、raw 表格/JSON、通用 metrics/progress/table/sections/terminal、声明式 textarea 输入与真实 PTY。没有系统 Action ID 特判和跨模块卡片拼装。
+- apps/web：布局、主题、固定导航、卡片、命令编辑保存、刷新、raw 表格/JSON、通用 metrics/progress/gauge/table/sections/terminal、声明式 textarea 输入与真实 PTY。没有系统 Action ID 特判和跨模块卡片拼装。
 - extensions/mcp：独立可选 Streamable HTTP/OAuth，无 Vue 依赖；调用同一引擎，当前工具只返回 result，Web 还能展示 raw。
 - root Broker：独立安装，可信 main SHA、非 root 构建、固定 systemd 部署/健康检查/回滚，不能接受任意模块命令。
 

@@ -8,7 +8,7 @@
 | --- | --- |
 | 布局、导航、主题、圆角、间距、响应式、PWA、登录/会话 | 面板 |
 | Action 卡片、说明/命令、保存、刷新、原始输出与 JSON | 面板 ActionCard |
-| 指标、进度条、表格、组合分区 | 面板 ResultRenderer |
+| 指标、进度条、圆环卡片、表格、组合分区 | 面板 ResultRenderer |
 | 采集/解析、输入输出 Schema、标题与说明 | 模块 |
 | 展示字段、标签、单位、分区、刷新建议 | 模块的 JSON 型 presentation |
 | 授权、CSRF/Origin、命令配置持久化、执行限制、输出校验 | 面板基础设施 |
@@ -51,7 +51,7 @@ ID 以模块 ID + "." 开头且全局唯一。业务需要一起刷新、配置�
 
 permission 是操作语义，不自行授予权限。Web/MCP 适配器负责授权；写操作引擎默认拒绝，新写类型须先实现并审查面板执行策略；terminal.execute 是明确批准的普通用户 Shell 特例，不代表任意模块 write 自动获准。不能通过 read 标签或 presentation 绕过写策略。root 更新 Broker 只处理固定可信 main 更新任务，不能用于模块 Shell。
 
-当前系统 Action 只有 system.info（主机字段 + disk）和 system.resources（cpu + memory）；另有 services.list。旧 system.cpu/system.memory/storage.usage 已删除，无隐藏别名。collectors 不是注册的 Action。
+当前系统 Action 只有 system.resources（cpu + memory + disk，排在前面）和 system.info（主机基本字段）；另有 services.list。旧 system.cpu/system.memory/storage.usage 已删除，无隐藏别名。collectors 不是注册的 Action。
 
 ## 可复制的最小示例
 
@@ -100,7 +100,7 @@ Linux 执行通过 timeout + /bin/sh -c，以现有非 root 服务身份，每�
 ```js
 migrateFrom:{newKey:{actionId:'old.action',key:'oldKey'}}
 ```
-优先当前已保存值 → 旧字段 → 默认值。保存写当前 Action；旧私有条目保留。改 key/Action ID 属于兼容性变更，必须更新升级说明并测试迁移优先级。
+migrateFrom 的值也可为有序数组，例如 filesystem:[{actionId:'system.info',key:'filesystem'},{actionId:'storage.usage',key:'filesystem'}]。优先当前已保存值 → 按顺序找到的旧字段 → 默认值。保存写当前 Action；旧私有条目保留。改 key/Action ID 属于兼容性变更，必须更新升级说明并测试迁移优先级。
 
 ## 展示协议
 
@@ -110,19 +110,20 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | --- | --- |
 | metrics | 非空 fields:[{key,label,format?}] |
 | progress | title、数值 valueKey；可选 totalKey/usedKey/availableKey、details |
+| gauge | title、百分比 valueKey、数值 totalKey；可选 usedKey、quantityFormat（bytes/number）、unit |
 | table | rowsKey 指向对象数组；非空 columns:[{key,label,format?}] |
-| sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象 |
+| sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象；可选 layout:'grid' 并排展示 |
 | terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 
-format 只支持 bytes/duration/milliseconds/integer；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度数值必须声明为 number；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。
+format 只支持 bytes/duration/milliseconds/integer/number；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度百分比必须声明为 number；圆环数量字段可为 number/integer，未给 usedKey 时用百分比 × 总量计算等效用量；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。
 
-同一 Action 返回 {cpu:{usagePercent},memory:{usagePercent}} 的示例：
+同一 Action 返回嵌套资源对象的示例（CPU 以逻辑核数为总量、百分比换算等效已用核数）：
 ```js
 {
-  actionId:'example.resources',renderer:'sections',
+  actionId:'example.resources',renderer:'sections',layout:'grid',
   loadOnEnter:true,refreshIntervalMs:5000,sections:[
-    {key:'cpu',renderer:'progress',title:'CPU 使用率',valueKey:'usagePercent'},
-    {key:'memory',renderer:'progress',title:'内存占用',valueKey:'usagePercent'}
+    {key:'cpu',renderer:'gauge',title:'CPU',valueKey:'usagePercent',totalKey:'logicalCpus',quantityFormat:'number',unit:'核'},
+    {key:'memory',renderer:'gauge',title:'内存',valueKey:'usagePercent',totalKey:'totalBytes',usedKey:'usedBytes',quantityFormat:'bytes'}
   ]
 }
 ```
