@@ -178,9 +178,19 @@ priv_switch(){
     mv -fT -- "$tmp" "$PRIV_CURRENT" || return 1
     durable_sync dir "$PRIV_ROOT" || return 1
   fi
-  systemctl restart linux-panel-privileged.service &&
-    systemctl is-active --quiet linux-panel-privileged.service &&
-    [[ -S /run/linux-panel-privileged/executor.sock ]]
+  systemctl restart linux-panel-privileged.service || return 1
+  # Type=simple reports active before Node binds the Unix socket.
+  # Respect the same bounded readiness window as the explicit installer.
+  local attempt
+  for attempt in $(seq 1 50);do
+    if systemctl is-active --quiet linux-panel-privileged.service &&
+       [[ -S /run/linux-panel-privileged/executor.sock ]];then
+      return 0
+    fi
+    sleep 0.1
+  done
+  log 'Privileged runtime restarted but its verified socket is unavailable'
+  return 1
 }
 priv_recover_old(){
   priv_present || return 0
