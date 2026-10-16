@@ -30,7 +30,7 @@ modules/example/
 
 manifest.id 必须等于目录名，entry 必须为 ./index.js；dependencies 为现有模块 ID，加载器检查缺失和循环依赖。setup 只接收 {actions,moduleId}，不能假设有数据库或 root 能力的注入。
 
-可选 manifest.navigationOrder 为有限数字，仅用于首次初始化导航顺序。面板将顺序保存在私有状态 moduleOrder；之后发现的新模块无论该值如何都追加末尾。不要通过模块名称、Action ID 或 Vue 特判控制导航；依赖装载顺序与显示顺序独立。
+可选 manifest.navigationOrder 为有限数字，仅用于首次初始化导航顺序。面板将顺序保存在私有状态 moduleOrder；管理员可在「面板设置 → 模块管理」通过上移/下移调整任意已安装业务模块，立即保存并更新导航，不按模块名称写特殊排序规则；已卸载但仍记录的模块位置保持，以便恢复加载。之后发现的新模块无论该值如何都追加末尾。不要通过模块名称、Action ID 或 Vue 特判控制导航；依赖装载顺序与显示顺序独立。
 
 manifest.json：
 ```json
