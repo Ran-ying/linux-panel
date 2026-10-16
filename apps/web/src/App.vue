@@ -232,7 +232,7 @@ onMounted(async () => {
           @unauthorized="signOutLocally" />
         <div v-if="activeGroup.actions.some(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))"
           class="action-flow">
-          <template v-for="action in activeGroup.actions.filter(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))" :key="action.id">
+          <template v-for="action in activeGroup.actions.filter(a => !presentations[a.id]?.embedded && (activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.')))" :key="action.id">
             <ActionCard :action="action" :presentation="presentations[action.id] ?? null"
               :csrf="session.csrf" @unauthorized="signOutLocally" />
             <TerminalConsole v-if="presentations[action.id]?.console==='terminal'" :action-id="action.id"

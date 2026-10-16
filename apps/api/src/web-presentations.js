@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer', 'number']);
 
 function validateView(view,schema,actionId,depth=0) {
@@ -28,6 +28,8 @@ function validateView(view,schema,actionId,depth=0) {
       } else if (view.renderer === 'metrics') {
         if (!Array.isArray(view.fields) || !view.fields.length) throw new Error('Missing metric fields');
         view.fields.forEach(f => checkField(f, schema));
+      } else if(view.renderer==='files') {
+        if(schema.path?.type!=='string' || schema.entries?.type!=='array')throw new Error('Invalid files result schema');
       } else if (view.renderer === 'table') {
         const nested = schema[view.rowsKey]?.items?.properties;
         if (!nested || !Array.isArray(view.columns) || !view.columns.length)
@@ -119,6 +121,22 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
               throw new Error('Select options must reference a string array result field');
           }
           keys.add(field.key);
+        }
+      }
+      if(item.embedded!==undefined && typeof item.embedded!=='boolean')throw new Error('Invalid embedded flag');
+      if(item.renderer==='files'){
+        for(const name of ['read','write','upload']){
+          const id=item.operations?.[name],target=visible.get(id);
+          if(!target || !id.startsWith(module.id+'.'))throw new Error('Files operation must reference an exposed module Action');
+        }
+      }
+      if(item.clientFilters!==undefined){
+        const rows=schema[item.rowsKey]?.items?.properties;
+        if(item.renderer!=='table' || !Array.isArray(item.clientFilters) || !item.clientFilters.length || item.clientFilters.length>12)
+          throw new Error('Invalid client filters');
+        for(const filter of item.clientFilters){
+          if(!['contains','exact'].includes(filter.match) || action.inputSchema.properties?.[filter.key]?.type!=='string' || rows?.[filter.field]?.type!=='string')
+            throw new Error('Invalid client filter fields');
         }
       }
       // UI values must be inert JSON, with no executable callbacks exposed.

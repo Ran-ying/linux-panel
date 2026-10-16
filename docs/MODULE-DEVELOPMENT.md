@@ -7,7 +7,7 @@
 | 内容 | 负责人 |
 | --- | --- |
 | 布局、导航、主题、圆角、间距、响应式、PWA、登录/会话 | 面板 |
-| Action 卡片、说明/命令、保存、刷新、原始输出与 JSON | 面板 ActionCard |
+| Action 卡片、说明/命令、保存、刷新、原始输出与 JSON、通用文件浏览器 | 面板 ActionCard |
 | 指标、进度条、圆环卡片、表格、组合分区 | 面板 ResultRenderer |
 | 采集/解析、输入输出 Schema、标题与说明 | 模块 |
 | 展示字段、标签、单位、分区、刷新建议 | 模块的 JSON 型 presentation |
@@ -115,6 +115,7 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | gauge | title、百分比 valueKey；totalKey 或非空 details 至少提供一种；可选 usedKey、quantityFormat（bytes/number）、unit |
 | table | rowsKey 指向对象数组；非空 columns:[{key,label,format?}] |
 | sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象；可选 layout:'grid' 并排展示 |
+| files | path/entries 输出，operations:{read,write,upload} 引用同模块 Web Action |
 | terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 
 format 只支持 bytes/duration/milliseconds/integer/number；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度百分比必须声明为 number；圆环数量字段可为 number/integer，未给 usedKey 时用百分比 × 总量计算等效用量；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。
@@ -137,6 +138,10 @@ loadOnEnter 仅允许无需必填参数的 read；自动刷新默认关闭，由
 MCP 工具通过 SDK fromJsonSchema 公布模块 Action.inputSchema/outputSchema，实际参数传给同一 ActionEngine；必填/可选/嵌套对象/数组/边界和未知字段由 schema 校验，已补齐原空参数缺口。
 
 presentation.inputs 可声明 [{key,label,type:'textarea'|'text'|'select',placeholder?,optionsKey?}]，字段必须存在于 inputSchema 且为 string；select 的 optionsKey 必须对应 outputSchema 中 string 数组，inputsLabel 可声明输入区标题；面板在信息区下方渲染输入。未声明时仍使用通用 JSON 编辑器。只对无需输入的 read 自动加载，不因有展示配置就自动执行写操作。
+
+presentation.embedded:true 可将辅助 Action 从独立卡片中隐藏，由主展示通过已校验的 operations 引用调用；它不改变 API 暴露或授权。files renderer 的模块契约见 [文件管理](FILES.md)。
+
+表格可声明 clientFilters:[{key,field,match:'contains'|'exact'}]，key 对应 string 输入、field 对应 rowsKey 元素中的 string 输出；面板对已经读取的行实时筛选，不重新调用 Action。“刷新数据”仍重新读取完整数据。服务模块保留可供 API 使用的后端筛选参数，Web 使用本地筛选。
 
 renderer:'terminal' 复用面板黑色 stdout/stderr 结果视图；console:'terminal' 在 Action 卡片下方提供通用真实 PTY 组件，仅适用于已批准的普通用户 Shell 能力。模块不附带 CSS/Vue，具体参考 [终端规范](TERMINAL.md)。
 

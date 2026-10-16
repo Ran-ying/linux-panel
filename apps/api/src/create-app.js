@@ -285,7 +285,7 @@ export async function createApp({
       authenticated:true,channel:'web',userId:request.panelIdentity.user.id
     });
   });
-  app.post('/api/actions/:id/execute', async request => {
+  app.post('/api/actions/:id/execute', {bodyLimit:12*1024*1024}, async request => {
     const action = registry.get(request.params.id);
     if (!action || action.exposure?.web !== true)
       throw Object.assign(new Error('Action unavailable'), { statusCode: 404 });

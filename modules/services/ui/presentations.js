@@ -1,4 +1,3 @@
-/** Web-only descriptors; the panel owns filter controls and table layout. */
 export default [
   {
     "actionId": "services.list",
@@ -44,6 +43,23 @@ export default [
         "label": "说明"
       }
     ],
-    "refreshIntervalMs": 0
+    "refreshIntervalMs": 0,
+    "clientFilters": [
+      {
+        "key": "nameKeyword",
+        "field": "name",
+        "match": "contains"
+      },
+      {
+        "key": "active",
+        "field": "active",
+        "match": "exact"
+      },
+      {
+        "key": "sub",
+        "field": "sub",
+        "match": "exact"
+      }
+    ]
   }
 ];

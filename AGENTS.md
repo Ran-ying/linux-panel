@@ -43,3 +43,5 @@ Before declaring a substantive feature, fix, production incident, deployment or 
 6. End the user-facing work with a short summary: **done / evidence / not yet done / next action**. If a write or validation failed, record the limitation and do not claim completion.
 
 This workflow is an **instruction for future contributors**, not an automatic background process; each new conversation must actually perform and confirm the relevant GitHub updates. If a new AI conversation has no prior context, read **this file, project status, Issue #54 and Issue #35**, then inspect live main and current tools before taking action.
+
+- **File capability:** files.list/read use ordinary-account fs access; files.write/upload are exact user-files Web-only write Actions under existing authenticated CSRF/Origin policy. No root/sudo/Broker. FileBrowser is panel-owned, helper Actions use embedded presentation, file content/path never enter audit records. See docs/FILES.md. Service Web filters are local over loaded rows; basic information does not poll.
