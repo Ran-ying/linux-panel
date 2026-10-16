@@ -104,14 +104,14 @@ function check(){
 
 <template>
   <section class="managed-configs">
-    <div class="config-toolbar">
-      <div class="panel-control-capsule">
+    <Teleport to="#module-header-actions">
+      <div class="config-toolbar">
         <button type="button" class="panel-control-primary" :disabled="busy" @click="openNew">{{ labels.create||'新建配置' }}</button>
-      <button type="button" :disabled="busy" @click="work(refresh)">刷新数据</button>
-      <button type="button" :disabled="busy" @click="check">{{ labels.check||'检查配置' }}</button>
+        <button type="button" :disabled="busy" @click="work(refresh)">刷新数据</button>
+        <button type="button" :disabled="busy" @click="check">{{ labels.check||'检查配置' }}</button>
       </div>
-      <span class="muted small">{{ listing.count }} 项 · {{ listing.enabledCount }} 项启用或待确认</span>
-    </div>
+    </Teleport>
+    <p class="config-summary muted small">{{ listing.count }} 项 · {{ listing.enabledCount }} 项启用或待确认</p>
     <p v-if="notice" role="status" class="config-notice">{{ notice }}</p>
     <p v-if="busy" role="status" class="muted small">正在处理…</p>
     <p v-if="error && !draft && !pending" role="alert" class="error">{{ error }}</p>
@@ -122,18 +122,9 @@ function check(){
     </div>
     <div class="config-browser" :class="{'has-selection':!!selectedSite}">
       <section class="config-list-panel" aria-label="网站列表">
-        <h3 class="config-panel-heading">网站</h3>
         <ul v-if="listing.sites.length" class="config-site-list">
           <li v-for="site in listing.sites" :key="site.file" class="config-site-row"
             :class="{'is-selected':selectedFile===site.file}">
-            <button type="button" class="config-site-selector" :disabled="busy"
-              :aria-label="'查看网站 '+site.name" :aria-pressed="selectedFile===site.file"
-              @click="selectSite(site)">
-              <strong class="config-site-name">{{ site.name }}</strong>
-              <span class="config-domains">
-                <span v-for="(domain,index) in domains(site)" :key="index" class="config-domain">{{ domain }}</span>
-              </span>
-            </button>
             <input type="checkbox" class="config-status-checkbox"
               :checked="site.enabled==='启用链接'||site.enabled==='启用目录'"
               :indeterminate="site.enabled==='配置候选'"
@@ -145,6 +136,14 @@ function check(){
                   ? '此配置的生效状态取决于 nginx.conf，不能在此启停'
                   : '此配置不能在此启停'"
               @click.prevent="ask(site,site.enabled==='启用链接'?'disable':'enable')" />
+            <button type="button" class="config-site-selector" :disabled="busy"
+              :aria-label="'查看网站 '+site.name" :aria-pressed="selectedFile===site.file"
+              @click="selectSite(site)">
+              <strong class="config-site-name">{{ site.name }}</strong>
+              <span class="config-domains">
+                <span v-for="(domain,index) in domains(site)" :key="index" class="config-domain">{{ domain }}</span>
+              </span>
+            </button>
           </li>
         </ul>
         <p v-else class="muted config-empty">没有找到站点配置文件</p>
@@ -216,29 +215,30 @@ function check(){
 
 <style scoped>
 .config-toolbar,.config-actions,.config-dialog-actions{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap}
-.config-toolbar{margin:.2rem 0 1rem}
+.config-toolbar{margin:0;justify-content:flex-end}
 .config-toolbar button,.config-actions button,.config-dialog-actions button{font:inherit;min-height:2.35rem;padding:.35rem .8rem}
-.config-browser{display:grid;grid-template-columns:minmax(0,25rem);align-items:start;gap:1rem;min-width:0}
-.config-browser.has-selection{grid-template-columns:minmax(0,24rem) minmax(0,1fr)}
-.config-list-panel,.config-detail-panel{border:1px solid var(--border,#8885);border-radius:10px;min-width:0;overflow:hidden}
-.config-panel-heading{font-size:1rem;margin:0;padding:.8rem 1rem;border-bottom:1px solid var(--border,#8885)}
+.config-summary{margin:.1rem 0 .45rem}
+.config-browser{display:grid;grid-template-columns:minmax(0,17rem);align-items:start;gap:1rem;min-width:0}
+.config-browser.has-selection{grid-template-columns:minmax(0,17rem) minmax(0,1fr)}
+.config-list-panel,.config-detail-panel{border:0;border-radius:0;min-width:0;overflow:visible}
+.config-detail-panel{border-left:1px solid var(--border-panel);padding-left:1rem}
 .config-site-list{list-style:none;margin:0;padding:0}
 .config-site-row{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--border,#8885)}
 .config-site-row:last-child{border-bottom:none}
 .config-site-row.is-selected{background:var(--surface-secondary,#8881)}
 .config-site-selector{flex:1;display:flex;flex-direction:column;gap:.25rem;min-width:0;
-  border:0;background:none;color:inherit;text-align:left;padding:.8rem 0 .8rem 1rem;
+  border:0;background:none;color:inherit;text-align:left;padding:.7rem .3rem .7rem 0;
   font:inherit;cursor:pointer}
 .config-site-selector:focus-visible{outline:2px solid var(--accent,#538ad7);outline-offset:-2px}
 .config-site-selector:disabled{cursor:wait}
 .config-site-name{font-weight:600;overflow-wrap:anywhere}
 .config-domains,.config-detail-section{display:flex;flex-direction:column;gap:.2rem;min-width:0}
 .config-domain{display:block;font-size:.87rem;color:var(--text-muted,#888);overflow-wrap:anywhere}
-.config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:0 1rem 0 .3rem;
+.config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:0 0 0 .2rem;
   cursor:pointer;accent-color:var(--accent,#538ad7)}
 .config-status-checkbox:disabled{cursor:not-allowed;opacity:.65}
 .config-empty{padding:1rem;margin:0}
-.config-detail-panel{padding:1rem;display:grid;gap:1.1rem}
+.config-detail-panel{padding-top:.1rem;padding-right:0;padding-bottom:0;display:grid;gap:1.1rem}
 .config-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:.7rem}
 .config-detail-heading h3{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
 .config-detail-heading button{font:inherit;min-height:2.2rem;padding:.25rem .7rem}
@@ -262,6 +262,6 @@ function check(){
 @media(max-width:900px){
   .config-browser.has-selection{grid-template-columns:minmax(0,1fr)}
   .config-browser{grid-template-columns:minmax(0,1fr)}
-  .config-toolbar{align-items:stretch}
+  .config-detail-panel{border-left:0;border-top:1px solid var(--border-panel);padding:1rem 0 0}
 }
 </style>
