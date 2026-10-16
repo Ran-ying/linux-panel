@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,stat,symlink} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm,stat,symlink,chmod} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createApp} from '../apps/api/src/create-app.js';
@@ -24,6 +24,7 @@ test('file listing, text revisions, UTF-8 bounds, uploads and HTTP write guards'
   const path=join(dir,'note.txt');await writeFile(path,'original',{mode:0o640});
   await mkdir(join(dir,'child'));
   const listing=await listFiles({path:dir,limit:1});
+  assert.equal(listing.writeAccess,'allowed');
   assert.equal(listing.total,2);assert.equal(listing.nextOffset,1);
   assert.equal((await listFiles({path:dir,offset:1})).entries.length,1);
   await assert.rejects(readText({path:join(dir,'missing')}),{statusCode:404});
@@ -97,5 +98,10 @@ test('recursive directory sizes, ownership, creation, rename collisions and syml
   await deleteEntry({path:join(dir,'loop')});assert.ok((await stat(folder)).isDirectory());
   await deleteEntry({path:renamed});await assert.rejects(stat(renamed),{code:'ENOENT'});
   await deleteEntry({path:dir});await assert.rejects(stat(dir),{code:'ENOENT'});
+  const locked=join(folder,'locked');await mkdir(locked);await chmod(locked,0o555);
+  try{
+    assert.equal((await listFiles({path:locked})).writeAccess,'denied');
+    await assert.rejects(createEntry({path:join(locked,'denied'),type:'file'}),{statusCode:403});
+  }finally{await chmod(locked,0o700);}
   await assert.rejects(deleteEntry({path:'/'}),{statusCode:403});
 });

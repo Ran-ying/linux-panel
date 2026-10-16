@@ -17,6 +17,7 @@ const origin='http://127.0.0.1:49273';
 const output=process.env.PANEL_BROWSER_OUTPUT || join(temp,'screenshots');
 await mkdir(output,{recursive:true});
 const fileFixture=join(temp,'files-fixture');await mkdir(join(fileFixture,'child'),{recursive:true});
+const lockedFixture=join(temp,'readonly-fixture');await mkdir(lockedFixture,{mode:0o555});
 await writeFile(join(fileFixture,'note.txt'),'file-fixture-original');
 await new AuthService(new StateStore(statePath)).bootstrap('admin',password);
 const app=await createApp({root,statePath,publicOrigin:origin,production:true,
@@ -262,6 +263,21 @@ try {
       if(name.trim()==='文件管理' && [390,1280].includes(width)){
         assert.equal(await page.locator('.action-card').count(),1,'helper Actions belong inside the file browser');
         const browser=page.locator('.file-browser');
+        const card=page.locator('.action-card');
+        assert.equal(await card.locator('.action-info-tabs,.result-header').count(),0,'file browser owns its controls');
+        assert.equal(await browser.getByText('目录路径',{exact:true}).count(),0,'path input retains only its accessible label');
+        const pathBar=browser.locator('.file-path-bar');
+        const items=await pathBar.locator(':scope>button,:scope>input').evaluateAll(nodes=>nodes.map(n=>({
+          tag:n.tagName,label:n.textContent,height:n.getBoundingClientRect().height,top:n.getBoundingClientRect().top
+        })));
+        assert.deepEqual(items.map(i=>i.tag),['BUTTON','INPUT','BUTTON']);
+        assert.deepEqual(items.filter(i=>i.tag==='BUTTON').map(i=>i.label),['上一级','打开目录']);
+        assert.ok(items.every(i=>Math.abs(i.height-items[0].height)<1 && Math.abs(i.top-items[0].top)<1),'three equal-height controls stay on one row');
+        assert.deepEqual(await browser.locator('.file-toolbar>button').allTextContents(),['上传文件','新建文件','新建文件夹']);
+        await browser.getByRole('textbox',{name:'目录路径',exact:true}).fill(lockedFixture);
+        await browser.getByRole('button',{name:'打开目录',exact:true}).click();
+        await browser.getByText('面板服务账户没有当前目录的写入权限。请打开可写目录后新建或上传文件。',{exact:true}).waitFor();
+        for(const label of ['上传文件','新建文件','新建文件夹'])assert.equal(await browser.getByRole('button',{name:label,exact:true}).isDisabled(),true);
         await browser.getByRole('textbox',{name:'目录路径',exact:true}).fill(fileFixture);
         await browser.getByRole('button',{name:'打开目录',exact:true}).click();
         await browser.getByRole('button',{name:'note.txt',exact:true}).click();
@@ -290,6 +306,12 @@ try {
         const fileHeaders=await browser.locator('.file-table th').allTextContents();
         assert.ok(fileHeaders.includes('大小（MB）'));
         assert.ok(fileHeaders.includes('权限 / 所有者'));
+        const metadata=await browser.locator('.file-table tbody tr').evaluateAll(rows=>rows.map(row=>({
+          size:row.children[2].textContent,date:row.querySelector('.file-date')?.textContent,time:row.querySelector('.file-time')?.textContent,
+          dateTop:row.querySelector('.file-date')?.getBoundingClientRect().top,timeTop:row.querySelector('.file-time')?.getBoundingClientRect().top
+        })));
+        assert.ok(metadata.every(row=>/^(≥ )?[\d,]+\.\d{2} MB$/.test(row.size.trim())),'MB values have exactly two decimals');
+        assert.ok(metadata.every(row=>/^\d{4}-\d{2}-\d{2}$/.test(row.date) && /^\d{2}:\d{2}:\d{2}$/.test(row.time) && row.timeTop>row.dateTop),'modified dates and times occupy separate lines');
         await browser.getByRole('button',{name:'新建文件',exact:true}).click();
         await browser.getByRole('textbox',{name:'名称',exact:true}).fill('created-'+width+'.txt');
         await browser.getByRole('button',{name:'确定',exact:true}).click();

@@ -1,10 +1,11 @@
 <script setup>
-import {ref,watch,onUnmounted} from 'vue';
+import {ref,watch,onUnmounted,computed} from 'vue';
 const props=defineProps({initialData:Object,listAction:String,operations:Object,csrf:String});
 const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
 const busy=ref(false),error=ref(''),message=ref(''),uploadInput=ref(null);
 const dragging=ref(false),operation=ref(null),entryName=ref('');
+const canWrite=computed(()=>listing.value.writeAccess==='allowed');
 const controller=new AbortController();
 watch(()=>props.initialData,data=>{listing.value=data;address.value=data.path;});
 onUnmounted(()=>controller.abort());
@@ -54,6 +55,7 @@ function upload(event){const files=Array.from(event.target.files || []);event.ta
 function drop(event){dragging.value=false;return uploadFiles(Array.from(event.dataTransfer.files || []));}
 function uploadFiles(files){
   if(!files.length)return;
+  if(!canWrite.value){error.value='当前目录不可写，请打开有写入权限的目录后上传';return;}
   return task(async()=>{
     try{
       for(const file of files){
@@ -90,24 +92,30 @@ function remove(entry){
 }
 function megabytes(entry){
   if(entry.size===null)return '—';
-  return (entry.sizeComplete?'':'≥ ')+(entry.size/1000000).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6})+' MB';
+  return (entry.sizeComplete?'':'≥ ')+(entry.size/1000000).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MB';
+}
+function dateParts(value){
+  const date=new Date(value);
+  if(!value || Number.isNaN(date.getTime()))return null;
+  return {date:date.toLocaleDateString('sv-SE'),time:date.toLocaleTimeString('zh-CN',{hour12:false})};
 }
 </script>
 <template>
   <div class="file-browser" :class="{'file-dragging':dragging}" @dragover.prevent="dragging=true"
     @dragleave="!$event.currentTarget.contains($event.relatedTarget) && (dragging=false)" @drop.prevent="drop">
     <form class="file-path-bar" @submit.prevent="task(()=>list(address))">
-      <label>目录路径<input v-model="address" aria-label="目录路径" :disabled="busy" /></label>
-      <button type="submit" :disabled="busy">打开目录</button>
       <button type="button" :disabled="busy || !listing.parent" @click="task(()=>list(listing.parent))">上一级</button>
-      <button type="button" :disabled="busy" @click="uploadInput.click()">上传文件</button>
-      <input ref="uploadInput" class="file-upload-input" type="file" multiple aria-label="上传文件" @change="upload" />
+      <input v-model="address" aria-label="目录路径" :disabled="busy" />
+      <button type="submit" :disabled="busy">打开目录</button>
     </form>
     <div class="file-toolbar">
-      <button type="button" :disabled="busy" @click="beginCreate('file')">新建文件</button>
-      <button type="button" :disabled="busy" @click="beginCreate('directory')">新建文件夹</button>
+      <button type="button" :disabled="busy || !canWrite" @click="uploadInput.click()">上传文件</button>
+      <input ref="uploadInput" class="file-upload-input" type="file" multiple aria-label="上传文件" :disabled="busy || !canWrite" @change="upload" />
+      <button type="button" :disabled="busy || !canWrite" @click="beginCreate('file')">新建文件</button>
+      <button type="button" :disabled="busy || !canWrite" @click="beginCreate('directory')">新建文件夹</button>
       <span class="muted small">可将文件拖入此处上传</span>
     </div>
+    <p v-if="!canWrite" class="notice file-access-notice" role="status">{{ listing.writeAccess==='readonly'?'当前目录所在文件系统只读。':'面板服务账户没有当前目录的写入权限。' }}请打开可写目录后新建或上传文件。</p>
     <div v-if="dragging" class="file-drop-hint">松开以上传到当前目录</div>
     <form v-if="operation" class="file-entry-form" @submit.prevent="submitEntry">
       <label>{{ operation.kind==='rename'?'重命名':operation.type==='file'?'新建文件':'新建文件夹' }}
@@ -127,10 +135,13 @@ function megabytes(entry){
             <td>{{ entry.type==='directory'?'目录':entry.type==='file'?'文件':'其他' }}{{ entry.symlink?' · 链接':'' }}</td>
             <td :title="entry.sizeComplete?'逻辑文件大小，1 MB = 1,000,000 B':'未完整统计；可能无权限、超过扫描限额或为目录链接'">{{ megabytes(entry) }}</td>
             <td><span class="file-permissions">{{ entry.permissions }}</span><span class="file-owner">{{ entry.owner }}</span></td>
-            <td>{{ entry.modifiedAt }}</td>
+            <td><time v-if="dateParts(entry.modifiedAt)" :datetime="entry.modifiedAt" class="file-modified">
+              <span class="file-date">{{ dateParts(entry.modifiedAt).date }}</span>
+              <span class="file-time">{{ dateParts(entry.modifiedAt).time }}</span>
+            </time><span v-else>—</span></td>
             <td><div class="file-row-actions">
-              <button type="button" :disabled="busy" :aria-label="'重命名 '+entry.name" @click="beginRename(entry)">重命名</button>
-              <button type="button" :disabled="busy" :aria-label="'删除 '+entry.name" @click="remove(entry)">删除</button>
+              <button type="button" :disabled="busy || !canWrite" :aria-label="'重命名 '+entry.name" @click="beginRename(entry)">重命名</button>
+              <button type="button" :disabled="busy || !canWrite" :aria-label="'删除 '+entry.name" @click="remove(entry)">删除</button>
             </div></td>
           </tr>
           <tr v-if="!listing.entries.length"><td colspan="6">空目录</td></tr>
