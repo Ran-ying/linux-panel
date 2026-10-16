@@ -1,6 +1,7 @@
 import {createServer} from 'node:net';
 import {chmod,chown,lstat,unlink} from 'node:fs/promises';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
+import {realpathSync} from 'node:fs';
 import {createPrivilegedHandlers} from './handlers.js';
 const failure=(message,statusCode=400)=>Object.assign(new Error(message),{statusCode});
 export async function dispatchPrivileged(request,handlers){
@@ -43,7 +44,9 @@ export async function startPrivilegedServer({socketPath,groupId,handlers=createP
   catch(error){server.close();throw error;}
   return server;
 }
-if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
+// Node resolves symlinked ESM entrypoints to real paths. The service launches
+// current/server.js while import.meta.url points into releases/<SHA>/server.js.
+if(process.argv[1] && realpathSync(process.argv[1])===fileURLToPath(import.meta.url)){
   if(process.getuid?.()!==0)throw Error('Privileged executor requires root');
   const groupId=Number(process.env.PANEL_CLIENT_GID);
   if(!Number.isSafeInteger(groupId)||groupId<0)throw Error('PANEL_CLIENT_GID is required');
