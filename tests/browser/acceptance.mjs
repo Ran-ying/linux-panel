@@ -184,6 +184,26 @@ try {
         });
         assert.equal(controls,true,'refresh must precede visual/JSON controls in result section');
       }
+      if(name.trim()==='终端'){
+        const card=page.locator('.action-card').first();
+        await page.locator('.terminal-console').waitFor();
+        if([390,1280].includes(width)){
+          await card.getByRole('textbox',{name:'命令',exact:true}).fill("printf 'browser-command\\n'; printf 'browser-error\\n' >&2; exit 2");
+          await card.getByRole('button',{name:'执行命令',exact:true}).click();
+          await card.locator('.terminal-result').waitFor();
+          assert.equal(await card.locator('.terminal-output').first().textContent(),'browser-command\n');
+          assert.ok((await card.locator('.terminal-summary').innerText()).includes('退出码：2'));
+          const console=page.locator('.terminal-console');
+          await console.getByRole('button',{name:'连接终端',exact:true}).click();
+          await console.getByRole('button',{name:'断开',exact:true}).waitFor();
+          await console.getByRole('textbox',{name:'终端输入',exact:true}).fill("cd /tmp; printf '\\160\\164\\171\\055\\142\\162\\157\\167\\163\\145\\162\\012'; pwd");
+          await console.getByRole('button',{name:'发送',exact:true}).click();
+          await page.waitForFunction(()=>document.querySelector('.terminal-screen')?.textContent.includes('pty-browser'));
+          await console.getByRole('button',{name:'Ctrl+C',exact:true}).click();
+          await page.screenshot({path:join(output,'terminal-connected-'+width+'.png'),fullPage:true});
+          await console.getByRole('button',{name:'断开',exact:true}).click();
+        }
+      }
       // Editing and opening the raw JSON disclosure can scroll the page; measure the initial header gutter at the top.
       await page.evaluate(()=>window.scrollTo(0,0));
       // All module containers must fit; tables/nav may scroll internally.
@@ -204,7 +224,7 @@ try {
       const frames=await page.locator('.module-content').evaluate(content=>{
         const sidebar=document.querySelector('.module-sidebar');
         const side=sidebar.getBoundingClientRect(), box=content.getBoundingClientRect();
-        const nodes=[...content.querySelectorAll(':scope > .module-intro,:scope > .action-card,:scope > .settings-section,:scope > .action-flow > .action-card')];
+        const nodes=[...content.querySelectorAll(':scope > .module-intro,:scope > .action-card,:scope > .settings-section,:scope > .action-flow > .action-card,:scope > .action-flow > .terminal-console')];
         const rects=nodes.map(n=>n.getBoundingClientRect());
         return {centerError:Math.abs(box.right+side.left-innerWidth),width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
           radius:getComputedStyle(sidebar).borderTopLeftRadius,
