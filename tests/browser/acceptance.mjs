@@ -337,8 +337,13 @@ try {
           const cs=getComputedStyle(node);
           return {border:cs.borderTopWidth,radius:cs.borderTopLeftRadius,background:cs.backgroundColor};
         });
-        assert.equal(outerStyles.border,'0px','website manager content must have no outer frame');
-        assert.equal(outerStyles.radius,'0px','website manager must not have a rounded container');
+        assert.equal(outerStyles.border,'1px',
+          'the website manager must retain its own outer card border');
+        assert.ok(parseFloat(outerStyles.radius)>=12,
+          'the website manager must retain its own rounded outer card');
+        const moduleRadius=await moduleTitle.evaluate(node=>getComputedStyle(node).borderTopLeftRadius);
+        assert.equal(outerStyles.radius,moduleRadius,
+          'website manager outer radius must match the shared module card design');
         assert.equal(await manager.evaluate(node=>getComputedStyle(node).borderTopWidth),'0px',
           'managed-configs nested section must be unframed');
         const siteListStyle=await manager.locator('.config-list-panel').evaluate(node=>{
