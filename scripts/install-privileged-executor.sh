@@ -57,7 +57,7 @@ PY
 install -d -o root -g root -m 0755 /usr/local/lib
 LP_STAGE=$(mktemp -d /usr/local/lib/.linux-panel-privileged.XXXXXX)
 trap 'rm -rf "$LP_STAGE"' EXIT
-for file in server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js;do
+for file in server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js nginx-contracts.js nginx-operations.js;do
   install -o root -g root -m 0600 "$LP_ROOT/platform/privileged/$file" "$LP_STAGE/$file"
 done
 printf '{"type":"module"}\n' > "$LP_STAGE/package.json"

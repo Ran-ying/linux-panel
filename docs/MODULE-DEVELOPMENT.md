@@ -118,6 +118,7 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | table | rowsKey 指向对象数组；非空 columns:[{key,label,format?}] |
 | sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象；可选 layout:'grid' 并排展示 |
 | files | path/entries 输出，operations:{accounts,read,write,upload,create,rename,delete,chmod,chown} 引用同模块 Web Action |
+| managed-configs | sites[]、count/启用数；operations:{read,apply,check} 引用相同模块的读/写 Actions，面板提供通用配置编辑和确认弹窗 |
 | scheduled-tasks | tasks[]、revision、count；operations:{save,remove} 引用同模块已暴露的写 Action，Web 面板提供编辑/启停/删除弹窗 |
 | terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 

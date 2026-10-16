@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files', 'scheduled-tasks']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files', 'scheduled-tasks', 'managed-configs']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer', 'number']);
 
 function validateView(view,schema,actionId,depth=0) {
@@ -30,6 +30,11 @@ function validateView(view,schema,actionId,depth=0) {
         view.fields.forEach(f => checkField(f, schema));
       } else if(view.renderer==='files') {
         if(schema.path?.type!=='string' || schema.entries?.type!=='array')throw new Error('Invalid files result schema');
+      } else if(view.renderer === 'managed-configs') {
+        const site=schema.sites?.items?.properties;
+        if(schema.count?.type!=='integer' || schema.enabledCount?.type!=='integer' ||
+          !site || ['name','location','enabled','serverNames','listens','file','editable'].some(key=>!site[key]))
+          throw new Error('Invalid managed-configs result schema');
       } else if (view.renderer === 'scheduled-tasks') {
         const job=schema.tasks?.items?.properties;
         if(schema.revision?.type!=='string' || schema.count?.type!=='integer' ||
@@ -135,6 +140,16 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
           const id=item.operations?.[name],target=visible.get(id);
           if(!target || !id.startsWith(module.id+'.'))throw new Error('Files operation must reference an exposed module Action');
         }
+      }
+      if(item.renderer==='managed-configs'){
+        for(const [name,kind] of [['read','read'],['apply','write'],['check','read']]){
+          const id=item.operations?.[name],target=visible.get(id);
+          if(typeof id!=='string'||!id.startsWith(module.id+'.')||!target||target.kind!==kind)
+            throw new Error('Managed config operation must refer to exposed module Action');
+        }
+        if(item.labels!==undefined && (!item.labels || typeof item.labels!=='object' ||
+          Object.values(item.labels).some(value=>typeof value!=='string'||value.length>80)))
+          throw new Error('Invalid managed config labels');
       }
       if(item.renderer==='scheduled-tasks'){
         for(const name of ['save','remove']){

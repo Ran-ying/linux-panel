@@ -1,0 +1,7 @@
+{
+  "id": "nginx",
+  "name": "Nginx 网站",
+  "version": "0.2.0",
+  "entry": "./index.js",
+  "dependencies": []
+}
