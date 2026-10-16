@@ -64,14 +64,36 @@ trap 'rm -rf -- "$LP_STAGE"' EXIT
 mkdir -m 0700 "$LP_STAGE/releases"
 mkdir -m 0700 "$LP_STAGE/releases/$LP_SHA"
 LP_PACKAGE="$LP_STAGE/releases/$LP_SHA"
-for file in server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js;do
+# The reviewed package manifest supports future bundled root modules without
+# adding special cases to either installer or immutable Broker.
+LP_MANIFEST="$LP_ROOT/platform/privileged/package-manifest.json"
+LP_ENTRIES="$LP_PACKAGE/.entries"
+python3 -I - "$LP_MANIFEST" > "$LP_ENTRIES" <<'PY'
+import json,re,sys
+with open(sys.argv[1],encoding='utf-8') as f: m=json.load(f)
+if set(m)!={'version','files','dependencies'} or m['version']!=1: raise SystemExit('Unsupported root package manifest')
+files,deps=m['files'],m['dependencies']
+if not isinstance(files,list) or not 2<=len(files)<=40 or len(set(files))!=len(files) or not {'server.js','handlers.js'}.issubset(files):
+    raise SystemExit('Invalid root package files')
+if not isinstance(deps,list) or not 1<=len(deps)<=20 or len(set(deps))!=len(deps): raise SystemExit('Invalid root dependencies')
+if any(not isinstance(f,str) or not re.fullmatch(r'[a-z][a-z0-9-]*\.js',f) for f in files): raise SystemExit('Unsafe source')
+if any(not isinstance(d,str) or not re.fullmatch(r'[a-z][a-z0-9-]*',d) for d in deps): raise SystemExit('Unsafe dependency')
+for f in files: print('file '+f)
+for d in deps: print('dep '+d)
+PY
+cp -- "$LP_MANIFEST" "$LP_PACKAGE/manifest.json"
+while read -r kind file;do
+  [[ "$kind" == file ]] || continue
   install -o root -g root -m 0600 "$LP_ROOT/platform/privileged/$file" "$LP_PACKAGE/$file"
-done
+done < "$LP_ENTRIES"
 printf '{"type":"module"}\n' > "$LP_PACKAGE/package.json"
 mkdir "$LP_PACKAGE/node_modules"
-for package in ajv fast-deep-equal fast-uri json-schema-traverse require-from-string;do
-  cp -R -L "$LP_ROOT/node_modules/$package" "$LP_PACKAGE/node_modules/$package"
-done
+while read -r kind package;do
+  [[ "$kind" == dep ]] || continue
+  [[ -d "$LP_ROOT/node_modules/$package" && ! -L "$LP_ROOT/node_modules/$package" ]] || exit 1
+  [[ -z "$(find "$LP_ROOT/node_modules/$package" -type l -print -quit)" ]] || exit 1
+  cp -R -- "$LP_ROOT/node_modules/$package" "$LP_PACKAGE/node_modules/$package"
+done < "$LP_ENTRIES"
 chown -R root:root "$LP_STAGE"
 chmod -R go-rwx "$LP_STAGE"
 "$LP_NODE" --input-type=module -e 'const h=await import(process.argv[1]);if(h.createPrivilegedHandlers().size<1)process.exit(1)' "file://$LP_PACKAGE/handlers.js"
