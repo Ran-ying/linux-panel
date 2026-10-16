@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, onBeforeUnmount, watch, nextTick, ref, computed } from 'vue';
+import { onMounted, onBeforeUnmount, watch, nextTick, ref, computed, defineAsyncComponent } from 'vue';
 import ActionCard from './components/ActionCard.vue';
+const TerminalConsole=defineAsyncComponent(()=>import('./components/TerminalConsole.vue'));
 import UpdateManager from './components/UpdateManager.vue';
 import ListenerManager from './components/ListenerManager.vue';
 import LoginPanel from './components/LoginPanel.vue';
@@ -231,9 +232,12 @@ onMounted(async () => {
           @unauthorized="signOutLocally" />
         <div v-if="activeGroup.actions.some(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))"
           class="action-flow">
-          <ActionCard v-for="action in activeGroup.actions.filter(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))"
-            :key="action.id" :action="action" :presentation="presentations[action.id] ?? null"
-            :csrf="session.csrf" @unauthorized="signOutLocally" />
+          <template v-for="action in activeGroup.actions.filter(a => activeGroup.id !== 'panel' || !a.id.startsWith('panel.update.') && !a.id.startsWith('panel.listener.'))" :key="action.id">
+            <ActionCard :action="action" :presentation="presentations[action.id] ?? null"
+              :csrf="session.csrf" @unauthorized="signOutLocally" />
+            <TerminalConsole v-if="presentations[action.id]?.console==='terminal'" :action-id="action.id"
+              :csrf="session.csrf" @unauthorized="signOutLocally" />
+          </template>
         </div>
         <section v-else-if="activeGroup.id !== 'panel'" class="empty-state">这个模块暂时没有对 Web 开放的 Action。</section>
       </div>
