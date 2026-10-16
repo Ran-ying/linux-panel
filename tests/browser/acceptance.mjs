@@ -87,6 +87,17 @@ try {
           assert.equal(await card.locator('.command-table tbody tr').count(),9);
           const hostname=card.getByRole('textbox',{name:'命令 hostname',exact:true});
           assert.equal(await hostname.inputValue(),'hostname');
+          const shortHeight=await hostname.evaluate(n=>n.getBoundingClientRect().height);
+          await hostname.fill(Array.from({length:8},(_,i)=>'# line '+i).join('\n'));
+          await page.waitForFunction(()=>{const n=document.querySelector('.command-table textarea');return n.clientHeight>=n.scrollHeight;});
+          const tallHeight=await hostname.evaluate(n=>n.getBoundingClientRect().height);
+          assert.ok(tallHeight>shortHeight+60,'command input must grow with content');
+          await hostname.fill('hostname');
+          await page.waitForFunction(height=>document.querySelector('.command-table textarea').getBoundingClientRect().height<=height+1,shortHeight);
+          await card.getByRole('tab',{name:'命令',exact:true}).click();
+          await card.getByRole('tab',{name:'命令',exact:true}).click();
+          const clipped=await card.locator('.command-table textarea').evaluateAll(nodes=>nodes.some(n=>n.scrollHeight>n.clientHeight+1));
+          assert.equal(clipped,false,'loaded and reopened command inputs must fit wrapped values');
           if(width===1280){
             await hostname.fill('printf panel-command-test');
             let saved=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/commands') && r.request().method()==='PUT');
@@ -104,6 +115,16 @@ try {
             await executed;
           }
         }
+        const sizes=await card.locator('.result-controls button').evaluateAll(nodes=>nodes.map(n=>{
+          const s=getComputedStyle(n),r=n.getBoundingClientRect();
+          return [r.width,r.height,s.fontSize,s.fontWeight,s.lineHeight];
+        }));
+        assert.equal(sizes.length,3);
+        assert.ok(sizes.every(s=>JSON.stringify(s)===JSON.stringify(sizes[0])),'result buttons must share dimensions and typography');
+        const pills=await card.locator('.action-info-tabs,.view-switch').evaluateAll(nodes=>
+          nodes.every(n=>parseFloat(getComputedStyle(n).borderTopLeftRadius)>=999 &&
+            [...n.querySelectorAll('button')].every(b=>parseFloat(getComputedStyle(b).borderTopLeftRadius)>=999)));
+        assert.equal(pills,true,'information and result switches must be capsules');
         const controls=await card.locator('.result-controls').evaluate(node=>{
           const refresh=node.querySelector('.action-refresh').getBoundingClientRect();
           const visual=node.querySelector('.view-switch').getBoundingClientRect();

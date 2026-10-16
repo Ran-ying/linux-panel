@@ -1,3 +1,11 @@
+# Action capsules and expanding command inputs — 2026-10-16
+
+Refresh, Visual and Raw JSON now share button width, height and typography. Description/Commands and Visual/JSON use rounded capsule groups with selected-state borders. Command value textareas fit their contents on load, editing, saving and reopening, and reflow when the available width changes. Mobile controls retain 44px touch targets.
+
+Browser acceptance checks cover equal button metrics, both capsule groups, multiline growth/shrink and wrapped values after reopening at desktop/mobile widths. Vue build, CI, screenshot review and deployment pending at this snapshot.
+
+Base main / last confirmed test deployment: `f8d1940265f9fd55523df3ab6aa5e1b988d2074f`, PR #92. Durable MCP transaction `e35ae3ce4cef7c125873f039d5a2e73c` succeeded at 2026-10-15T22:44:56Z; service active/running and shared terminal collector verified. Final evidence for this change will be recorded in Issue #54.
+
 # Action information tabs and editable terminal commands — 2026-10-16
 
 Owner specified title, an Information section with Description/Commands tabs initially hidden, and an Operation result section with Refresh immediately before Visual/JSON. Description lazily renders short/detail prose. Commands lazily loads a non-JSON key/value table, with fixed output keys, editable command values and one bottom Save button. Save persists configuration; subsequent refresh really executes it.
