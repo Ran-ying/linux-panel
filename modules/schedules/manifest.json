@@ -1,0 +1,7 @@
+{
+  "id": "schedules",
+  "name": "系统现有定时任务",
+  "version": "0.1.0",
+  "entry": "./index.js",
+  "dependencies": []
+}

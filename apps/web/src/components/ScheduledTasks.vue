@@ -2,7 +2,8 @@
 import {ref,computed,watch,onUnmounted} from 'vue';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
-  operations:{type:Object,required:true},csrf:{type:String,required:true}
+  operations:{type:Object,required:true},csrf:{type:String,required:true},
+  mode:{type:String,required:true,validator:value=>['managed','system'].includes(value)}
 });
 const emit=defineEmits(['unauthorized','listing-change']);
 const listing=ref(props.initialData),busy=ref(false),error=ref(''),message=ref('');
@@ -111,16 +112,16 @@ function remove(){
 <template>
   <section class="scheduled-tasks">
     <div class="task-toolbar">
-      <button type="button" :disabled="busy" @click="openForm(null)">新建任务</button>
+      <button v-if="mode==='managed'" type="button" :disabled="busy" @click="openForm(null)">新建任务</button>
       <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
-      <span class="muted small">系统 {{ listing.systemCount??0 }} 项 · 面板任务 {{ listing.count }} 项</span>
+      <span v-if="mode==='managed'" class="muted small">共 {{ listing.count }} 项</span>
+      <span v-else class="muted small">系统 {{ listing.systemCount??0 }} 项</span>
     </div>
     <div v-if="message" class="task-notice" role="status">{{ message }}</div>
     <p v-if="error && !draft && !removeTarget" class="error" role="alert">{{ error }}</p>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
-    <h3 class="system-title">Linux Panel 托管的定时任务</h3>
-    <p class="muted small">新建任务写入独立的 /etc/cron.d/linux-panel，以 linuxpanel 用户运行。系统原有任务显示在下方。</p>
-    <div class="table-wrap">
+    <p v-if="mode==='managed'" class="muted small">新建任务写入独立的 /etc/cron.d/linux-panel，以 linuxpanel 用户运行。</p>
+    <div v-if="mode==='managed'" class="table-wrap">
       <table class="task-table">
         <thead><tr><th>名称</th><th>计划（服务器本地时间）</th><th>命令</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
@@ -139,17 +140,16 @@ function remove(){
         </tbody>
       </table>
     </div>
-    <h3 class="system-title">系统现有定时任务</h3>
-    <div class="task-toolbar system-filters">
+    <div v-if="mode==='system'" class="task-toolbar system-filters">
       <label>搜索
         <input v-model="systemQuery" placeholder="任务名称、用户或命令" aria-label="搜索系统任务" />
       </label>
       <span class="muted small">显示 {{ systemRows.length }} / {{ listing.systemCount??0 }} 项</span>
     </div>
-    <p v-if="listing.systemWarnings?.length" class="muted small" role="status">
+    <p v-if="mode==='system' && listing.systemWarnings?.length" class="muted small" role="status">
       部分来源读取受限：{{ listing.systemWarnings.join('；') }}
     </p>
-    <div class="table-wrap">
+    <div v-if="mode==='system'" class="table-wrap">
       <table class="task-table system-task-table">
         <thead>
           <tr>
@@ -200,7 +200,7 @@ function remove(){
         </tbody>
       </table>
     </div>
-    <dialog ref="systemEditDialog" class="task-dialog" aria-labelledby="system-edit-title" @close="systemDraft=null">
+    <dialog v-if="mode==='system'" ref="systemEditDialog" class="task-dialog" aria-labelledby="system-edit-title" @close="systemDraft=null">
       <form v-if="systemDraft" class="task-form" @submit.prevent="saveSystemEdit">
         <h3 id="system-edit-title">编辑现有系统 Cron 任务</h3>
         <p class="muted small">{{ systemDraft.source }} · 执行用户 {{ systemDraft.owner }}。仅修改选中的任务行，不更改其他条目。</p>
@@ -217,7 +217,7 @@ function remove(){
         </div>
       </form>
     </dialog>
-    <dialog ref="systemConfirmDialog" class="task-dialog" aria-labelledby="system-confirm-title" @close="systemConfirm=null">
+    <dialog v-if="mode==='system'" ref="systemConfirmDialog" class="task-dialog" aria-labelledby="system-confirm-title" @close="systemConfirm=null">
       <div v-if="systemConfirm" class="task-form">
         <h3 id="system-confirm-title">确认修改系统任务</h3>
         <p>确定{{ {enable:'启用',disable:'停用',remove:'删除'}[systemConfirm.operation] }} <strong>{{ systemConfirm.record.name }}</strong>？</p>
@@ -229,7 +229,7 @@ function remove(){
         </div>
       </div>
     </dialog>
-    <dialog ref="dialog" class="task-dialog" aria-labelledby="task-form-title" @close="draft=null">
+    <dialog v-if="mode==='managed'" ref="dialog" class="task-dialog" aria-labelledby="task-form-title" @close="draft=null">
       <form v-if="draft" class="task-form" @submit.prevent="save">
         <h3 id="task-form-title">{{ draft.id?'编辑定时任务':'新建定时任务' }}</h3>
         <label>任务名称
@@ -252,7 +252,7 @@ function remove(){
         </div>
       </form>
     </dialog>
-    <dialog ref="deleteDialog" class="task-dialog" aria-labelledby="task-delete-title" @close="removeTarget=null">
+    <dialog v-if="mode==='managed'" ref="deleteDialog" class="task-dialog" aria-labelledby="task-delete-title" @close="removeTarget=null">
       <div v-if="removeTarget" class="task-form">
         <h3 id="task-delete-title">删除任务</h3>
         <p>确定删除 <strong>{{ removeTarget.name }}</strong>？删除后不再安排后续执行，已经运行的进程不会终止。</p>
