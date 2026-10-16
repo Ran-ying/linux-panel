@@ -101,11 +101,11 @@ function prepare({withPrivileged=false}={}){
    writeFileSync(join(privRoot,'releases',old,'.ready'),old+'\n');
    writeFileSync(join(privRoot,'releases',old,'handlers.js'),'// old release\n');
    symlinkSync('releases/'+old,join(privRoot,'current'));
-   writeFileSync(join(root,'socket-ready'),'fixture');
+   writeFileSync(join(base,'socket-ready'),'fixture');
  }
  worker=swap(worker,'PRIV_ROOT=/usr/local/lib/linux-panel-privileged','PRIV_ROOT='+JSON.stringify(privRoot));
  worker=swap(worker,'/opt/node24/bin/node --input-type=module -e',JSON.stringify(process.execPath)+' --input-type=module -e');
- worker=swap(worker,'[[ -S /run/linux-panel-privileged/executor.sock ]]','[[ -f "$ROOT/socket-ready" ]]');
+ worker=worker.replaceAll('[[ -S /run/linux-panel-privileged/executor.sock ]]','[[ -f '+JSON.stringify(join(base,'socket-ready'))+' ]]');
  worker=swap(worker,'"$(stat -c %u "$PRIV_ROOT")" -eq 0','-O "$PRIV_ROOT"');
  worker=swap(worker,'"$(stat -c %u "$PRIV_RELEASES")" -eq 0','-O "$PRIV_RELEASES"');
  worker=swap(worker,'"$(stat -c %u "$pkg")" -eq 0','-O "$pkg"');
