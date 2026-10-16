@@ -162,6 +162,7 @@ try {
       await page.locator('.module-content').waitFor();
       if(name.trim()==='Linux Panel 托管的定时任务' && [390,1280].includes(width)){
         const schedule=page.locator('.scheduled-tasks');
+        await schedule.getByRole('button',{name:'新建任务'}).waitFor();
         assert.equal(await schedule.locator('.system-task-table').count(),0,
           'managed module must not include system tasks');
         assert.equal(await schedule.getByRole('button',{name:'新建任务'}).count(),1);
@@ -185,6 +186,7 @@ try {
         assert.equal(await schedule.getByText('暂无由 Linux Panel 管理的定时任务').count(),0,
           'system inventory must not render the managed list');
         const systemTable=schedule.locator('.system-task-table');
+        await systemTable.waitFor();
         const visibleRows=systemTable.locator('tbody tr');
         const source=systemTable.getByRole('combobox',{name:'按来源筛选'});
         const owner=systemTable.getByRole('combobox',{name:'按执行用户筛选'});
