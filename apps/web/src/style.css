@@ -503,7 +503,7 @@ table{min-width:500px}
   padding:4px 8px;border-radius:999px;font-size:.85rem;font-weight:500;line-height:1.25;white-space:nowrap}
 .action-card .view-switch button{border:1px solid transparent;border-radius:999px}
 .action-card .view-switch button.active{border-color:var(--focus-ring)}
-.action-card>.result{margin-top:16px}
+.action-card>.action-information,.action-card>.result{margin-top:16px;border-top:1px solid var(--border-panel);padding-top:12px}
 @media(max-width:730px){
   .result-controls{gap:8px}
   .command-table th,.command-table td{padding:6px}

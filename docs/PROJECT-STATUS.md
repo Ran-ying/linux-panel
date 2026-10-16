@@ -1,3 +1,9 @@
+# Equal Action section spacing — 2026-10-16
+
+Information and Operation result now share the same section frame: 16px top margin, 1px divider and 12px top padding. This gives Information the same visual separation from the Action title that results already have from the preceding content. Pill controls and command input behavior are unchanged.
+
+Vue build, existing browser acceptance and MCP test-server deployment pending at this snapshot. Base main / last confirmed test deployment: `1dde0bebf34095bbdca37f487e3566ce3aed771c` (PR #95), MCP transaction `d7eb551e781daef185ed590b56379c61` succeeded 2026-10-16T00:20:16Z, panel active/running. Final evidence follows in Issue #54.
+
 # Content-width pills with semicircular ends — 2026-10-16
 
 Owner clarified that Action buttons need fully rounded semicircular ends rather than 8px corners. Information options, result options and Refresh now use 999px radius and 4px/8px padding. Result buttons use natural content width instead of fixed 96px width, while retaining the same 32px height/font and right alignment.
