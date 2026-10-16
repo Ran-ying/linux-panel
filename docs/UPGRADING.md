@@ -1,10 +1,18 @@
+# 基本信息与 CPU 字段调整（2026-10-16）
+
+system.info 新增 distribution（Linux os-release 的发行版及版本），保留 platform/release/arch/uptimeSeconds/nodeVersion；移除 hostname/cpuCount/totalMemoryBytes/freeMemoryBytes 的采集、命令和结果字段。内核版本独立展示；内存只在资源 Action 展示。
+
+system.resources.cpu 新增 availableParallelism（nproc / os.availableParallelism），命令配置优先当前 resources.availableParallelism，再沿用旧 system.info.cpuCount。logicalCpus 仍是在线逻辑处理器数；两者都不是物理核心数。CPU 圆环显示整机忙碌百分比，下方显示整数计数，不再显示折算小数核数。旧私有配置条目保留但不再执行已删除字段。
+
+手机导航外框和功能/面板选项卡改为直角、左右贴边且无左右边框，保留上下安全边距；展开与收起按钮更紧凑。桌面导航布局保留。
+
 # 系统概览资源重构（2026-10-16）
 
 system.resources 现在返回 cpu、memory、disk，并显示在基本信息前面；system.info 不再返回 disk，也不再执行 filesystem 命令。磁盘输出路径从 system.info.result.disk 改为 system.resources.result.disk；两个 Action ID 保持不变。
 
 磁盘命令配置按 system.resources.filesystem → system.info.filesystem → storage.usage.filesystem → 默认命令的顺序沿用；保存只写当前 resources Action，旧私有条目保留。资源 raw 中包含 filesystem，基本信息 raw 不再包含它。CPU/内存原有命令迁移不变。
 
-面板新增通用 gauge renderer 与 sections.layout:'grid'；CPU 显示整体忙碌比例及等效已用逻辑核数/总逻辑核数，内存和磁盘显示已用/总量。模块不附带 CSS/Vue。
+面板新增通用 gauge renderer 与 sections.layout:'grid'；CPU 显示整体忙碌比例及逻辑处理器/可用并行度整数信息，内存和磁盘显示已用/总量。模块不附带 CSS/Vue。
 
 # 新增终端与 MCP 参数映射（2026-10-16）
 

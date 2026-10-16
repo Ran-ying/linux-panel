@@ -90,7 +90,7 @@ function formatted(key, formatKind) {
       <div class="metric-label">{{ presentation.title }}</div>
       <div class="gauge-ring" role="progressbar" :aria-label="presentation.title"
         :aria-valuenow="progress ?? undefined" aria-valuemin="0" aria-valuemax="100"
-        :aria-valuetext="progress === null ? '暂无数据' : progress.toFixed(1) + '%，' + quantity(gaugeUsed) + ' / ' + quantity(gaugeTotal)">
+        :aria-valuetext="progress === null ? '暂无数据' : progress.toFixed(1) + '%' + (presentation.totalKey ? '，' + quantity(gaugeUsed) + ' / ' + quantity(gaugeTotal) : '')">
         <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
           <circle class="gauge-track" cx="50" cy="50" r="43" />
           <circle class="gauge-fill" :class="{ critical: progress !== null && progress >= 90 }"
@@ -99,7 +99,12 @@ function formatted(key, formatKind) {
         </svg>
         <span class="gauge-percent">{{ progress === null ? '—' : progress.toFixed(1) + '%' }}</span>
       </div>
-      <div class="gauge-quantity"><span>{{ quantity(gaugeUsed) }}</span> / <span>{{ quantity(gaugeTotal) }}</span></div>
+      <div v-if="presentation.totalKey" class="gauge-quantity"><span>{{ quantity(gaugeUsed) }}</span> / <span>{{ quantity(gaugeTotal) }}</span></div>
+      <dl v-if="details.length" class="gauge-details">
+        <div v-for="field in details" :key="field.key">
+          <dt>{{ field.label }}</dt><dd>{{ formatted(field.key, field.format) }}</dd>
+        </div>
+      </dl>
     </div>
 
     <div v-else-if="presentation?.renderer === 'progress'" class="progress-panel">

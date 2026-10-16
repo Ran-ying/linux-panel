@@ -11,9 +11,18 @@ export default [
         "renderer": "gauge",
         "title": "CPU",
         "valueKey": "usagePercent",
-        "totalKey": "logicalCpus",
-        "quantityFormat": "number",
-        "unit": "核"
+        "details": [
+          {
+            "key": "logicalCpus",
+            "label": "逻辑处理器",
+            "format": "integer"
+          },
+          {
+            "key": "availableParallelism",
+            "label": "可用并行度",
+            "format": "integer"
+          }
+        ]
       },
       {
         "key": "memory",
@@ -43,26 +52,16 @@ export default [
     "refreshIntervalMs": 15000,
     "fields": [
       {
-        "key": "hostname",
-        "label": "主机名"
+        "key": "distribution",
+        "label": "操作系统"
       },
       {
-        "key": "platform",
-        "label": "操作系统"
+        "key": "release",
+        "label": "内核版本"
       },
       {
         "key": "arch",
         "label": "架构"
-      },
-      {
-        "key": "cpuCount",
-        "label": "可用并行度",
-        "format": "integer"
-      },
-      {
-        "key": "totalMemoryBytes",
-        "label": "物理内存",
-        "format": "bytes"
       },
       {
         "key": "uptimeSeconds",

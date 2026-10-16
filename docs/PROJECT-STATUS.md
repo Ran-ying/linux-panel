@@ -4,9 +4,11 @@
 
 ## 本次实现
 
+- 基本信息的 Action、命令和 Schema 已移除主机名、内存、cpuCount；新增发行版及版本，内核版本单独展示。并行度迁入 resources.cpu.availableParallelism，沿用旧自定义命令。CPU 不再显示折算小数核数，改为百分比及整数计数。
+- 手机导航外框/选项卡直角且左右贴边、无左右边框，缩小选项卡内边距与展开/收起按钮高度；上下安全边距和滚动/覆盖行为保留。
 - 真正的 system.resources（cpu + memory + disk，排在最前）与 system.info（基本信息）。原 system.cpu/system.memory/storage.usage 和独立 storage 模块删除，无隐藏 Action 别名。
 - 磁盘采集、命令、raw、Schema 实际迁入 resources；filesystem 配置优先当前 resources，其次旧 info、旧 storage。命令按 terminal.migrateFrom 声明迁移，支持有序候选，当前保存值优先；保存写当前 Action，保留旧私有条目。
-- 面板通用 sections 按嵌套 outputSchema 校验；新增 grid 布局和 gauge 圆环卡片（名称、占用圆环/百分比、已用/总量），复用基本信息的圆角样式。App.vue/导航无系统 Action ID 合并；模块仅提供数据/schema/说明/presentation，无 CSS/Vue。
+- 面板通用 sections 按嵌套 outputSchema 校验；新增 grid 布局和 gauge 圆环卡片（名称、占用圆环/百分比、数量或字段详情），复用基本信息的圆角样式。App.vue/导航无系统 Action ID 合并；模块仅提供数据/schema/说明/presentation，无 CSS/Vue。
 - Action 标题右侧放置说明/命令胶囊，移除读取类型标签与独立“信息”标题；默认只展示操作结果，点击后展开相应说明或命令，再次点击收起。
 - 单 Action → 单卡片、单保存、单执行请求、原始 key 列表/JSON。raw 是当次成功终端的 stdout/stderr/exitCode；result 单独解析校验。MCP 当前只返回 result。
 - [模块规范](MODULE-DEVELOPMENT.md) 含完整复制示例、职责/展示/命令/权限契约及 AI 交付清单。README/架构/MCP/升级/安全/路线图已同步。

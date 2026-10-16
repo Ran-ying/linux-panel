@@ -51,6 +51,8 @@ ID 以模块 ID + "." 开头且全局唯一。业务需要一起刷新、配置�
 
 permission 是操作语义，不自行授予权限。Web/MCP 适配器负责授权；写操作引擎默认拒绝，新写类型须先实现并审查面板执行策略；terminal.execute 是明确批准的普通用户 Shell 特例，不代表任意模块 write 自动获准。不能通过 read 标签或 presentation 绕过写策略。root 更新 Broker 只处理固定可信 main 更新任务，不能用于模块 Shell。
 
+system.info 只采集 platform、distribution（发行版及版本）、release（内核）、arch、uptimeSeconds、nodeVersion，不再采集 hostname/cpuCount/totalMemoryBytes/freeMemoryBytes。CPU 的 availableParallelism 属于 system.resources.cpu；旧 info.cpuCount 命令自动沿用。
+
 当前系统 Action 只有 system.resources（cpu + memory + disk，排在前面）和 system.info（主机基本字段）；另有 services.list。旧 system.cpu/system.memory/storage.usage 已删除，无隐藏别名。collectors 不是注册的 Action。
 
 ## 可复制的最小示例
@@ -110,19 +112,19 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | --- | --- |
 | metrics | 非空 fields:[{key,label,format?}] |
 | progress | title、数值 valueKey；可选 totalKey/usedKey/availableKey、details |
-| gauge | title、百分比 valueKey、数值 totalKey；可选 usedKey、quantityFormat（bytes/number）、unit |
+| gauge | title、百分比 valueKey；totalKey 或非空 details 至少提供一种；可选 usedKey、quantityFormat（bytes/number）、unit |
 | table | rowsKey 指向对象数组；非空 columns:[{key,label,format?}] |
 | sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象；可选 layout:'grid' 并排展示 |
 | terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 
 format 只支持 bytes/duration/milliseconds/integer/number；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度百分比必须声明为 number；圆环数量字段可为 number/integer，未给 usedKey 时用百分比 × 总量计算等效用量；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。
 
-同一 Action 返回嵌套资源对象的示例（CPU 以逻辑核数为总量、百分比换算等效已用核数）：
+同一 Action 返回嵌套资源对象的示例（CPU 圆环显示整机百分比，下方列出逻辑处理器和可用并行度，避免“小数核数”表述）：
 ```js
 {
   actionId:'example.resources',renderer:'sections',layout:'grid',
   loadOnEnter:true,refreshIntervalMs:5000,sections:[
-    {key:'cpu',renderer:'gauge',title:'CPU',valueKey:'usagePercent',totalKey:'logicalCpus',quantityFormat:'number',unit:'核'},
+    {key:'cpu',renderer:'gauge',title:'CPU',valueKey:'usagePercent',details:[{key:'logicalCpus',label:'逻辑处理器',format:'integer'},{key:'availableParallelism',label:'可用并行度',format:'integer'}]},
     {key:'memory',renderer:'gauge',title:'内存',valueKey:'usagePercent',totalKey:'totalBytes',usedKey:'usedBytes',quantityFormat:'bytes'}
   ]
 }

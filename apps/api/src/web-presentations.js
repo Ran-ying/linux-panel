@@ -44,7 +44,7 @@ function validateView(view,schema,actionId,depth=0) {
             throw new Error(`Invalid progress quantity field: ${actionId}`);
         }
         if(view.renderer==='gauge'){
-          if(!view.totalKey)throw new Error('Gauge requires a total quantity');
+          if(!view.totalKey && !view.details?.length)throw new Error('Gauge requires a total quantity or detail fields');
           if(view.quantityFormat!==undefined && !['bytes','number'].includes(view.quantityFormat))
             throw new Error('Invalid gauge quantity format');
           if(view.unit!==undefined && (typeof view.unit!=='string' || view.unit.length>20))

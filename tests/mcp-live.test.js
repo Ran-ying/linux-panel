@@ -75,7 +75,7 @@ test('real HTTP MCP: global read tools even with legacy narrow grant, revoke who
   const result=await rpc({method:'tools/call',params:{name:'system.info',arguments:{}}});
   assert.equal(result.status,200,JSON.stringify(result.data));
   const output=JSON.parse(result.data.result.content[0].text);
-  assert.equal(typeof output.hostname,'string');
+  assert.equal(typeof output.distribution,'string');
   assert.equal((await store.snapshot()).audit.at(-1).event,'mcp.action.execute');
   await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'system.resources':true}},user.id);
   const hidden=await rpc({method:'tools/list'});
