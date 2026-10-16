@@ -77,7 +77,9 @@ function confirm(){
   return work(async()=>{
     const {site,operation}=pending.value;
     const current=await request(props.operations.read,{name:site.name});
-    await submit({name:site.name,operation,revision:current.revision},()=>{
+    if(current.revision!==site.revision)
+      throw new Error('网站配置已被其他程序修改，请刷新后重新确认');
+    await submit({name:site.name,operation,revision:site.revision},()=>{
       confirmModal.value?.close();pending.value=null;
     });
   });

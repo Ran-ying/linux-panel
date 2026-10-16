@@ -4,7 +4,7 @@ const object=(properties,required=Object.keys(properties))=>({type:'object',prop
 const name={type:'string',minLength:1,maxLength:100,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$'};
 const revision={type:'string',pattern:'^([a-f0-9]{64})?$'};
 const site=object({name:text(200),location:text(32),enabled:text(24),serverNames:text(350),listens:text(350),
-  file:text(512),editable:{type:'boolean'}},['name','location','enabled','serverNames','listens','file','editable']);
+  file:text(512),editable:{type:'boolean'},revision},['name','location','enabled','serverNames','listens','file','editable','revision']);
 export const NGINX_CONTRACTS={
   sites:{title:'Nginx 网站管理',description:'查看 Nginx 站点配置、启用状态与指令摘要。',
     inputSchema:object({}),

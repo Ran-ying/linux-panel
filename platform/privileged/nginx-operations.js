@@ -145,7 +145,7 @@ export function createNginxOperations({
         if(!st.isFile()||st.size>MAX_BYTES){warnings.push(dir+'/'+name+' 超过大小限制或不是文件');return null;}
         const content=strictBytes(await fs.readFile(file));
         return {real,row:{name,location:dir,enabled:dir==='sites-available'?'未启用':dir==='conf.d'?'配置候选':'启用目录',
-          ...parseNginxDirectives(content),file,editable:dir==='sites-available'&&NAME.test(name)&&name!=='.'&&name!=='..'}};
+          ...parseNginxDirectives(content),file,revision:'',editable:dir==='sites-available'&&NAME.test(name)&&name!=='.'&&name!=='..'}};
       }catch(error){
         warnings.push(dir+'/'+name+' 读取失败：'+(error.code||'ERROR'));
         return null;
@@ -157,13 +157,28 @@ export function createNginxOperations({
     for(const name of await entries('sites-enabled')){
       const data=await sample('sites-enabled',name);if(!data)continue;
       const known=records.get(data.real);
-      if(known)known.enabled='启用链接';
+      if(known && known.name===name)known.enabled='启用链接';
       else records.set(data.real,data.row);
     }
     for(const name of await entries('conf.d')){
       if(!name.endsWith('.conf'))continue;
       const data=await sample('conf.d',name);
       if(data)records.set(data.real,data.row);
+    }
+    // Compute list revisions from the same complete config/link state used by apply().
+    // A suspicious regular-file alias or mismatched enabled symlink is not editable.
+    for(const row of records.values()){
+      if(!row.editable)continue;
+      try{
+        const direct=await fs.lstat(row.file);
+        if(!direct.isFile()||direct.isSymbolicLink())throw fail('站点配置不是常规文件',409);
+        const state=await existing(row.name);
+        row.revision=state.revision;
+        row.enabled=state.link===null?'未启用':'启用链接';
+      }catch(error){
+        row.editable=false;
+        warnings.push('无法安全编辑 '+row.name+'：'+(error.code||'需检查站点链接'));
+      }
     }
     const result=[...records.values()].sort((a,b)=>a.name.localeCompare(b.name)||a.file.localeCompare(b.file));
     return {source:'nginx-directories',count:result.length,

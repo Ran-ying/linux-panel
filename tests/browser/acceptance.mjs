@@ -67,7 +67,7 @@ try {
       const target=nginxSites.find(site=>site.name===input.name);
       if(id==='nginx.sites')data={source:'fixture',count:nginxSites.length,
         enabledCount:nginxSites.filter(site=>site.enabled==='启用链接').length,
-        sites:nginxSites.map(({content,revision,...site})=>site),warnings:[]};
+        sites:nginxSites.map(({content,...site})=>site),warnings:[]};
       else if(id==='nginx.check')data={ok:nginxSyntaxGood,status:nginxSyntaxGood?'配置检查通过':'配置检查失败',
         exitCode:nginxSyntaxGood?0:1,output:'fixture -t',identity:'root'};
       else if(id==='nginx.read'){
