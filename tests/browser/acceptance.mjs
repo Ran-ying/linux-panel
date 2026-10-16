@@ -413,17 +413,6 @@ try {
           await console.getByRole('button',{name:'断开',exact:true}).click();
         }
       }
-      if(name.trim()==='面板设置' && width===1280){
-        await page.getByRole('button',{name:'下移 服务浏览'}).click();
-        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,终端,服务浏览,文件管理');
-        await page.reload();
-        await page.locator('.module-nav button').first().waitFor();
-        assert.deepEqual((await page.locator('.module-nav button').allTextContents()).map(x=>x.trim()).slice(0,4),
-          ['系统概览','终端','服务浏览','文件管理'],'saved module order survives reload');
-        await navigate('面板设置');
-        await page.getByRole('button',{name:'上移 服务浏览'}).click();
-        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,服务浏览,终端,文件管理');
-      }
       // Editing and opening the raw JSON disclosure can scroll the page; measure the initial header gutter at the top.
       await page.evaluate(()=>window.scrollTo(0,0));
       // All module containers must fit; tables/nav may scroll internally.
@@ -460,6 +449,17 @@ try {
         width+' '+name+' cards must match the rounded sidebar frame');
       assert.ok(frames.gaps.every(g=>Math.abs(g-24)<1),width+' '+name+' card gaps must match sidebar gap');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
+      if(name.trim()==='面板设置' && width===1280){
+        await page.getByRole('button',{name:'下移 服务浏览'}).click();
+        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,终端,服务浏览,文件管理');
+        await page.reload();
+        await page.locator('.module-nav button').first().waitFor();
+        assert.deepEqual((await page.locator('.module-nav button').allTextContents()).map(x=>x.trim()).slice(0,4),
+          ['系统概览','终端','服务浏览','文件管理'],'saved module order survives reload');
+        await navigate('面板设置');
+        await page.getByRole('button',{name:'上移 服务浏览'}).click();
+        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,服务浏览,终端,文件管理');
+      }
     }
     if(width===1280){
       await page.locator('#session-days').fill('7');
