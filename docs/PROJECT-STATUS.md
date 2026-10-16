@@ -2,6 +2,10 @@
 
 更新：2026-10-16。v0.5.0 已发布，main 持续迭代。root 执行层已由 PR #112 合并进 main 697ff4698607008aa672c7db1164a39b9c4242b5，本轮补齐首次安装可选启用入口，关联 [Issue #111](https://github.com/Ran-ying/linux-panel/issues/111)。准确 CI、合并、普通 Web 部署与 root 激活证据统一见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
+## V2Ray 本机管理模块（2026-10-17，开发中）
+
+新增基于服务器现有 V2Fly 5.47.0 的 V2Ray 6-Action 原生模块（状态、读取、校验、保存、服务、未安装时安装）。源码与部署、CI 进度以 GitHub PR 和 Issue #54 为准；**不意味着已经修改或安装真实 V2Ray**。更多限制和核验见 [V2Ray 模块](V2RAY.md)。
+
 ## 定时任务模块布局（2026-10-16）
 
 纠正之前将 Cron 拆为两个侧边栏模块的实现：**仅一个「定时任务」模块**，内部始终上下展示**两张独立的顶层圆角卡片**：「Linux Panel 托管的定时任务」及「系统现有定时任务」，每张卡片内直接是标题、工具栏与表格，不嵌套卡片、不用页签，也没有包住两张卡片的额外圆角大框。两个部分仍使用原先受控 `cron.list/save/remove/systemSet` Actions、同一份数据；保留系统任务来源/用户/状态筛选，未迁移任何 Cron 文件。有关合并与生产验收，以 Issue #54 记录为准。
