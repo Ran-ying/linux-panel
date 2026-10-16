@@ -48,7 +48,7 @@ import os,stat,sys
 p=os.path.realpath(sys.argv[1])
 while True:
  s=os.stat(p)
- if s.st_uid != 0 or s.st_mode & 0o022: raise SystemExit('Node runtime/parents must be root-owned and not group/world writable')
+ if s.st_uid != 0 or s.st_mode & 0o022: raise SystemExit('Node runtime/parents must be root-owned and not group/world writable: '+p)
  if p=='/': break
  p=os.path.dirname(p)
 PY
