@@ -101,12 +101,15 @@ try {
       }
       if([390,1280].includes(width) && ['系统概览','服务浏览'].includes(name.trim())){
         const card=name.trim()==='系统概览'?page.locator('.action-card').nth(1):page.locator('.action-card').first();
-        assert.equal(await card.locator('.info-panel').count(),0,'information must start hidden');
+        assert.equal(await card.locator('.action-information,.info-panel,.information-heading,.read-pill').count(),0,
+          'default Action must show no information row, details or kind badge');
+        assert.equal(await card.locator('.card-heading>.action-info-tabs').count(),1,
+          'detail capsule must live beside the Action title');
         await card.getByRole('tab',{name:'说明',exact:true}).click();
         await card.locator('.description-panel').waitFor();
         assert.ok((await card.locator('.description-panel p').count())>=2,'show short and detailed descriptions');
         await card.getByRole('tab',{name:'说明',exact:true}).click();
-        assert.equal(await card.locator('.info-panel').count(),0,'click selected tab to hide information');
+        assert.equal(await card.locator('.action-information,.info-panel').count(),0,'click selected tab to hide the entire information region');
         await card.getByRole('tab',{name:'命令',exact:true}).click();
         await card.locator('.command-table').first().waitFor();
         assert.equal(await card.locator('.result').count(),1);
@@ -188,13 +191,13 @@ try {
           }));
         assert.ok(widths.every(delta=>delta<1),'button width must fit its text plus 8px padding and 1px borders');
         const aligned=await card.evaluate(node=>{
-          const info=node.querySelector('.information-heading').getBoundingClientRect();
+          const info=node.querySelector('.card-heading').getBoundingClientRect();
           const tabs=node.querySelector('.action-info-tabs').getBoundingClientRect();
           const result=node.querySelector('.result-header').getBoundingClientRect();
           const views=node.querySelector('.view-switch').getBoundingClientRect();
           return Math.abs(info.right-tabs.right)<1 && Math.abs(result.right-views.right)<1;
         });
-        assert.equal(aligned,true,'information and result switches must align right');
+        assert.equal(aligned,true,'title and result switches must align right');
         const controls=await card.locator('.result-controls').evaluate(node=>{
           const refresh=node.querySelector('.action-refresh').getBoundingClientRect();
           const visual=node.querySelector('.view-switch').getBoundingClientRect();

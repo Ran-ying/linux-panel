@@ -129,12 +129,7 @@ onUnmounted(()=>{
   <section class="action-card" :aria-label="action.title">
     <div class="card-heading">
       <h3>{{ action.title }}</h3>
-      <span class="read-pill">{{ action.kind === 'read' ? '数据读取' : presentation?.console === 'terminal' ? '命令执行' : '需授权' }}</span>
-    </div>
-    <div class="action-information">
-      <div class="information-heading">
-        <strong>信息</strong>
-        <div class="action-info-tabs" role="tablist" :aria-label="action.title + '信息'">
+      <div class="action-info-tabs" role="tablist" :aria-label="action.title + '信息'">
           <button type="button" role="tab" :id="'description-tab-'+action.id"
             :aria-selected="infoTab==='description'" :aria-controls="'description-'+action.id"
             @click="selectInfo('description')">说明</button>
@@ -142,7 +137,8 @@ onUnmounted(()=>{
             :aria-selected="infoTab==='commands'" :aria-controls="'commands-'+action.id"
             @click="selectInfo('commands')">命令</button>
         </div>
-      </div>
+    </div>
+    <div v-if="infoTab" class="action-information">
       <div v-if="infoTab==='description'" class="info-panel description-panel" role="tabpanel"
         :id="'description-'+action.id" :aria-labelledby="'description-tab-'+action.id">
         <p>{{ action.description }}</p>

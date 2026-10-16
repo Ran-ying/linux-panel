@@ -484,7 +484,7 @@ table{min-width:500px}
 .action-explanation .execution-plan{margin:10px 0 0;padding:0;border:0;border-radius:0;background:transparent}
 
 /* Each Action has optional information tabs, then result controls. */
-.information-heading,.result-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.result-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .action-info-tabs,.result-controls{margin-left:auto;justify-content:flex-end}
 .action-info-tabs,.action-card .view-switch{display:inline-flex;flex-wrap:nowrap;gap:2px;padding:2px;
   border:1px solid var(--border-panel);border-radius:999px;background:var(--nav-bg)}
@@ -503,7 +503,7 @@ table{min-width:500px}
   padding:4px 8px;border-radius:999px;font-size:.85rem;font-weight:500;line-height:1.25;white-space:nowrap}
 .action-card .view-switch button{border:1px solid transparent;border-radius:999px}
 .action-card .view-switch button.active{border-color:var(--focus-ring)}
-.action-card>.action-information,.action-card>.result{margin-top:16px;border-top:1px solid var(--border-panel);padding-top:12px}
+.action-card>.result{margin-top:16px;border-top:1px solid var(--border-panel);padding-top:12px}
 @media(max-width:730px){
   .result-controls{gap:8px}
   .command-table th,.command-table td{padding:6px}
@@ -561,3 +561,10 @@ table{min-width:500px}
 
 .result-sections-grid>.result-section>.rendered{height:100%}
 .gauge-quantity>span{white-space:nowrap}
+
+/* Action details are opt-in; the title row owns the compact detail tabs. */
+.action-card>.card-heading{align-items:center}
+.action-card>.card-heading h3{margin:0}
+.card-heading>.action-info-tabs{flex-shrink:0}
+.action-card>.action-information{margin-top:16px}
+.action-card>.action-information>.info-panel{margin-top:0}
