@@ -102,3 +102,19 @@ jobs:
           }
           console.log('PASS real linuxpanel Web -> installed root service, /etc and /root file operations');
           JS
+
+          # Disposable fixture only: exercise the one-time immutable root Broker
+          # migration after a complete fresh Web + privileged installation.
+          # PR checkout is not main; rename the local test branch solely here.
+          if [ "$(sudo git -c safe.directory=/opt/linux-panel -C /opt/linux-panel branch --show-current)" != main ]; then
+            sudo git -c safe.directory=/opt/linux-panel -C /opt/linux-panel branch -m main
+          fi
+          sudo bash /opt/linux-panel/scripts/install-update-broker.sh --apply
+          sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --check
+          sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --enable
+          sudo systemctl is-active --quiet linux-panel.service
+          sudo systemctl is-active --quiet linux-panel-privileged.service
+          sudo cmp /opt/linux-panel/scripts/update-worker.sh /usr/local/libexec/linux-panel-update-worker
+          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env PANEL_CRON_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-cron-executor.js
+          sudo rm -f /etc/cron.d/linux-panel
+          echo 'PASS root Broker migration and Cron handler on disposable fresh install'
