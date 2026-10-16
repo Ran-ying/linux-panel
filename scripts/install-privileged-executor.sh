@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Explicit operator bootstrap/update for root-owned reviewed Action handlers.
 set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 LP_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 LP_DEST=/usr/local/lib/linux-panel-privileged
@@ -17,7 +18,8 @@ same fixed root file Actions directly; Web-only is NOT an OS isolation boundary.
 System file administration is a broad root capability. No root Shell endpoint.
 Installs fixed root-owned code/dependencies, starts a separate executor and
 restarts Web. Does not modify the update Broker, proxies or other services.
-New privileged handlers require rerunning this command after review/update.
+Once the immutable Broker is upgraded, pinned main updates synchronize the fixed
+root package automatically. Existing installations need one operator bootstrap.
 EOF
 }
 LP_MODE='';LP_NODE=/opt/node24/bin/node
@@ -55,22 +57,86 @@ PY
 "$LP_NODE" -e 'const [a,b]=process.versions.node.split(".").map(Number);if(a<22 || a===22&&b<12)process.exit(1)'
 [[ ! -L "$LP_DEST" ]] || { echo 'Refuse symlinked executor package' >&2;exit 1; }
 install -d -o root -g root -m 0755 /usr/local/lib
+LP_SHA="$(git -c safe.directory="$LP_ROOT" -C "$LP_ROOT" rev-parse HEAD)"
+[[ "$LP_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
 LP_STAGE=$(mktemp -d /usr/local/lib/.linux-panel-privileged.XXXXXX)
-trap 'rm -rf "$LP_STAGE"' EXIT
-for file in server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js nginx-contracts.js nginx-operations.js;do
-  install -o root -g root -m 0600 "$LP_ROOT/platform/privileged/$file" "$LP_STAGE/$file"
-done
-printf '{"type":"module"}\n' > "$LP_STAGE/package.json"
-mkdir "$LP_STAGE/node_modules"
-for package in ajv fast-deep-equal fast-uri json-schema-traverse require-from-string;do
-  cp -R -L "$LP_ROOT/node_modules/$package" "$LP_STAGE/node_modules/$package"
-done
+LP_PREVIOUS=''
+LP_UNIT_BEFORE=''
+LP_DEPLOYING=0
+LP_COMPLETED=0
+if [[ -f "$LP_UNIT" ]];then
+  LP_UNIT_BEFORE="$(mktemp /etc/systemd/system/.linux-panel-privileged-unit.XXXXXX)"
+  cp -- "$LP_UNIT" "$LP_UNIT_BEFORE"
+fi
+cleanup_install(){
+  local rc=$?
+  if ((rc!=0)) && ((LP_DEPLOYING));then
+    systemctl stop linux-panel-privileged.service 2>/dev/null || true
+    if [[ -n "$LP_PREVIOUS" && -d "$LP_PREVIOUS" ]];then
+      rm -rf -- "$LP_DEST" 2>/dev/null || true
+      mv -T "$LP_PREVIOUS" "$LP_DEST" || true
+    fi
+    if [[ -n "$LP_UNIT_BEFORE" && -f "$LP_UNIT_BEFORE" ]];then
+      install -o root -g root -m 0644 "$LP_UNIT_BEFORE" "$LP_UNIT" || true
+    fi
+    systemctl daemon-reload || true
+    if [[ -d "$LP_DEST" ]];then systemctl start linux-panel-privileged.service || true;fi
+    systemctl restart linux-panel.service || true
+  fi
+  rm -rf -- "$LP_STAGE"
+  if ((rc==0 && LP_COMPLETED));then
+    if [[ -n "$LP_PREVIOUS" ]];then rm -rf -- "$LP_PREVIOUS";fi
+  fi
+  if [[ -n "$LP_UNIT_BEFORE" ]];then rm -f -- "$LP_UNIT_BEFORE";fi
+}
+trap cleanup_install EXIT
+mkdir -m 0700 "$LP_STAGE/releases"
+mkdir -m 0700 "$LP_STAGE/releases/$LP_SHA"
+LP_PACKAGE="$LP_STAGE/releases/$LP_SHA"
+# The reviewed package manifest supports future bundled root modules without
+# adding special cases to either installer or immutable Broker.
+LP_MANIFEST="$LP_ROOT/platform/privileged/package-manifest.json"
+LP_ENTRIES="$LP_PACKAGE/.entries"
+python3 -I - "$LP_MANIFEST" > "$LP_ENTRIES" <<'PY'
+import json,re,sys
+with open(sys.argv[1],encoding='utf-8') as f: m=json.load(f)
+if set(m)!={'version','files','dependencies'} or m['version']!=1: raise SystemExit('Unsupported root package manifest')
+files,deps=m['files'],m['dependencies']
+if not isinstance(files,list) or not 2<=len(files)<=40 or len(set(files))!=len(files) or not {'server.js','handlers.js'}.issubset(files):
+    raise SystemExit('Invalid root package files')
+if not isinstance(deps,list) or not 1<=len(deps)<=20 or len(set(deps))!=len(deps): raise SystemExit('Invalid root dependencies')
+if any(not isinstance(f,str) or not re.fullmatch(r'[a-z][a-z0-9-]*\.js',f) for f in files): raise SystemExit('Unsafe source')
+if any(not isinstance(d,str) or not re.fullmatch(r'[a-z][a-z0-9-]*',d) for d in deps): raise SystemExit('Unsafe dependency')
+for f in files: print('file '+f)
+for d in deps: print('dep '+d)
+PY
+cp -- "$LP_MANIFEST" "$LP_PACKAGE/manifest.json"
+while read -r kind file;do
+  [[ "$kind" == file ]] || continue
+  install -o root -g root -m 0600 "$LP_ROOT/platform/privileged/$file" "$LP_PACKAGE/$file"
+done < "$LP_ENTRIES"
+printf '{"type":"module"}\n' > "$LP_PACKAGE/package.json"
+mkdir "$LP_PACKAGE/node_modules"
+while read -r kind package;do
+  [[ "$kind" == dep ]] || continue
+  [[ -d "$LP_ROOT/node_modules/$package" && ! -L "$LP_ROOT/node_modules/$package" ]] || exit 1
+  [[ -z "$(find "$LP_ROOT/node_modules/$package" -type l -print -quit)" ]] || exit 1
+  cp -R -- "$LP_ROOT/node_modules/$package" "$LP_PACKAGE/node_modules/$package"
+done < "$LP_ENTRIES"
 chown -R root:root "$LP_STAGE"
 chmod -R go-rwx "$LP_STAGE"
-"$LP_NODE" --input-type=module -e 'const h=await import(process.argv[1]);if(h.createPrivilegedHandlers().size<1)process.exit(1)' "file://$LP_STAGE/handlers.js"
+"$LP_NODE" --input-type=module -e 'const h=await import(process.argv[1]);if(h.createPrivilegedHandlers().size<1)process.exit(1)' "file://$LP_PACKAGE/handlers.js"
+printf '%s\n' "$LP_SHA" > "$LP_PACKAGE/.ready"
+chmod 0600 "$LP_PACKAGE/.ready"
+ln -s "releases/$LP_SHA" "$LP_STAGE/current"
 systemctl stop linux-panel-privileged.service 2>/dev/null || true
-rm -rf "$LP_DEST"
-mv "$LP_STAGE" "$LP_DEST"
+if [[ -e "$LP_DEST" ]];then
+  LP_PREVIOUS="$(mktemp -d /usr/local/lib/.linux-panel-previous.XXXXXX)"
+  rmdir "$LP_PREVIOUS"
+  mv -T "$LP_DEST" "$LP_PREVIOUS"
+fi
+LP_DEPLOYING=1
+mv -T "$LP_STAGE" "$LP_DEST"
 if ! getent group linux-panel-privileged >/dev/null;then groupadd --system linux-panel-privileged;fi
 LP_GID=$(getent group linux-panel-privileged | cut -d: -f3)
 sed -e "s|ExecStart=/opt/node24/bin/node |ExecStart=$LP_NODE |" \
@@ -105,4 +171,5 @@ if(result.accessMode!=="root")process.exit(1);
 ' "file://$LP_ROOT/platform/privileged/client.js"
 systemctl restart linux-panel.service
 systemctl is-active --quiet linux-panel.service
-echo 'Enabled reviewed root Actions; Web remains linuxpanel. The same UID terminal is trusted to use these controlled operations.'
+LP_COMPLETED=1
+echo 'Enabled versioned root Actions; Web remains linuxpanel.'

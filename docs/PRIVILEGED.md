@@ -16,7 +16,7 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
 
 默认 Node 为 /opt/node24/bin/node，可通过 --node-bin 指定另一个受 root 保护的 Node 22.12+ 路径。脚本安装固定 root-owned 包和已锁定安装的 Ajv 及其运行依赖到 /usr/local/lib/linux-panel-privileged，启动 linux-panel-privileged.service，设置 Web 的 PANEL_PRIVILEGED_SOCKET 并重启 Web。不会更改 Web 的 User、原更新 Broker、反向代理或其他业务服务。不运行 npm 的 root 安装钩子。源代码应是已经审查的可信 main。
 
-根端包 root-only，不运行时读取 checkout 的 modules、node_modules 或私有数据目录。后续新增/更新根端 handler 或共享 Schema 时，普通代码更新后必须重新运行上述安装命令；main 更新不会自动把新代码变成 root 可执行代码。
+根端包 root-only，不运行时读取 checkout 的 modules、node_modules 或私有数据目录。新版包使用 `releases/<git-sha>` 与原子 `current` 指针；源码与运行依赖清单由 `platform/privileged/package-manifest.json` 声明，固定安装器严格验证 basename。**首次安装/旧 Broker 未迁移时**仍需管理员显式启用。迁移后的受限 root Broker 会在每次可信 origin/main 更新内按已固定审核的安装协议自动同步 root handler，与普通 Web 共享健康检查、失败回滚及重启恢复事务。不使用 Web/MCP 任意 root Shell，且不会更新 systemd 特权单元自身或扩大 CapabilityBoundingSet。
 
 关闭：
 
@@ -89,4 +89,4 @@ Nginx 模块使用固定 root handler `nginx.sites/read/check/apply`，只允许
 
 新模块 `cron.list/save/remove` 沿用相同固定注册表/IPC/Web 身份校验，但**只能**读写 `/etc/cron.d/linux-panel` 且每条任务静态以 `linuxpanel` 用户运行。不得接受文件路径或任意运行身份，不修改其他人的 crontab。此功能不会变成任意 root Shell API。任务本身是持久的普通账户命令能力；保存配置不等于执行已成功。
 
-升级后必须由管理员再次运行 `install-privileged-executor.sh --enable` 安装更新的 root-owned Cron handler，普通 Git 更新不会改动特权包。没有 root 通道时此模块返回 503 而非绕过权限。见 [Cron 操作规范](CRON.md)。
+旧部署第一次启用自动 root 包更新时，需要在新版源码部署后**一次性**运行 `sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --enable`，同步已审核的 root 安装包与不可变更新 Broker。此后普通经过授权的 main 更新会同步已声明 root 文件（包括 Cron 和 Nginx），不必为每个模块重新手动安装。没有 root 通道时此模块返回 503 而非绕过权限。见 [Cron 操作规范](CRON.md)。

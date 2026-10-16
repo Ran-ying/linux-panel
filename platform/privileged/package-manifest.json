@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "files": [
+    "server.js",
+    "handlers.js",
+    "file-contracts.js",
+    "file-operations.js",
+    "cron-contracts.js",
+    "cron-operations.js",
+    "nginx-contracts.js",
+    "nginx-operations.js"
+  ],
+  "dependencies": [
+    "ajv",
+    "fast-deep-equal",
+    "fast-uri",
+    "json-schema-traverse",
+    "require-from-string"
+  ]
+}

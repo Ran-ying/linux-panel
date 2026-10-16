@@ -30,8 +30,7 @@ For an ordinary test-VM edit, do not invoke provider snapshots, extra SHA256 com
   marker is created. It validates the SHA equals the trusted origin/main HEAD
   and that it is a fast-forward update.
 - The non-root `linuxpanel-updater` user executes Git/npm/test/build. At least 1 GiB must remain free on the checkout filesystem before the worker stops the app.
-  The root broker only backs up private data, controls the specific systemd
-  panel service, and restores prior state on failed deployments.
+  The root broker backs up private data, controls the fixed panel service, and (after explicit operator bootstrap) synchronizes versioned reviewed root Action packages from pinned Git objects with atomic pointer switching and rollback. It does not execute scripts supplied through MCP.
 
 ## Independent Web and MCP gates
 
@@ -458,3 +457,10 @@ requires a deliberate administrator review and installation.
 
 The GitHub source may be public before the installer receives real
 VPS end-to-end acceptance; treat those as independent milestones.
+
+
+## Versioned root handler synchronization (2026-10-16)
+
+The installed immutable worker, not the checked-out shell scripts, implements a fixed validated `package-manifest.json` contract. It reads all handler source bytes using the previously pinned trusted Git object SHA, copies reviewed npm runtime dependencies into a new root-owned `releases/<SHA>` package, checks isolated imports, durably stages it, atomically switches `current`, and verifies the fixed `linux-panel-privileged.service`. A failed package switch participates in the same Web+Git rollback and recovery journal. If the root package is not installed, updates continue without privileged Actions. If the legacy non-versioned root package exists, the new worker rejects upgrades until the explicit migration is performed.
+
+**One-time migration:** after the normal code update, the operator runs `sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --enable` from clean reviewed main. This manually upgrades the immutable worker, both fixed sandbox units and the installed root handler package to the current exact SHA. No Web/MCP tool can update this immutable worker itself. Later pinned main updates automatically synchronize the root package; no per-module root shell or repeated handler installer is needed. Neither new systemd units nor expanded capabilities are silently introduced by the auto-sync.

@@ -16,3 +16,7 @@
 2026-10-16 实机复核：独立 linux-panel-privileged.service 和普通 linux-panel.service 均为 active，socket 组为 root:linux-panel-privileged。以 linuxpanel 运行已有 verify-privileged-executor.js，/etc、/root 的随机临时文件创建、读写、版本冲突、chmod/chown、重命名和清理全部 PASS。新装仅在显式 --enable-privileged 后自动启用 root 文件 Actions；默认仍不安装，已有主机不需要重新安装应用。具体 CI/PR 与部署证据见 Issue #54。
 
 下一步：Nginx root 包显式升级与实际受控 Web 操作验收、真实 iPhone/Android QA、其它模块。Nginx 语法和 reload 检查不保证公网代理/HTTPS 上游的端到端健康；异常断电无 Nginx 独立恢复日志。没有不可信插件沙箱、多管理员或独立安全审计。
+
+## 受控 root 包自动更新（PR #120）
+
+通用 manifest + 版本化 root-owned releases + 原子 current 切换，作为可信 origin/main Broker 部署事务的一部分，出错时与 Web 一并恢复。**以 PR #120 实际合并/CI 为源码状态依据，目标 VPS 尚未完成 root Broker 初次迁移。** 已部署的旧 root 包和不可变 Broker 必须由操作员显式运行一次 `enable-privileged-auto-updates.sh --enable`，之后才能在后续 main 更新中自动同步；普通面板 SHA 更新成功不能替代 root 包版本校验。

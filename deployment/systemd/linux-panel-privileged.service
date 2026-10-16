@@ -10,7 +10,7 @@ RuntimeDirectory=linux-panel-privileged
 RuntimeDirectoryMode=0750
 Environment=NODE_OPTIONS=
 Environment=NODE_PATH=
-ExecStart=/opt/node24/bin/node /usr/local/lib/linux-panel-privileged/server.js
+ExecStart=/opt/node24/bin/node /usr/local/lib/linux-panel-privileged/current/server.js
 Restart=on-failure
 RestartSec=2
 UMask=0077
@@ -21,10 +21,10 @@ PrivateTmp=false
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX
 RestrictNamespaces=true
 LockPersonality=true
-CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_FSETID CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_FSETID
 
 [Install]
 WantedBy=multi-user.target

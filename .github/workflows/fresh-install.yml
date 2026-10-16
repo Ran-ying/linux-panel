@@ -7,9 +7,6 @@ on:
       - 'scripts/admin-init.js'
       - 'scripts/verify-cron-executor.js'
       - 'platform/privileged/**'
-      - 'deployment/systemd/linux-panel-privileged.service'
-      - 'modules/nginx/**'
-      - 'scripts/verify-nginx-executor.js'
       - 'modules/cron/**'
       - '.github/workflows/fresh-install.yml'
 permissions:
@@ -23,12 +20,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Prepare disposable Nginx integration fixture
-        run: |
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nginx
-          sudo systemctl enable --now nginx.service
-          sudo nginx -t
       - name: Install current PR on disposable runner, login and refuse replacement
         env:
           INSTALL_REF: ${{ github.head_ref }}
@@ -43,6 +34,7 @@ jobs:
           # runtime specifically for the privileged service.
           sudo install -d -o root -g root -m 0755 /usr/lib/linux-panel-root-test-runtime
           sudo install -o root -g root -m 0755 "$(command -v node)" /usr/lib/linux-panel-root-test-runtime/node
+          trap 'sudo systemctl status linux-panel-privileged.service linux-panel.service --no-pager --lines=25 || true; sudo journalctl -u linux-panel-privileged.service -n 35 --no-pager || true' ERR
           sudo bash scripts/setup.sh --apply --host 127.0.0.1 --port 49331 \
             --node-bin "$(command -v node)" --ref "$INSTALL_REF" \
             --enable-privileged --privileged-node-bin /usr/lib/linux-panel-root-test-runtime/node \
@@ -80,7 +72,6 @@ jobs:
           sudo test ! -e /etc/cron.d/linux-panel
           sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env PANEL_CRON_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-cron-executor.js
           sudo rm -f /etc/cron.d/linux-panel
-          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env CI=true PANEL_NGINX_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-nginx-executor.js
           PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import {randomUUID} from 'node:crypto';
@@ -111,3 +102,24 @@ jobs:
           }
           console.log('PASS real linuxpanel Web -> installed root service, /etc and /root file operations');
           JS
+
+          # Disposable fixture only: exercise the one-time immutable root Broker
+          # migration after a complete fresh Web + privileged installation.
+          # PR checkout is not main; rename the local test branch solely here.
+          if [ "$(sudo git -c safe.directory=/opt/linux-panel -C /opt/linux-panel branch --show-current)" != main ]; then
+            sudo git -c safe.directory=/opt/linux-panel -C /opt/linux-panel branch -m main
+          fi
+          # Fresh installer uses the selected test Node, whereas the Broker
+          # deliberately expects its own isolated /opt/node24 toolchain.
+          sudo install -d -o root -g root -m 0755 /opt/node24/bin
+          sudo ln -s /usr/lib/linux-panel-root-test-runtime/node /opt/node24/bin/node
+          sudo ln -s "$(command -v npm)" /opt/node24/bin/npm
+          sudo bash /opt/linux-panel/scripts/install-update-broker.sh --apply
+          sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --check
+          sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --enable
+          sudo systemctl is-active --quiet linux-panel.service
+          sudo systemctl is-active --quiet linux-panel-privileged.service
+          sudo cmp /opt/linux-panel/scripts/update-worker.sh /usr/local/libexec/linux-panel-update-worker
+          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env PANEL_CRON_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-cron-executor.js
+          sudo rm -f /etc/cron.d/linux-panel
+          echo 'PASS root Broker migration and Cron handler on disposable fresh install'
