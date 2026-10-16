@@ -35,6 +35,28 @@ try {
   for(const width of [320,390,730,1280,1920]){
     const context=await browser.newContext({viewport:{width,height:900}});
     const page=await context.newPage();
+    // Disposable Cron fixture: run the new generic scheduler UI without any
+    // system cron write or privileged socket on the browser CI host.
+    let cronJobs=[],cronVersion=0;
+    const cronRevision=()=>String(cronVersion).padStart(64,'0');
+    await page.route('**/api/actions/cron.*/execute',async route=>{
+      const id=new URL(route.request().url()).pathname.split('/')[3];
+      const input=route.request().postDataJSON()?.input ?? {};
+      let result,status=200;
+      if(id==='cron.list')result={tasks:cronJobs,revision:cronRevision(),count:cronJobs.length};
+      else if(input.revision!==cronRevision()){status=409;result={error:'任务已改变'};}
+      else if(id==='cron.save'){
+        const task={...input.task,id:input.task.id??'00000000-0000-4000-8000-000000000001'};
+        const index=cronJobs.findIndex(row=>row.id===task.id);
+        if(index>=0)cronJobs[index]=task;else cronJobs.push(task);
+        cronVersion++;result={id:task.id,revision:cronRevision()};
+      }else if(id==='cron.remove'){
+        cronJobs=cronJobs.filter(row=>row.id!==input.id);
+        cronVersion++;result={id:input.id,revision:cronRevision()};
+      }else{status=404;result={error:'Unknown fixture action'};}
+      await route.fulfill({status,contentType:'application/json',body:JSON.stringify(
+        status===200?{action:id,result}:result)});
+    });
     const errors=[];
     page.on('pageerror',e=>errors.push(e.message));
     let releaseAuth;
@@ -72,6 +94,20 @@ try {
     for(const name of [...names,'面板设置']){
       await navigate(name.trim());
       await page.locator('.module-content').waitFor();
+      if(name.trim()==='定时任务' && [390,1280].includes(width)){
+        await page.getByRole('button',{name:'新建任务'}).click();
+        const form=page.getByRole('dialog',{name:'新建定时任务'});
+        await form.getByRole('textbox',{name:'任务名称'}).fill('Fixture nightly');
+        await form.getByRole('textbox',{name:'Cron 表达式'}).fill('0 2 * * *');
+        await form.getByRole('textbox',{name:'执行命令'}).fill('/usr/bin/true');
+        await form.getByRole('button',{name:'保存'}).click();
+        await page.getByText('Fixture nightly').waitFor();
+        await page.getByRole('button',{name:'停用 Fixture nightly'}).click();
+        await page.getByText('已停用',{exact:true}).waitFor();
+        await page.getByRole('button',{name:'删除 Fixture nightly'}).click();
+        await page.getByRole('dialog',{name:'删除任务'}).getByRole('button',{name:'删除'}).click();
+        await page.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
+      }
       if(name.trim()==='系统概览'){
         await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor();
         await page.getByRole('heading',{name:'资源使用情况',exact:true}).waitFor();
