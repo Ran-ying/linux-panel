@@ -216,7 +216,7 @@ function check(){
 <style scoped>
 .config-toolbar,.config-actions,.config-dialog-actions{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap}
 .config-toolbar{margin:0;justify-content:flex-end}
-.config-toolbar button,.config-actions button,.config-dialog-actions button{font:inherit;min-height:2.35rem;padding:.35rem .8rem}
+.config-actions button,.config-dialog-actions button{font:inherit;min-height:2.35rem;padding:.35rem .8rem}
 .config-summary{margin:.1rem 0 .45rem}
 .config-browser{display:grid;grid-template-columns:minmax(0,17rem);align-items:start;gap:1rem;min-width:0}
 .config-browser.has-selection{grid-template-columns:minmax(0,17rem) minmax(0,1fr)}

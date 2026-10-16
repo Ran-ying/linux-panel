@@ -743,7 +743,7 @@ table{min-width:500px}
 }
 .module-header-actions button:disabled{opacity:.5;cursor:not-allowed}
 /* Metadata remains a two-line text control, like date/time—not a pill. */
-.file-table button.file-permissions-button{
+:is(.file-browser,.scheduled-tasks,.managed-configs) button.file-permissions-button:not(.file-entry):not(.config-site-selector){
   height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;
   color:inherit;text-align:left;font:inherit;font-size:inherit;font-weight:inherit;
   line-height:inherit;white-space:normal;cursor:pointer
