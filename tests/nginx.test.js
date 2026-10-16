@@ -38,6 +38,7 @@ test('Nginx inventory distinguishes available, symlink-enabled, conf.d and block
   assert.equal(list.count,3);
   assert.equal(list.enabledCount,2);
   assert.equal(list.sites.find(s=>s.name==='alpha').enabled,'启用链接');
+  assert.equal(list.sites.find(s=>s.name==='alpha').revision,(await f.ops.read({name:'alpha'})).revision);
   assert.equal(list.sites.find(s=>s.name==='disabled').enabled,'未启用');
   assert.equal(list.sites.find(s=>s.name==='other.conf').editable,false);
   assert.ok(list.warnings.some(s=>s.includes('目录外')));
