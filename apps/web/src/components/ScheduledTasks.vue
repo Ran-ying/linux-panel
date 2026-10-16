@@ -110,8 +110,8 @@ function remove(){
 
 <template>
   <section class="scheduled-tasks">
-    <div class="task-toolbar">
-      <button type="button" :disabled="busy" @click="openForm(null)">新建任务</button>
+    <div class="task-toolbar panel-control-capsule">
+      <button type="button" class="panel-control-primary" :disabled="busy" @click="openForm(null)">新建任务</button>
       <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
       <span class="muted small">系统 {{ listing.systemCount??0 }} 项 · 面板任务 {{ listing.count }} 项</span>
     </div>
