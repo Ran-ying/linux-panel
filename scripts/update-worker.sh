@@ -66,6 +66,106 @@ record(){
   mv -fT -- "$tmp" "$RESULT" || { rm -f -- "$tmp"; return 1; }
   durable_sync dir "$result_dir"
 }
+# Fixed root-owned privileged package release management. This logic runs
+# exclusively in the immutable installed Broker; NEVER execute a Shell script
+# or JavaScript helper from the mutable Git checkout as root.
+PRIV_ROOT=/usr/local/lib/linux-panel-privileged
+PRIV_RELEASES="$PRIV_ROOT/releases"
+PRIV_CURRENT="$PRIV_ROOT/current"
+PRIV_FILES=(server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js)
+PRIV_DEPS=(ajv fast-deep-equal fast-uri json-schema-traverse require-from-string)
+priv_present(){
+  [[ -d "$PRIV_ROOT" && ! -L "$PRIV_ROOT" ]]
+}
+priv_release(){
+  local sha="$1"
+  [[ "$sha" =~ ^[a-f0-9]{40}$ && -d "$PRIV_RELEASES/$sha" &&
+     ! -L "$PRIV_RELEASES/$sha" &&
+     -f "$PRIV_RELEASES/$sha/.ready" &&
+     ! -L "$PRIV_RELEASES/$sha/.ready" &&
+     "$(cat "$PRIV_RELEASES/$sha/.ready")" == "$sha" ]]
+}
+priv_current_is(){
+  [[ -L "$PRIV_CURRENT" && "$(readlink "$PRIV_CURRENT")" == "releases/$1" ]]
+}
+priv_preflight(){
+  if ! priv_present;then
+    [[ ! -e "$PRIV_ROOT" && ! -L "$PRIV_ROOT" ]]
+    return
+  fi
+  [[ "$(stat -c %u "$PRIV_ROOT")" -eq 0 &&
+     -d "$PRIV_RELEASES" && ! -L "$PRIV_RELEASES" &&
+     "$(stat -c %u "$PRIV_RELEASES")" -eq 0 &&
+     -L "$PRIV_CURRENT" ]] || return 1
+  priv_current_is "$OLD" && priv_release "$OLD"
+}
+priv_stage(){
+  local sha="$1" pkg file source target
+  priv_present || return 0
+  [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || return 1
+  pkg="$PRIV_RELEASES/$sha"
+  [[ ! -L "$pkg" ]] || return 1
+  if [[ -d "$pkg" ]];then
+    [[ "$(stat -c %u "$pkg")" -eq 0 ]] || return 1
+    rm -rf -- "$pkg" || return 1
+  fi
+  (umask 077; mkdir -- "$pkg" && mkdir -- "$pkg/node_modules") || return 1
+  for file in "${PRIV_FILES[@]}";do
+    # Read bytes from the pinned Git object, not potentially mutated
+    # files in the working tree after npm install/test lifecycle hooks.
+    as_updater git -C "$ROOT" show "$sha:platform/privileged/$file" > "$pkg/$file" || return 1
+    chmod 0600 "$pkg/$file" || return 1
+  done
+  printf '{"type":"module"}\n' > "$pkg/package.json" || return 1
+  for file in "${PRIV_DEPS[@]}";do
+    source="$ROOT/node_modules/$file"
+    target="$pkg/node_modules/$file"
+    [[ -d "$source" && ! -L "$source" &&
+       "$(stat -c %U "$source")" == "$USER" ]] || return 1
+    # Never dereference symlinked npm package trees as root.
+    [[ -z "$(find "$source" -type l -print -quit)" ]] || return 1
+    cp -R -- "$source" "$target" || return 1
+  done
+  chown -R root:root "$pkg" || return 1
+  chmod -R go-rwx "$pkg" || return 1
+  /opt/node24/bin/node --input-type=module -e '
+    const h=await import(process.argv[1]);
+    const map=h.createPrivilegedHandlers();
+    if(!(map instanceof Map) || map.size<1) process.exit(1);
+  ' "file://$pkg/handlers.js" || return 1
+  printf '%s\n' "$sha" > "$pkg/.ready" || return 1
+  chmod 0600 "$pkg/.ready" || return 1
+  # Persist the complete release BEFORE publishing its symlink.
+  sync -f "$pkg" || return 1
+  durable_sync dir "$PRIV_RELEASES"
+}
+priv_switch(){
+  local sha="$1" tmp
+  priv_present || return 0
+  priv_release "$sha" || return 1
+  if ! priv_current_is "$sha";then
+    systemctl stop linux-panel-privileged.service || return 1
+    tmp="$PRIV_ROOT/.current.$sha"
+    [[ ! -e "$tmp" && ! -L "$tmp" ]] || return 1
+    ln -s "releases/$sha" "$tmp" || return 1
+    mv -fT -- "$tmp" "$PRIV_CURRENT" || return 1
+    durable_sync dir "$PRIV_ROOT" || return 1
+  fi
+  systemctl restart linux-panel-privileged.service &&
+    systemctl is-active --quiet linux-panel-privileged.service &&
+    [[ -S /run/linux-panel-privileged/executor.sock ]]
+}
+priv_recover_old(){
+  priv_present || return 0
+  priv_switch "$OLD"
+}
+priv_verify_target(){
+  priv_present || return 0
+  priv_current_is "$TARGET" && priv_release "$TARGET" &&
+    systemctl is-active --quiet linux-panel-privileged.service &&
+    [[ -S /run/linux-panel-privileged/executor.sock ]]
+}
+
 MODE=normal
 if [[ "$#" -eq 1 && "$1" == --recover-only ]];then MODE=recover
 elif [[ "$#" -ne 0 ]];then exit 2;fi
