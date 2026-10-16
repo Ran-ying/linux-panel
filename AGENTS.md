@@ -25,6 +25,8 @@
 
 - **Panel-first modules:** read [docs/MODULE-DEVELOPMENT.md](docs/MODULE-DEVELOPMENT.md). Built-in system Actions are system.info (including disk) and system.resources (CPU/memory); old split Actions/storage module are retired. Generic metrics/progress/table/sections drive rendering; do not add business Action-ID branches or module CSS to App.vue.
 
+- **Terminal capability:** terminal.execute is the one approved ordinary-service-user Shell write Action (user-shell policy); generic writes remain denied. It is exposed to existing trusted MCP grants when the terminal module is loaded/exposed. No root/sudo/Broker escalation. Action input/output schemas are advertised through SDK fromJsonSchema; actual parameters reach the shared Engine. The panel owns textarea/terminal rendering and session-bound PTY transport; modules only declare presentation. See docs/TERMINAL.md.
+
 ## Agent routing for the next release gates
 
 For coding, repo-wide fixes, installation CLI and CI integration, **prefer Codex Cloud** working in small PRs. For browser-oriented acceptance, cross-app issue/release evidence, and documentation packages, **use ChatGPT Work**. ChatGPT coordinates milestone gates, reviews the exact CI and only performs production MCP deploys under the owner's explicit authorization. The owner is responsible for physical iPhone/Android testing and root-only VPS decisions. No cloud-only screenshot can substitute for actual device QA. Keep the phase checklists and exit criteria in [the v0.5 release plan](docs/V0.5-RELEASE-PLAN.md).

@@ -8,8 +8,9 @@
 - core：可信随仓库模块发现与依赖、注册、JSON Schema、默认拒绝新写类型。
 - modules/system：system.info（主机信息 + disk）、system.resources（cpu + memory）。collectors 为内部帮助代码，旧 split Actions 与 storage 模块已移除。
 - modules/services：services.list。
+- modules/terminal：terminal.execute（显式 user-shell 写能力），命令输入和 PTY GUI 均由面板提供。
 - apps/api：Fastify、业务 API、数据型 presentation 校验。配置不能携带样式/脚本。
-- apps/web：布局、主题、固定导航、卡片、命令编辑保存、刷新、raw 表格/JSON、通用 metrics/progress/table/sections。没有系统 Action ID 特判和跨模块卡片拼装。
+- apps/web：布局、主题、固定导航、卡片、命令编辑保存、刷新、raw 表格/JSON、通用 metrics/progress/table/sections/terminal、声明式 textarea 输入与真实 PTY。没有系统 Action ID 特判和跨模块卡片拼装。
 - extensions/mcp：独立可选 Streamable HTTP/OAuth，无 Vue 依赖；调用同一引擎，当前工具只返回 result，Web 还能展示 raw。
 - root Broker：独立安装，可信 main SHA、非 root 构建、固定 systemd 部署/健康检查/回滚，不能接受任意模块命令。
 
@@ -23,7 +24,7 @@ Linux terminal.fields/decode 定义命令/解析，管理员通过统一 CSRF/Or
 
 Web 使用管理员 Cookie、权限/Origin/CSRF，敏感变更另验密码/可选 TOTP。MCP 默认关闭；OAuth PKCE 授予整个可信客户端访问，全局控制 read 暴露、更新申请和直接更新，不按客户端/工具分配业务 Scope；旧 Scope 仅兼容保留。撤销整个 grant 即刻失效。
 
-写 Action 默认拒绝；现有 proposal-only 与精确 broker-enqueue 策略要求可信适配器上下文。MCP 直接更新需独立全局策略与 Broker 激活，之后不要求每次 Web 审批。
+写 Action 默认拒绝；现有 proposal-only、精确 broker-enqueue 和 terminal.execute 的 user-shell 策略要求可信适配器上下文。MCP 直接更新需独立全局策略与 Broker 激活，之后不要求每次 Web 审批。
 
 ## 范围
 

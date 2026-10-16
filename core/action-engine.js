@@ -1,3 +1,4 @@
+import {isUserShellAction} from './action-policy.js';
 import Ajv from 'ajv';
 
 /**
@@ -30,7 +31,7 @@ export class ActionEngine {
         action.permission==='panel:update:execute' &&
         action.executionPolicy==='broker-enqueue' &&
         context.directUpdateAuthorized===true;
-      if(!trustedCaller || (!isProposal && !isExactBrokerEnqueue))
+      if(!trustedCaller || (!isProposal && !isExactBrokerEnqueue && !isUserShellAction(action)))
         throw Object.assign(new Error('Write action requires explicit trusted execution policy'), { statusCode: 403 });
     }
     let validate = this.inputValidators.get(action);
@@ -77,6 +78,9 @@ export class ActionEngine {
         throw err;
       }
     }
-    return { action: id, result, ...(terminal ? {raw:terminal.raw} : {}) };
+    const raw=terminal?.raw ?? (isUserShellAction(action)?{command:{
+      stdout:result.stdout,stderr:result.stderr,exitCode:result.exitCode
+    }}:undefined);
+    return {action:id,result,...(raw?{raw}:{})};
   }
 }

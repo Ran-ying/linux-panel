@@ -3,7 +3,7 @@
  * For the consent document only, the one registered callback origin may
  * participate in form redirects. Other routes stay strictly same-origin.
  */
-export function panelContentSecurityPolicy(registeredCallbackOrigin = null) {
+export function panelContentSecurityPolicy(registeredCallbackOrigin = null, styleNonce = null) {
   let formAction = "form-action 'self'";
   if (registeredCallbackOrigin !== null) {
     if (typeof registeredCallbackOrigin !== 'string')
@@ -15,7 +15,10 @@ export function panelContentSecurityPolicy(registeredCallbackOrigin = null) {
       throw new Error('Invalid OAuth callback origin');
     formAction += ' ' + parsed.origin;
   }
+  if(styleNonce!==null && (typeof styleNonce!=='string' || !/^[A-Za-z0-9_-]{16,128}$/.test(styleNonce)))
+    throw new Error('Invalid style nonce');
+  const styleSource=styleNonce===null?"'self'":"'self' 'nonce-"+styleNonce+"'";
   return "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
-    formAction + "; script-src 'self'; style-src 'self'; " +
+    formAction + "; script-src 'self'; style-src " + styleSource + "; " +
     "img-src 'self' data:; font-src 'self'; connect-src 'self'";
 }

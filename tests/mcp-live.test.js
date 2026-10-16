@@ -63,6 +63,15 @@ test('real HTTP MCP: global read tools even with legacy narrow grant, revoke who
   assert.ok(exposed.includes('system.info'));
   assert.ok(exposed.includes('system.resources'),'legacy checkbox cannot hide an MCP-exposed read Action');
   assert.ok(exposed.includes('services.list'),'old system-only OAuth grant cannot hide new tools');
+  const terminal=found.data.result.tools.find(tool=>tool.name==='terminal.execute');
+  assert.ok(terminal);
+  assert.deepEqual(terminal.inputSchema.required,['command']);
+  assert.equal(terminal.inputSchema.properties.command.type,'string');
+  const command=await rpc({method:'tools/call',params:{name:'terminal.execute',arguments:{command:"printf 'mcp-terminal\\n'; exit 4"}}});
+  if(process.getuid?.()!==0){
+    assert.equal(command.data.result.structuredContent.stdout,'mcp-terminal\n');
+    assert.equal(command.data.result.structuredContent.exitCode,4);
+  }else assert.equal(command.data.result.isError,true);
   const result=await rpc({method:'tools/call',params:{name:'system.info',arguments:{}}});
   assert.equal(result.status,200,JSON.stringify(result.data));
   const output=JSON.parse(result.data.result.content[0].text);

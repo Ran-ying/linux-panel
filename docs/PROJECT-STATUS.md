@@ -10,21 +10,25 @@
 - 单 Action → 单卡片、单保存、单执行请求、原始 key 列表/JSON。raw 是当次成功终端的 stdout/stderr/exitCode；result 单独解析校验。MCP 当前只返回 result。
 - [模块规范](MODULE-DEVELOPMENT.md) 含完整复制示例、职责/展示/命令/权限契约及 AI 交付清单。README/架构/MCP/升级/安全/路线图已同步。
 
+终端/参数映射变更的完整 CI、浏览器/PTY 与部署证据统一见对应 PR / Issue #54；不能把上面的旧基线测试当作新变更验证。
+
 ## 保持的能力与边界
 
 管理员/TOTP、默认 30 天可配置会话、后台登录检查、浅色/Auto/深色、居中卡片、固定移动导航/PWA、Web/MCP 共用执行。可信个人 OAuth grant + 全局策略，不逐工具 Scope。Linux 编辑 Shell 以非 root 身份，每条 5 秒/128 KiB，不是只读沙箱。root Broker 只接受固定可信 main 更新任务。
 
 ## 验证与部署
 
-实现：PR #98，基线 main 为 46b22836957cb2c2ebf5e4ca285185a22497fa41。语法检查、Vue 构建、19 项本地针对测试通过（1 项普通 Linux 用例在 UID 0 环境跳过）；完整 CI 38833349238 和历史扫描 38833349253 已通过，包含普通 Linux 命令、OAuth/MCP、配置迁移与多宽度浏览器/PWA 验收。
+系统 Action 合并的基线记录：PR #98，基线 main 为 46b22836957cb2c2ebf5e4ca285185a22497fa41。语法检查、Vue 构建、19 项本地针对测试通过（1 项普通 Linux 用例在 UID 0 环境跳过）；完整 CI 38833349238 和历史扫描 38833349253 已通过，包含普通 Linux 命令、OAuth/MCP、配置迁移与多宽度浏览器/PWA 验收。
 
 部署结果只在 [Issue #54 最新记录](https://github.com/Ran-ying/linux-panel/issues/54) 维护一份，运行中的准确 SHA 由 MCP panel.update.status 返回。本页不反复缓存会过时的“当前服务器版本”，也不以 PR 合并或 queued 推断部署成功。每次部署必须核对持久化 SHA/status 和服务健康，再更新交接记录。
 
-## 已知不足：MCP 读取工具的输入参数映射（已记录，未实现）
+## 终端与参数协议
 
-普通读取工具目前在 extensions/mcp/index.js 使用空的严格输入 Schema，并把 {} 传给 ActionEngine，没有自动使用 Action.inputSchema，也没有转发调用参数。无参数 Action 正常；带可选参数的读取无法传参，带必填参数的 Action 即使进入工具清单也无法完成正常调用。更新申请/直接更新是独立手写参数适配，不代表通用映射已经实现。
+新增终端模块，只有 terminal.execute 一个 Action，接收 command / 可选 timeoutSeconds，返回 stdout/stderr/退出码/超时/截断/耗时。它是明确批准的普通服务账户 Shell 写能力，不使用 root Broker。
 
-后续工作：定义并验证 Action JSON Schema 到 MCP 工具输入的映射、将实际参数传给同一 ActionEngine，覆盖必填/可选/嵌套/数组/边界/未知字段和 Web/MCP 一致性测试。暂不扩展执行权限或新增写策略。在补齐前，模块作者不要宣称带参数读取已获得完整 MCP 支持。
+面板提供通用 textarea 输入、terminal 结果 renderer 及卡片下方的黑色真实 PTY，支持目录保持、Ctrl+C、交互输入和尺寸变化。PTY 需要 Python 3，复用 Web 会话/Origin/CSRF，最多两个内存会话，撤销/闲置/退出清理，命令与输出不持久化。
+
+MCP 现直接公布 Action 输入/输出 Schema、转发参数，由同一引擎验证，原空参数不足已补齐。普通 read 和这一批准的 user-shell 能力随模块暴露给已授权可信客户端，其他 write 默认拒绝。详情见 [终端规范](TERMINAL.md)。
 
 ## 下一步
 

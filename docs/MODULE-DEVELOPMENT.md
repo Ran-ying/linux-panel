@@ -49,7 +49,7 @@ ID 以模块 ID + "." 开头且全局唯一。业务需要一起刷新、配置�
 
 内置规范要求 id、title、description、explain、kind、permission、exposure、inputSchema、outputSchema、execute。kind 为 read/write；exposure.web/mcp 明确声明。Schema 必须描述 object，优先 required 和 additionalProperties:false，声明类型与合理数值范围。execute 返回 JSON 对象，不返回 BigInt、undefined、函数或非有限数；引擎验证输入与输出。
 
-permission 是操作语义，不自行授予权限。Web/MCP 适配器负责授权；写操作引擎默认拒绝，新写类型须先实现并审查面板执行策略。不能通过 read 标签或 presentation 绕过写策略。root 更新 Broker 只处理固定可信 main 更新任务，不能用于模块 Shell。
+permission 是操作语义，不自行授予权限。Web/MCP 适配器负责授权；写操作引擎默认拒绝，新写类型须先实现并审查面板执行策略；terminal.execute 是明确批准的普通用户 Shell 特例，不代表任意模块 write 自动获准。不能通过 read 标签或 presentation 绕过写策略。root 更新 Broker 只处理固定可信 main 更新任务，不能用于模块 Shell。
 
 当前系统 Action 只有 system.info（主机字段 + disk）和 system.resources（cpu + memory）；另有 services.list。旧 system.cpu/system.memory/storage.usage 已删除，无隐藏别名。collectors 不是注册的 Action。
 
@@ -112,6 +112,7 @@ presentation 只能引用自己模块对 Web 暴露的 Action。配置为 JSON �
 | progress | title、数值 valueKey；可选 totalKey/usedKey/availableKey、details |
 | table | rowsKey 指向对象数组；非空 columns:[{key,label,format?}] |
 | sections | 非空 sections:[子展示]；子项 key 指向当前结果的对象字段，省略则用当前对象 |
+| terminal | result 中 stdout/stderr 字符串，显示黑色命令结果 |
 
 format 只支持 bytes/duration/milliseconds/integer；省略按文本显示。key 是当前对象的直接字段，不是表达式或点路径。嵌套对象用 sections.key；进度数值必须声明为 number；表格列须在 rowsKey 的 items.properties 中存在。sections 每层最多 12 项、最多三层分区，所有子引用按对应 outputSchema 校验。
 
@@ -126,13 +127,15 @@ format 只支持 bytes/duration/milliseconds/integer；省略按文本显示。k
 }
 ```
 
-loadOnEnter 仅允许无需必填参数的 read；自动刷新默认关闭，由用户开启。refreshIntervalMs 为 0 或 3000–60000 整数。尚无模块自定义复杂表单协议，当前输入为通用 JSON 编辑器；有需求先扩展面板，不另建绕过引擎的业务 API。
+loadOnEnter 仅允许无需必填参数的 read；自动刷新默认关闭，由用户开启。refreshIntervalMs 为 0 或 3000–60000 整数。输入目前支持声明式 string textarea；其他字段仍可使用 JSON 编辑器。复杂表单有需求先扩展面板，不另建绕过引擎的业务 API。
 
-## 已知不足：MCP 读取工具的输入参数映射（已记录，未实现）
+## MCP 参数映射与输入控件
 
-普通读取工具目前在 extensions/mcp/index.js 使用空的严格输入 Schema，并把 {} 传给 ActionEngine，没有自动使用 Action.inputSchema，也没有转发调用参数。无参数 Action 正常；带可选参数的读取无法传参，带必填参数的 Action 即使进入工具清单也无法完成正常调用。更新申请/直接更新是独立手写参数适配，不代表通用映射已经实现。
+MCP 工具通过 SDK fromJsonSchema 公布模块 Action.inputSchema/outputSchema，实际参数传给同一 ActionEngine；必填/可选/嵌套对象/数组/边界和未知字段由 schema 校验，已补齐原空参数缺口。
 
-后续工作：定义并验证 Action JSON Schema 到 MCP 工具输入的映射、将实际参数传给同一 ActionEngine，覆盖必填/可选/嵌套/数组/边界/未知字段和 Web/MCP 一致性测试。暂不扩展执行权限或新增写策略。在补齐前，模块作者不要宣称带参数读取已获得完整 MCP 支持。
+presentation.inputs 可声明 [{key,label,type:'textarea',placeholder?}]，字段必须存在于 inputSchema 且为 string；面板在信息区下方渲染输入。未声明时仍使用通用 JSON 编辑器。只对无需输入的 read 自动加载，不因有展示配置就自动执行写操作。
+
+renderer:'terminal' 复用面板黑色 stdout/stderr 结果视图；console:'terminal' 在 Action 卡片下方提供通用真实 PTY 组件，仅适用于已批准的普通用户 Shell 能力。模块不附带 CSS/Vue，具体参考 [终端规范](TERMINAL.md)。
 
 ## AI 实施与交付检查表
 

@@ -1,4 +1,4 @@
-import { exposedReadActions, setMcpPolicy, actionAllowed, mcpPolicy } from '../../platform/mcp-policy.js';
+import { exposedMcpActions, setMcpPolicy, actionAllowed, mcpPolicy } from '../../platform/mcp-policy.js';
 import * as auditHelpers from '../../platform/state-store.js';
 import { installOAuthRoutes } from './oauth-router.js';
 import {hash, allowedScopes} from './oauth-store.js';
@@ -24,7 +24,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     return {
       policy: mcpPolicy(state),
       endpoint: resourceUrl ?? null,
-      tools: exposedReadActions(registry).map(({ id, title, description, permission, kind }) =>
+      tools: exposedMcpActions(registry).map(({ id, title, description, permission, kind }) =>
         ({ id, title, description, permission, kind }))
     };
   });
@@ -38,7 +38,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
   // extension's separate npm dependencies have not yet been installed.
   let nodePromise;
   const getNodeHandler = () => (nodePromise ??= (async () => {
-    const [{ createMcpHandler, McpServer }, { toNodeHandler }, z] = await Promise.all([
+    const [{ createMcpHandler, McpServer, fromJsonSchema }, { toNodeHandler }, z] = await Promise.all([
       import('@modelcontextprotocol/server'), import('@modelcontextprotocol/node'), import('zod/v4')
     ]);
     const handler = createMcpHandler(async ({ authInfo } = {}) => {
@@ -46,7 +46,7 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     // The owner grants access to the MCP endpoint, not a separate list of
     // rights for each OAuth client. Only registry-approved MCP read Actions
     // are visible; the global policy controls writes separately.
-    const visible = mcpPolicy(snapshot).enabled ? exposedReadActions(registry) : [];
+    const visible = mcpPolicy(snapshot).enabled ? exposedMcpActions(registry) : [];
 
     const server = new McpServer({ name: 'linux-panel', version: '0.5.0' }, { capabilities: { tools: {} } });
     // Write proposals use the same Action registered in the platform registry.
@@ -146,9 +146,10 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
     for (const action of visible) {
       server.registerTool(action.id, {
         description: action.description || action.title,
-        inputSchema: z.object({}).strict(),
-        annotations: { readOnlyHint: true, destructiveHint: false }
-      }, async (_input, ctx) => {
+        inputSchema: fromJsonSchema(action.inputSchema),
+        ...(action.outputSchema?{outputSchema:fromJsonSchema(action.outputSchema)}:{}),
+        annotations: { readOnlyHint: action.kind==='read', destructiveHint: action.kind==='write' }
+      }, async (input, ctx) => {
         const verified = ctx.http?.authInfo ?? authInfo;
         const state = await store.snapshot();
         const source = registry.get(action.id);
@@ -160,7 +161,9 @@ export async function registerMcpExtension(app, { store, auth, registry, engine,
           return { isError: true, content: [{ type: 'text', text: 'This tool is not authorized' }] };
         // This is defense-in-depth; client credentials are not Web cookies.
         auth.requirePermission({ user: { id: live.userId, role: live.role } }, source.permission);
-        const value = await engine.run(action.id, {}, 'mcp');
+        const value = await engine.run(action.id, input ?? {}, 'mcp', {
+          authenticated:true,channel:'mcp',userId:live.userId,clientId:live.clientId
+        });
         await store.mutate(state => {
           const { addAudit } = auditHelpers;
           addAudit(state, 'mcp.action.execute', live.userId, action.id);

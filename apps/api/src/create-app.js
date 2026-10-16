@@ -1,3 +1,6 @@
+import {randomBytes} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {TerminalSessions} from '../../../platform/terminal.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
@@ -295,6 +298,29 @@ export async function createApp({
     return result;
   });
 
+  const terminals=new TerminalSessions({registry,auth,presentations});
+  app.addHook('onClose',async()=>terminals.shutdown());
+  app.post('/api/terminal/sessions',async request=>{
+    const body=request.body;
+    if(!body || Object.keys(body).some(key=>!['actionId','cols','rows'].includes(key)))throw badRequest('Invalid terminal request');
+    const result=await terminals.open(request.panelIdentity,readSessionCookie(request.headers.cookie),body);
+    await store.mutate(state=>addAudit(state,'terminal.open',request.panelIdentity.user.id,body.actionId));
+    return result;
+  });
+  app.get('/api/terminal/sessions/:id/output',async request=>
+    terminals.output(request.panelIdentity,request.params.id,Number(request.query.after ?? 0)));
+  app.post('/api/terminal/sessions/:id/input',async request=>{
+    if(!request.body || Object.keys(request.body).length!==1)throw badRequest('Invalid terminal input');
+    terminals.input(request.panelIdentity,request.params.id,request.body.data);return {ok:true};
+  });
+  app.post('/api/terminal/sessions/:id/resize',async request=>{
+    if(!request.body || Object.keys(request.body).some(key=>!['cols','rows'].includes(key)))throw badRequest('Invalid terminal resize');
+    terminals.resize(request.panelIdentity,request.params.id,request.body.cols,request.body.rows);return {ok:true};
+  });
+  app.delete('/api/terminal/sessions/:id',async request=>{
+    terminals.close(request.panelIdentity,request.params.id);return {ok:true};
+  });
+
   app.setErrorHandler((error, request, reply) => {
     const status = Number.isInteger(error.statusCode) && error.statusCode >= 400 && error.statusCode <= 599 ? error.statusCode : 500;
     request.log.error(error);
@@ -303,6 +329,14 @@ export async function createApp({
 
   const dist = resolve(root, 'apps/web/dist');
   if (existsSync(join(dist, 'index.html'))) {
+    const indexHtml=await readFile(join(dist,'index.html'),'utf8');
+    const serveIndex=async(request,reply)=>{
+      const nonce=randomBytes(24).toString('base64url');
+      reply.header('Cache-Control','no-store');
+      if(production)reply.header('Content-Security-Policy',panelContentSecurityPolicy(null,nonce));
+      return reply.type('text/html; charset=utf-8').send(indexHtml.replace('<head>','<head><meta name="panel-style-nonce" content="'+nonce+'">'));
+    };
+    app.get('/',serveIndex);app.get('/index.html',serveIndex);
     await app.register(fastifyStatic, { root: dist, prefix: '/' });
   } else {
     app.get('/', async () => ({ message: 'UI not built; run npm run dev:web or npm run build:web' }));

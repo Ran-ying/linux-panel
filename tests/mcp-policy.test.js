@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StateStore } from '../platform/state-store.js';
 import { ActionRegistry } from '../core/action-registry.js';
-import { setMcpPolicy, mcpPolicy, actionAllowed, exposedReadActions } from '../platform/mcp-policy.js';
+import { setMcpPolicy, mcpPolicy, actionAllowed, exposedReadActions, exposedMcpActions } from '../platform/mcp-policy.js';
 
 test('MCP default policy is disabled and denies every Action', async t => {
   const folder = await mkdtemp(join(tmpdir(), 'mcp-policy-'));
@@ -50,4 +50,19 @@ test('MCP enabled exposes declared read actions globally, not per-action setting
   await assert.rejects(setMcpPolicy(store,registry,{enabled:true,registrationEnabled:false,allowDirectUpdates:'yes',tools:{}},'1'),{statusCode:400});
   assert.equal(actionAllowed(await store.snapshot(),registry.get('system.info')),false);
   await assert.rejects(setMcpPolicy(store,registry,{enabled:true,registrationEnabled:false,allowUpdates:'yes',tools:{}},'1'),{statusCode:400});
+});
+
+test('only the approved terminal write Action joins globally callable tools',async t=>{
+  const folder=await mkdtemp(join(tmpdir(),'panel-terminal-policy-'));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const store=new StateStore(join(folder,'state.json')),registry=new ActionRegistry();
+  const make=id=>({id,kind:'write',permission:'terminal:execute',executionPolicy:'user-shell',
+    exposure:{mcp:true,web:true},inputSchema:{type:'object',properties:{}},execute:async()=>({})});
+  registry.register('terminal',make('terminal.execute'));
+  registry.register('other',make('other.execute'));
+  await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:false},'fixture');
+  const state=await store.snapshot();
+  assert.deepEqual(exposedMcpActions(registry).map(action=>action.id),['terminal.execute']);
+  assert.equal(actionAllowed(state,registry.get('terminal.execute')),true);
+  assert.equal(actionAllowed(state,registry.get('other.execute')),false);
 });

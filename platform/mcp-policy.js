@@ -1,3 +1,4 @@
+import {isUserShellAction} from '../core/action-policy.js';
 import { addAudit } from './state-store.js';
 
 // A missing v0.4 policy always fails closed. v0.3 state files need no migration.
@@ -10,6 +11,11 @@ export function exposedReadActions(registry) {
     action.kind === 'read' && typeof action.permission === 'string' && action.permission.length > 0
   );
 }
+export function exposedMcpActions(registry) {
+  return registry.list('mcp').filter(action=>
+    action.kind==='read' && typeof action.permission==='string' && action.permission.length>0 ||
+    isUserShellAction(registry.get(action.id)));
+}
 export function mcpPolicy(state) {
   return state.mcp?.policy ?? defaultMcpPolicy();
 }
@@ -18,15 +24,14 @@ export function mcpPolicy(state) {
 // Legacy per-Action checkboxes in saved state are intentionally ignored.
 export function actionAllowed(state, action) {
   return mcpPolicy(state).enabled === true &&
-    action?.kind === 'read' &&
+    (action?.kind === 'read' || isUserShellAction(action)) &&
     action?.exposure?.mcp === true &&
     typeof action.permission === 'string' &&
     action.permission.length > 0;
 }
 
 /**
- * Only allow toggling existing read-only MCP-exposed Actions.
- * Explicit allowlist: adding a new business Action never auto-exposes it to AI.
+ * Legacy tool selections are validated then discarded; global source-declared capabilities govern access.
  */
 export async function setMcpPolicy(store, registry, input, actor) {
   if (!input || typeof input !== 'object' || Array.isArray(input) ||
@@ -36,7 +41,7 @@ export async function setMcpPolicy(store, registry, input, actor) {
       (input.allowUpdates !== undefined && typeof input.allowUpdates !== 'boolean') ||
       (input.allowDirectUpdates !== undefined && typeof input.allowDirectUpdates !== 'boolean'))
     throw Object.assign(new Error('Invalid MCP policy'), { statusCode: 400 });
-  const known = new Set(exposedReadActions(registry).map(a => a.id));
+  const known = new Set(exposedMcpActions(registry).map(a => a.id));
   for (const [id, enabled] of Object.entries(input.tools ?? {})) {
     if (!known.has(id) || typeof enabled !== 'boolean')
       throw Object.assign(new Error('Unknown or invalid MCP tool: ' + id), { statusCode: 400 });

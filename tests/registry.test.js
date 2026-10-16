@@ -36,9 +36,9 @@ test('bundled modules load after dependencies and expose expected actions', asyn
   const manager = new ModuleManager(resolve('modules'), registry);
   const loaded = await manager.loadAll();
   const ids = loaded.map(m => m.id);
-  assert.deepEqual([...ids].sort(), ['services', 'system']);
+  assert.deepEqual([...ids].sort(), ['services', 'system', 'terminal']);
   assert.deepEqual(registry.list('web').map(a => a.id).sort(),
-    ['services.list', 'system.info', 'system.resources']);
+    ['services.list', 'system.info', 'system.resources', 'terminal.execute']);
   for(const id of ['storage.usage','system.cpu','system.memory'])assert.equal(registry.get(id),undefined);
 });
 

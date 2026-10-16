@@ -8,6 +8,8 @@ const props=defineProps({
 const emit=defineEmits(['unauthorized']);
 const inputText=ref('{}'),response=ref(null),error=ref(''),busy=ref(false);
 const view=ref('visual'),autoRefresh=ref(false),infoTab=ref(null);
+const formInput=ref(Object.fromEntries((props.presentation?.inputs ?? []).map(field=>[field.key,props.action.inputSchema?.properties?.[field.key]?.default ?? ''])));
+const inputReady=computed(()=>(props.action.inputSchema?.required ?? []).every(key=>!props.presentation?.inputs || String(formInput.value[key] ?? '').trim().length>0));
 const fields=ref([]),commandsLoaded=ref(false),commandsEditable=ref(false);
 const commandBusy=ref(false),commandError=ref(''),commandMessage=ref('');
 const refreshSeconds=computed(()=>(props.presentation?.refreshIntervalMs ?? 0)/1000);
@@ -85,7 +87,7 @@ async function run(operation,refresh=false) {
   try {
     const reply=await fetch('/api/actions/'+encodeURIComponent(props.action.id)+'/'+operation,{
       method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
-      body:JSON.stringify({input:JSON.parse(inputText.value)}),signal:controller.signal
+      body:JSON.stringify({input:props.presentation?.inputs ? formInput.value : JSON.parse(inputText.value)}),signal:controller.signal
     });
     const payload=await reply.json();
     if(reply.status===401)emit('unauthorized');
@@ -127,7 +129,7 @@ onUnmounted(()=>{
   <section class="action-card" :aria-label="action.title">
     <div class="card-heading">
       <h3>{{ action.title }}</h3>
-      <span class="read-pill">{{ action.kind === 'read' ? '数据读取' : '需授权' }}</span>
+      <span class="read-pill">{{ action.kind === 'read' ? '数据读取' : presentation?.console === 'terminal' ? '命令执行' : '需授权' }}</span>
     </div>
     <div class="action-information">
       <div class="information-heading">
@@ -163,20 +165,29 @@ onUnmounted(()=>{
             <button type="submit" class="command-save primary form-button" :disabled="commandBusy">保存</button>
             <p v-if="commandMessage" class="notice success-notice" role="status">{{ commandMessage }}</p>
           </form>
-          <p v-else class="muted small">此操作没有可编辑的 Linux 终端命令。</p>
+          <p v-else class="muted small">{{ presentation?.inputs ? '此操作通过输入参数指定执行内容。' : '此操作没有可编辑的 Linux 终端命令。' }}</p>
         </template>
       </div>
     </div>
 
-    <label v-if="hasInputFields" :for="'input-'+action.id">JSON 参数</label>
-    <textarea v-if="hasInputFields" :id="'input-'+action.id" v-model="inputText" rows="3" spellcheck="false" />
+    <div v-if="presentation?.inputs" class="action-inputs">
+      <strong>输入</strong>
+      <label v-for="field in presentation.inputs" :key="field.key" :for="'field-'+action.id+'-'+field.key">
+        <span>{{ field.label }}</span>
+        <textarea :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]" rows="4"
+          :placeholder="field.placeholder" :maxlength="action.inputSchema.properties[field.key].maxLength"
+          :required="action.inputSchema.required?.includes(field.key)" :disabled="busy" spellcheck="false" />
+      </label>
+    </div>
+    <label v-else-if="hasInputFields" :for="'input-'+action.id">JSON 参数</label>
+    <textarea v-if="hasInputFields && !presentation?.inputs" :id="'input-'+action.id" v-model="inputText" rows="3" spellcheck="false" />
 
     <div class="result">
       <div class="result-header">
         <strong>操作结果</strong>
         <div class="result-controls">
-          <button type="button" class="action-refresh primary" :disabled="busy || commandBusy" @click="run('execute')">
-            {{ busy ? '处理中…' : action.kind === 'write' ? '申请更新' : '刷新数据' }}
+          <button type="button" class="action-refresh primary" :disabled="busy || commandBusy || !inputReady" @click="run('execute')">
+            {{ busy ? '处理中…' : presentation?.renderer === 'terminal' ? '执行命令' : action.kind === 'write' ? '申请更新' : '刷新数据' }}
           </button>
           <div v-if="response" class="view-switch" aria-label="结果查看模式">
             <button type="button" :class="{active:view==='visual'}" @click="view='visual'">可视化</button>
@@ -211,7 +222,7 @@ onUnmounted(()=>{
         </div>
       </template>
       <p v-else-if="busy && !error" class="empty-state" role="status">正在读取实时数据…</p>
-      <p v-else-if="!error" class="empty-state">{{ action.kind === 'write' ? '此操作只生成待批准的更新申请，不会立即部署。' : '尚未读取数据，可点击“刷新数据”。' }}</p>
+      <p v-else-if="!error" class="empty-state">{{ presentation?.renderer === 'terminal' ? '输入命令后点击“执行命令”。' : action.kind === 'write' ? '此操作只生成待批准的更新申请，不会立即部署。' : '尚未读取数据，可点击“刷新数据”。' }}</p>
     </div>
   </section>
 </template>

@@ -403,7 +403,7 @@ table{min-width:500px}
   gap:var(--content-space);margin:0;padding:0;background:transparent;
 }
 .action-flow{gap:var(--content-space)}
-.module-intro,.action-card,.settings-section{
+.module-intro,.action-card,.settings-section,.terminal-console{
   margin:0;border:1px solid var(--border-panel);border-radius:14px;
   background:var(--panel-bg);
 }
@@ -519,3 +519,22 @@ table{min-width:500px}
 .command-stdout{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
 .raw-json{margin-top:16px}
 .raw-json summary{cursor:pointer}
+
+/* Panel-owned command form and terminal capability, available to declared modules. */
+.action-inputs{margin-top:16px;border-top:1px solid var(--border-panel);padding-top:12px}
+.action-inputs label{display:block;margin-top:12px}
+.action-inputs label>span{display:block;margin-bottom:8px;font-size:.9rem}
+.terminal-result{padding:12px;background:#080b10;color:#e5e7eb;border-radius:10px;min-width:0}
+.terminal-output{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,monospace}
+.terminal-stderr{color:#fca5a5;margin-top:8px}
+.terminal-summary{margin:12px 0 0;font-size:.8rem;color:#cbd5e1}
+.terminal-console{min-width:0;padding:14px 18px}
+.terminal-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.terminal-controls button,.terminal-line button{padding:4px 10px;min-height:32px;border:1px solid var(--button-border);border-radius:999px;background:var(--button-bg);color:var(--text-primary);cursor:pointer}
+.terminal-screen{height:360px;padding:8px;background:#080b10;border-radius:10px;overflow:hidden}
+.terminal-screen .xterm{height:100%}
+.terminal-line{display:flex;gap:8px;margin-top:12px}
+.terminal-line input{min-width:0;flex:1;padding:8px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--text-primary)}
+@media(max-width:730px){.terminal-console{padding:12px 14px}.terminal-screen{height:300px}.terminal-controls button,.terminal-line button{min-height:40px}}
+
+.terminal-line .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
