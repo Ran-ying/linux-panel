@@ -9,7 +9,8 @@ const props=defineProps({
   action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
 const emit=defineEmits(['unauthorized']);
-const minimal=computed(()=>props.presentation?.chrome==='minimal');
+const minimal=computed(()=>['minimal','flat'].includes(props.presentation?.chrome));
+const flat=computed(()=>props.presentation?.chrome==='flat');
 const inputText=ref('{}'),response=ref(null),error=ref(''),busy=ref(false);
 const view=ref('visual'),autoRefresh=ref(false),infoTab=ref(null);
 const formInput=ref(Object.fromEntries((props.presentation?.inputs ?? []).map(field=>[field.key,props.action.inputSchema?.properties?.[field.key]?.default ?? ''])));
@@ -141,8 +142,8 @@ onUnmounted(()=>{
 </script>
 
 <template>
-  <section class="action-card" :class="{'minimal-action':minimal}" :aria-label="action.title">
-    <div class="card-heading">
+  <section class="action-card" :class="{'minimal-action':minimal,'flat-action':flat}" :aria-label="action.title">
+    <div v-if="!flat" class="card-heading">
       <h3>{{ action.title }}</h3>
       <div v-if="!minimal" class="action-info-tabs" role="tablist" :aria-label="action.title + '信息'">
           <button type="button" role="tab" :id="'description-tab-'+action.id"
