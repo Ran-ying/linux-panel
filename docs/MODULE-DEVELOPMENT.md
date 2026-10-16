@@ -128,6 +128,12 @@ format 只支持 bytes/duration/milliseconds/integer；省略按文本显示。k
 
 loadOnEnter 仅允许无需必填参数的 read；自动刷新默认关闭，由用户开启。refreshIntervalMs 为 0 或 3000–60000 整数。尚无模块自定义复杂表单协议，当前输入为通用 JSON 编辑器；有需求先扩展面板，不另建绕过引擎的业务 API。
 
+## 已知不足：MCP 读取工具的输入参数映射（已记录，未实现）
+
+普通读取工具目前在 extensions/mcp/index.js 使用空的严格输入 Schema，并把 {} 传给 ActionEngine，没有自动使用 Action.inputSchema，也没有转发调用参数。无参数 Action 正常；带可选参数的读取无法传参，带必填参数的 Action 即使进入工具清单也无法完成正常调用。更新申请/直接更新是独立手写参数适配，不代表通用映射已经实现。
+
+后续工作：定义并验证 Action JSON Schema 到 MCP 工具输入的映射、将实际参数传给同一 ActionEngine，覆盖必填/可选/嵌套/数组/边界/未知字段和 Web/MCP 一致性测试。暂不扩展执行权限或新增写策略。在补齐前，模块作者不要宣称带参数读取已获得完整 MCP 支持。
+
 ## AI 实施与交付检查表
 
 1. 读当前状态，确认命名/依赖/权限；实现 collectors → Action → presentation。
