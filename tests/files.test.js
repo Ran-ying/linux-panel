@@ -23,6 +23,7 @@ test('file listing, text revisions, UTF-8 bounds, uploads and HTTP write guards'
   const listing=await listFiles({path:dir,limit:1});
   assert.equal(listing.total,2);assert.equal(listing.nextOffset,1);
   assert.equal((await listFiles({path:dir,offset:1})).entries.length,1);
+  await assert.rejects(readText({path:join(dir,'missing')}),{statusCode:404});
   const initial=await readText({path});
   await writeText({path,content:'edited',revision:initial.revision});
   assert.equal(await readFile(path,'utf8'),'edited');

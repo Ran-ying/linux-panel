@@ -218,7 +218,7 @@ onUnmounted(()=>{
       <template v-if="response">
         <FileBrowser v-if="view==='visual' && presentation?.renderer==='files'" :initial-data="response.content.result"
           :list-action="action.id" :operations="presentation.operations" :csrf="csrf"
-          @path-change="filePath=$event" @unauthorized="emit('unauthorized')" />
+          @path-change="filePath=$event" @listing-change="response.content.result=$event" @unauthorized="emit('unauthorized')" />
         <ResultRenderer v-else-if="view==='visual'" :data="displayedResult" :presentation="presentation" />
         <div v-else class="raw-data">
           <template v-if="response.content.raw">

@@ -14,7 +14,7 @@ function ordinaryUser(){
 }
 const revision=buffer=>createHash('sha256').update(buffer).digest('hex');
 async function target(path){ordinaryUser();return fs.realpath(filePath(path));}
-export async function listFiles({path='/',offset=0,limit=200}={}){
+async function listFilesImpl({path='/',offset=0,limit=200}={}){
   path=await target(path);
   const names=await fs.readdir(path,{withFileTypes:true});
   names.sort((a,b)=>Number(b.isDirectory())-Number(a.isDirectory()) || a.name.localeCompare(b.name));
@@ -28,7 +28,7 @@ export async function listFiles({path='/',offset=0,limit=200}={}){
   return {path,parent:path==='/'?null:dirname(path),entries,total:names.length,
     nextOffset:offset+entries.length<names.length?offset+entries.length:null};
 }
-export async function readText({path}){
+async function readTextImpl({path}){
   path=await target(path);
   const handle=await fs.open(path,constants.O_RDONLY | constants.O_NONBLOCK);
   try{
@@ -47,7 +47,7 @@ export async function readText({path}){
     return {path,content,revision:revision(bytes),size:bytesRead,modifiedAt:stats.mtime.toISOString()};
   }finally{await handle.close();}
 }
-export async function writeText({path,content,revision:expected}){
+async function writeTextImpl({path,content,revision:expected}){
   const current=await readText({path});path=current.path;
   if(current.revision!==expected)throw fail('文件已被修改，请重新打开后再保存',409);
   const buffer=Buffer.from(content,'utf8');
@@ -65,7 +65,7 @@ export async function writeText({path,content,revision:expected}){
   const next=await fs.stat(path);
   return {path,revision:revision(buffer),size:buffer.length,modifiedAt:next.mtime.toISOString()};
 }
-export async function uploadFile({path,contentBase64}){
+async function uploadFileImpl({path,contentBase64}){
   ordinaryUser();path=filePath(path);
   const buffer=Buffer.from(contentBase64,'base64');
   if(buffer.length>UPLOAD_LIMIT)throw fail('上传文件超过 8 MiB',413);
@@ -74,3 +74,19 @@ export async function uploadFile({path,contentBase64}){
   catch(error){if(error.code==='EEXIST')throw fail('同名文件已存在，请更换名称',409);throw error;}
   return {path,size:buffer.length};
 }
+
+function expose(operation){
+  return async input=>{
+    try{return await operation(input);}
+    catch(error){
+      if(error.statusCode)throw error;
+      const codes={ENOENT:[404,'文件或目录不存在'],ENOTDIR:[400,'路径不是目录'],EISDIR:[400,'路径指向目录'],
+        EACCES:[403,'没有访问此文件或目录的权限'],EPERM:[403,'没有执行此文件操作的权限'],
+        EROFS:[403,'文件系统只读'],ENOSPC:[507,'磁盘空间不足'],ELOOP:[400,'无法解析符号链接']};
+      const [status,message]=codes[error.code] ?? [500,'文件操作失败'];
+      throw fail(message,status);
+    }
+  };
+}
+export const listFiles=expose(listFilesImpl),readText=expose(readTextImpl),
+  writeText=expose(writeTextImpl),uploadFile=expose(uploadFileImpl);

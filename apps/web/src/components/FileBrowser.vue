@@ -1,7 +1,7 @@
 <script setup>
 import {ref,watch,onUnmounted} from 'vue';
 const props=defineProps({initialData:Object,listAction:String,operations:Object,csrf:String});
-const emit=defineEmits(['path-change','unauthorized']);
+const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
 const busy=ref(false),error=ref(''),message=ref(''),uploadInput=ref(null);
 const controller=new AbortController();
@@ -25,7 +25,7 @@ async function task(fn){
 async function list(path,more=false){
   const result=await request(props.listAction,{path,...(more?{offset:listing.value.nextOffset}:{})});
   listing.value=more?{...result,entries:[...listing.value.entries,...result.entries]}:result;
-  address.value=result.path;emit('path-change',result.path);
+  address.value=result.path;emit('path-change',result.path);emit('listing-change',listing.value);
 }
 function open(entry){
   if(entry.type==='directory')return task(()=>list(join(entry.name)));
