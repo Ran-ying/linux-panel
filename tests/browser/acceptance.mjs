@@ -317,6 +317,13 @@ try {
         await permissions.getByRole('combobox',{name:'文件用户',exact:true}).waitFor({state:'visible'});
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户',exact:true}).locator('option').count()>1);
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户组',exact:true}).locator('option').count()>1);
+        const selectArrow=await permissions.getByRole('combobox',{name:'文件用户',exact:true}).evaluate(select=>{
+          const pseudo=getComputedStyle(select.closest('label'),'::after');
+          return {appearance:getComputedStyle(select).appearance,right:pseudo.right,bottom:pseudo.bottom};
+        });
+        assert.equal(selectArrow.appearance,'none');
+        assert.equal(selectArrow.right,'20px','select chevron should be inset from the edge');
+        assert.equal(selectArrow.bottom,'17px');
         await permissions.getByRole('button',{name:'保存',exact:true}).click();
         await browser.getByText('权限与属主已保存',{exact:true}).waitFor();
         assert.equal((await (await import('node:fs/promises')).stat(join(fileFixture,'note.txt'))).mode & 0o777,0o600);
@@ -400,6 +407,17 @@ try {
           await page.screenshot({path:join(output,'terminal-connected-'+width+'.png'),fullPage:true});
           await console.getByRole('button',{name:'断开',exact:true}).click();
         }
+      }
+      if(name.trim()==='面板设置' && width===1280){
+        await page.getByRole('button',{name:'下移 服务浏览'}).click();
+        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,终端,服务浏览,文件管理');
+        await page.reload();
+        await page.locator('.module-nav button').first().waitFor();
+        assert.deepEqual((await page.locator('.module-nav button').allTextContents()).map(x=>x.trim()).slice(0,4),
+          ['系统概览','终端','服务浏览','文件管理'],'saved module order survives reload');
+        await navigate('面板设置');
+        await page.getByRole('button',{name:'上移 服务浏览'}).click();
+        await page.waitForFunction(()=>[...document.querySelectorAll('.module-nav button')].map(n=>n.textContent.trim()).slice(0,4).join(',')==='系统概览,服务浏览,终端,文件管理');
       }
       // Editing and opening the raw JSON disclosure can scroll the page; measure the initial header gutter at the top.
       await page.evaluate(()=>window.scrollTo(0,0));
