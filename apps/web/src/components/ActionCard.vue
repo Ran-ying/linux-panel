@@ -142,7 +142,7 @@ onUnmounted(()=>{
 </script>
 
 <template>
-  <section class="action-card" :class="{'minimal-action':minimal,'flat-action':flat,'unboxed-manager':presentation?.headerLayout==='inline'}" :aria-label="action.title">
+  <section class="action-card" :class="{'minimal-action':minimal,'flat-action':flat}" :aria-label="action.title">
     <div v-if="!flat" class="card-heading">
       <h3>{{ action.title }}</h3>
       <div v-if="presentation?.headerLayout==='inline'" class="module-header-actions"
