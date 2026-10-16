@@ -103,6 +103,33 @@ export function createSystemCronOperations({etc='/etc',spool='/var/spool/cron/cr
         }
       }catch(e){if(e.code!=='ENOENT')addWarning(dir,e);}
     }
+    // anacron has its own days/delay/job-id schedule syntax.
+    try{
+      const data=await readSafe(join(etc,'anacrontab'));
+      for(const [index,raw] of data.content.split('\n').entries()){
+        const line=raw.trim();
+        if(!line||line.startsWith('#')||line.includes('='))continue;
+        const match=/^(@monthly|[1-9]\d*)\s+(\d+)\s+([A-Za-z0-9_-]+)\s+(.+)$/.exec(line);
+        if(!match)continue;
+        tasks.push({id:sha('anacron\0'+index+'\0'+raw),revision:sha(data.content),
+          sourceType:'anacron',source:join(etc,'anacrontab'),name:match[3],owner:'root',
+          expression:match[1]+' / delay '+match[2]+' min',command:match[4],enabled:true,
+          editable:false,control:'none',nextRun:'',detail:'anacron 定期任务；请在文件管理中修改',
+          line:index,raw});
+      }
+    }catch(e){if(e.code!=='ENOENT')addWarning('anacron',e);}
+    // Optional at queues contain one-shot rather than recurring jobs.
+    try{
+      const data=await execute('/usr/bin/atq',[]);
+      for(const line of data.split('\n').slice(0,150)){
+        const match=/^(\d+)\s+(.+?)\s+([a-z])\s+(\S+)\s*$/.exec(line.trim());
+        if(!match)continue;
+        tasks.push({id:sha('at\0'+match[1]),revision:sha(data),sourceType:'at-job',
+          source:'atq',name:'at #'+match[1],owner:match[4],expression:match[2],
+          command:'',enabled:true,editable:false,control:'none',nextRun:'',
+          detail:'单次 at 任务；目前只读',line:0,raw:''});
+      }
+    }catch(e){if(e.code!=='ENOENT')addWarning('atq',e);}
     try{
       const timerData=JSON.parse(await execute('/usr/bin/systemctl',['list-timers','--all','--output=json','--no-pager']));
       const fileData=JSON.parse(await execute('/usr/bin/systemctl',['list-unit-files','--type=timer','--all','--output=json','--no-pager']));
