@@ -36,10 +36,10 @@ test('bundled modules load after dependencies and expose expected actions', asyn
   const manager = new ModuleManager(resolve('modules'), registry);
   const loaded = await manager.loadAll();
   const ids = loaded.map(m => m.id);
-  assert.equal(ids[0], 'system');
-  assert.deepEqual([...ids].sort(), ['services', 'storage', 'system']);
+  assert.deepEqual([...ids].sort(), ['services', 'system']);
   assert.deepEqual(registry.list('web').map(a => a.id).sort(),
-    ['services.list', 'storage.usage', 'system.cpu', 'system.info', 'system.memory']);
+    ['services.list', 'system.info', 'system.resources']);
+  for(const id of ['storage.usage','system.cpu','system.memory'])assert.equal(registry.get(id),undefined);
 });
 
 test('engine validates inputs and returned data', async () => {

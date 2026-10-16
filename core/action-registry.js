@@ -1,6 +1,6 @@
 /**
  * Modules own Actions. The Registry exposes metadata, never executable functions.
- * Permission strings are descriptive in v0.2: they are NOT authorization.
+ * Permission strings describe intent; trusted adapters enforce authorization.
  */
 export class ActionRegistry {
   #actions = new Map();

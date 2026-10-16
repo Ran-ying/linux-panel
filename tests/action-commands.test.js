@@ -8,9 +8,7 @@ import {ActionCommands,runTerminalCommand} from '../platform/action-commands.js'
 import {ActionRegistry} from '../core/action-registry.js';
 import {ActionEngine} from '../core/action-engine.js';
 import info from '../modules/system/actions/info.js';
-import memory from '../modules/system/actions/memory.js';
-import cpu from '../modules/system/actions/cpu.js';
-import disk from '../modules/storage/actions/usage.js';
+import resources from '../modules/system/actions/resources.js';
 import services from '../modules/services/actions/list.js';
 
 test('saved command configuration persists and is shared by preview and actual Action execution',async t=>{
@@ -18,7 +16,7 @@ test('saved command configuration persists and is shared by preview and actual A
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const store=new StateStore(join(folder,'state.json'));
   const values={hostname:'fixture',platform:'linux',release:'test',arch:'x86_64',cpuCount:'2',
-    totalMemoryBytes:'1024',freeMemoryBytes:'512',uptimeSeconds:'60',nodeVersion:'v24.0.0'};
+    totalMemoryBytes:'1024',freeMemoryBytes:'512',uptimeSeconds:'60',nodeVersion:'v24.0.0',filesystem:'1024 100 40 30'};
   const output=new Map(Object.entries(info.terminal.fields).map(([key,command])=>[command,values[key]]));
   output.set('printf changed',{stdout:'changed\n\n',stderr:'fixture warning\n',exitCode:0});
   let runs=0;
@@ -57,16 +55,38 @@ test('terminal commands run without root and have a process timeout',async t=>{
   await assert.rejects(runTerminalCommand('sleep 2',{timeoutSeconds:0.05}));
 });
 
-test('Linux terminal defaults keep all five read Action output contracts',async t=>{
+test('Linux terminal defaults satisfy the three consolidated Action contracts',async t=>{
   if(process.platform!=='linux' || process.getuid?.()===0){t.skip('requires ordinary Linux user');return;}
   const folder=await mkdtemp(join(tmpdir(),'panel-terminal-defaults-'));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const commands=new ActionCommands(new StateStore(join(folder,'state.json')));
   const registry=new ActionRegistry();
-  for(const action of [info,memory,cpu,disk,services])registry.register(action.id.split('.')[0],action);
+  for(const action of [info,resources,services])registry.register(action.id.split('.')[0],action);
   const engine=new ActionEngine(registry,{commands});
-  for(const action of [info,memory,cpu,disk,services]){
+  for(const action of [info,resources,services]){
     const {result}=await engine.run(action.id);
     assert.ok(result && typeof result==='object',action.id);
   }
+});
+
+test('legacy field overrides migrate by module descriptor and new values take precedence',async t=>{
+  const folder=await mkdtemp(join(tmpdir(),'panel-command-migration-'));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const store=new StateStore(join(folder,'state.json'));
+  await store.mutate(state=>{state.actionCommands={
+    'system.info':{hostname:'printf old-host'},
+    'storage.usage':{filesystem:'printf disk-fixture'},
+    'system.cpu':{sample:'printf cpu-fixture',model:'printf model-fixture'},
+    'system.memory':{meminfo:'printf memory-fixture'}
+  };});
+  const commands=new ActionCommands(store);
+  const configured=async action=>Object.fromEntries((await commands.config(action)).fields.map(f=>[f.key,f.value]));
+  assert.equal((await configured(info)).filesystem,'printf disk-fixture');
+  assert.equal((await configured(info)).hostname,'printf old-host');
+  const migrated=await configured(resources);
+  assert.equal(migrated.sample,'printf cpu-fixture');
+  assert.equal(migrated.meminfo,'printf memory-fixture');
+  assert.equal(Object.keys(migrated).length,4);
+  await commands.save(resources,{...migrated,sample:'printf new-fixture'},'fixture-admin');
+  assert.equal((await configured(resources)).sample,'printf new-fixture');
 });

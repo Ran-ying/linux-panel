@@ -1,7 +1,6 @@
 import info from './actions/info.js';
-import memory from './actions/memory.js';
-import cpu from './actions/cpu.js';
+import resources from './actions/resources.js';
 
-export async function setup({ actions, moduleId }) {
-  for (const action of [info, memory, cpu]) actions.register(moduleId, action);
+export async function setup({actions,moduleId}) {
+  for(const action of [info,resources])actions.register(moduleId,action);
 }

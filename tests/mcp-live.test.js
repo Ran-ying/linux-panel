@@ -28,8 +28,7 @@ test('real HTTP MCP: global read tools even with legacy narrow grant, revoke who
   const manager=new ModuleManager(join(process.cwd(),'modules'),registry);
   await manager.loadAll();
   await setMcpPolicy(store,registry,{
-    enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.cpu':false,'storage.usage':false,
-      'system.memory':false,'services.list':false}
+    enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.resources':false,'services.list':false}
   },user.id);
   const oauth=new OAuthStore(store,registry,resource);
   const client=await oauth.register({client_name:'Local test',redirect_uris:['https://client.example/cb']});
@@ -62,14 +61,14 @@ test('real HTTP MCP: global read tools even with legacy narrow grant, revoke who
   assert.ok(found.data.result?.tools, JSON.stringify(found.data));
   const exposed=found.data.result.tools.map(x=>x.name);
   assert.ok(exposed.includes('system.info'));
-  assert.ok(exposed.includes('storage.usage'),'legacy checkbox cannot hide an MCP-exposed read Action');
+  assert.ok(exposed.includes('system.resources'),'legacy checkbox cannot hide an MCP-exposed read Action');
   assert.ok(exposed.includes('services.list'),'old system-only OAuth grant cannot hide new tools');
   const result=await rpc({method:'tools/call',params:{name:'system.info',arguments:{}}});
   assert.equal(result.status,200,JSON.stringify(result.data));
   const output=JSON.parse(result.data.result.content[0].text);
   assert.equal(typeof output.hostname,'string');
   assert.equal((await store.snapshot()).audit.at(-1).event,'mcp.action.execute');
-  await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'storage.usage':true}},user.id);
+  await setMcpPolicy(store,registry,{enabled:true,registrationEnabled:true,tools:{'system.resources':true}},user.id);
   const hidden=await rpc({method:'tools/list'});
   assert.equal(hidden.status,200,JSON.stringify(hidden.data));
   assert.ok(hidden.data.result?.tools, JSON.stringify(hidden.data));

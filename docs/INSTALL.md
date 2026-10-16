@@ -75,7 +75,7 @@ sudo bash scripts/prepare-host.sh --create-swap 1024 --apply
 ### 3.2 2026-10-14 Ubuntu 24.04 测试机实例
 
 主机原有 Node 18.19.1，内存约 961 MiB、可用约 150 MiB、无 Swap；首次预检 **2 BLOCK**（Node 与内存）。独立安装 Node v24.21.0，并显式创建 1024 MiB Swap 后：
-`--preflight --node-bin /opt/node24/bin/node` 得到 **0 BLOCK、2 个资源 WARN**（约 3963 MiB 空闲磁盘；约 150 MiB 可用 RAM + 1022 MiB 空闲 Swap）。此前第三个 WARN 是旧安装器 `--no-nginx` 的提示，**新版安装器不再检查任何 Nginx 事项**。该机还没有安装 Linux Panel；不应把预检当作运行验收。
+`--preflight --node-bin /opt/node24/bin/node` 得到 **0 BLOCK、2 个资源 WARN**（约 3963 MiB 空闲磁盘；约 150 MiB 可用 RAM + 1022 MiB 空闲 Swap）。此前第三个 WARN 是旧安装器 `--no-nginx` 的提示，**新版安装器不再检查任何 Nginx 事项**。这是 2026-10-14 的历史预检截点，当时尚未安装；当前已部署状态见 PROJECT-STATUS.md / Issue #54，不应把预检当作运行验收。
 
 ## 4. 自动首次安装
 

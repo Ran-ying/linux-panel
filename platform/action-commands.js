@@ -25,9 +25,11 @@ export class ActionCommands {
   }
   async config(action) {
     if (!this.supports(action)) return {editable:false,fields:[]};
-    const saved=(await this.store.snapshot()).actionCommands?.[action.id] ?? {};
+    const all=(await this.store.snapshot()).actionCommands ?? {};
+    const saved=all[action.id] ?? {};
+    const legacy=action.terminal.migrateFrom ?? {};
     return {editable:true,fields:Object.entries(action.terminal.fields).map(([key,value])=>({
-      key,value:saved[key] ?? value,defaultValue:value
+      key,value:saved[key] ?? all[legacy[key]?.actionId]?.[legacy[key]?.key] ?? value,defaultValue:value
     }))};
   }
   async save(action, input, actor) {

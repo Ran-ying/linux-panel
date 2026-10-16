@@ -1,4 +1,4 @@
-# 部署说明（当前 v0.4）
+# 部署说明（v0.5 / 当前 main，2026-10-16）
 
 请阅读 **[INSTALL.md](INSTALL.md)**：完整的手动安装、Nginx/systemd 配置和 `scripts/install.sh` 通用部署脚本。
 

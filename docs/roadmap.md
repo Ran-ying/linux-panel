@@ -1,30 +1,17 @@
-# Linux Panel development milestones
+# Linux Panel 路线图
 
-**Current priority (2026-10-15): ship a reproducible, secure public v0.5 release before extending privileged server Actions.** See the actionable [v0.5 release execution plan](V0.5-RELEASE-PLAN.md), [current project status](PROJECT-STATUS.md) and [Issue #54 handoff](https://github.com/Ran-ying/linux-panel/issues/54). Version tags are not implied by feature completion.
+更新：2026-10-16。[v0.5.0 已发布](https://github.com/Ran-ying/linux-panel/releases/tag/v0.5.0)，旧 tag 固定；main 以独立 PR 迭代。[当前状态](PROJECT-STATUS.md) 描述当前功能，[Issue #54](https://github.com/Ran-ying/linux-panel/issues/54) 提供部署证据。
 
-## Completed capabilities (not a final release signoff)
+## 已完成
 
-- **v0.1:** Fastify + Vue + ActionEngine.
-- **v0.2:** structured modules, schema validation and independent UI presentation policies.
-- **v0.3:** authenticated Web console, CSRF, sessions, audit and reverse-proxy deployment.
-- **v0.4:** optional MCP and OAuth PKCE. The current trusted personal MCP mode uses an authenticated client grant plus globally controlled exposed Actions; historical per-client scope restrictions are not the current behavior.
-- **v0.5 implementation milestones already validated:** optional TOTP/recovery, account throttling, Web/MCP shared update Actions, independently installed immutable root-owned systemd Broker, restricted origin/main SHA update, rollback, dark/light/system themes and responsive PWA. Disposable systemd acceptance and successive real MCP production updates have passed. **This does not itself approve v0.5 public release.**
+ActionEngine/可信模块/schema；Web/MCP 共享执行；管理员/TOTP/可配置 30 天会话；可信个人 MCP 全局策略；受限 main SHA 更新/Broker/回滚恢复；响应式 PWA/固定移动导航/浅色 Auto 深色；可编辑普通用户命令与原始输出；真正合并的系统 Action、通用 sections renderer、面板优先模块规范。
 
-## v0.5 release readiness — ordered gates
+## 后续
 
-1. **Mobile/PWA device QA:** browser responsive review plus genuine iPhone/Android home-screen, safe-area, keyboard, offline/privacy, theme and navigation checks. Record unknown hardware coverage honestly.
-2. **First-time install UX:** simplify the supported Ubuntu/Debian setup path; preserve separate read-only preflight, app install, opt-in privileged Broker installation, explicit activation and explicit MCP direct-execute authorization. Verify cross-UID Git ACL behavior before/after a real update in disposable environments. Track [Issue #22](https://github.com/Ran-ying/linux-panel/issues/22).
-3. **v0.5 release gate:** full-history secret audit, dependency/license/security checks, documentation refresh, repeatable clean install/upgrade/uninstall and rollback/recovery, threat-model review and owner signoff. Reconcile open [#14](https://github.com/Ran-ying/linux-panel/issues/14), [#23](https://github.com/Ran-ying/linux-panel/issues/23) and [#35](https://github.com/Ran-ying/linux-panel/issues/35) with actual evidence before closing them.
+1. 按真实使用反馈做手机设备 QA，浏览器截图不替代 iPhone/Android。
+2. 按 MODULE-DEVELOPMENT.md 扩展诊断模块，复用 presentation、权限与命令能力。
+3. 通用复杂输入表单/新 renderer 先定义校验协议与测试，避免业务 ID 特判。
+4. 服务日志/受限重启等业务写操作需单独策略，不引入通用 root Shell。
+5. 持续改进安装、升级、恢复并记录实际支持平台。
 
-## After public v0.5
-
-- **v0.6:** bounded server operations via explicit allowlisted Actions and a restricted privilege broker. Prioritize read-only service/log diagnostics, then narrowly permitted restarts with confirmation and audit; **never** expose a generic root shell. A trusted OAuth client can discover newly globally enabled exposed MCP tools, so gate new privileged capabilities deliberately.
-- **v1.0:** installation/upgrade/recovery experience proven across supported platforms, independent security verification, stable compatibility contract and maintained release documentation.
-
-## Execution route
-
-- **Codex Cloud:** repo implementation, bug fixes, tests, CI and reviewable feature PRs.
-- **ChatGPT Work:** browser-oriented release QA, coordination of cross-app evidence, documentation/release deliverables. It cannot replace real iOS/Android device testing.
-- **ChatGPT + operator:** gate review, cross-agent sequencing, trusted PR/CI checks and explicitly authorized production MCP updates verified through persisted result + live service health.
-
-**Publication is not release certification.** A GitHub merge, passing CI, update `queued` receipt or successful deployment is not by itself an acceptance of the remaining release gates. Root-owned Broker remains a separately installed and explicitly activated component.
+独立安全审计、多管理员、第三方模块隔离和分布式状态尚未实现。旧 [v0.5 计划](V0.5-RELEASE-PLAN.md) 是历史验收记录，不表示当前仍未发布。

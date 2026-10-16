@@ -29,7 +29,7 @@ async function fixture(t) {
   const cookie=login.headers['set-cookie'].split(';')[0],csrf=login.json().csrf;
   const enabled=await app.inject({method:'PUT',url:'/api/extensions/mcp/settings',
     headers:{cookie,'x-panel-csrf':csrf},
-    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.cpu':true,'storage.usage':true}}});
+    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.resources':true}}});
   assert.equal(enabled.statusCode,200);
   return {app,store,cookie,csrf};
 }
@@ -52,7 +52,7 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
   const verifier=randomBytes(32).toString('base64url');
   const challenge=createHash('sha256').update(verifier).digest('base64url');
   const query=new URLSearchParams({client_id:id,response_type:'code',
-    redirect_uri:'https://client.example/callback',scope:'system:read storage:read',
+    redirect_uri:'https://client.example/callback',scope:'system:read services:read',
     state:'safety-check-123456',resource,code_challenge:challenge,code_challenge_method:'S256'});
   const url='/oauth/authorize?'+query.toString();
   const noLogin=await app.inject(url);
@@ -108,7 +108,7 @@ test('OAuth discovery, PKCE approval, refresh and immediate server revocation',a
   const valid=await storeOAuth.verifyAccessToken(tokens.access_token);
   assert.ok(valid);
   assert.ok(valid.scopes.includes('system:read'));
-  assert.ok(valid.scopes.includes('storage:read'));
+  assert.ok(valid.scopes.includes('services:read'));
   assert.ok(valid.scopes.includes('services:read'),
     'owner-approved clients receive all enabled MCP read actions');
   const grants=(await app.inject({url:'/api/extensions/mcp/grants',headers:{cookie}})).json().grants;
@@ -200,13 +200,13 @@ test('offline_access is available only for refresh, not for MCP tools',async t=>
   const registry=new ActionRegistry();
   await new ModuleManager(join(process.cwd(),'modules'),registry).loadAll();
   const storeOAuth=new OAuthStore(store,registry,resource);
-  assert.ok((await storeOAuth.verifyAccessToken(token.json().access_token)).scopes.includes('storage:read'));
+  assert.ok((await storeOAuth.verifyAccessToken(token.json().access_token)).scopes.includes('services:read'));
   const refresh=await app.inject({method:'POST',url:'/oauth/token',
     headers:{'content-type':'application/x-www-form-urlencoded'},
     payload:new URLSearchParams({client_id:clientId,grant_type:'refresh_token',
       refresh_token:token.json().refresh_token,resource}).toString()});
   assert.equal(refresh.statusCode,200,refresh.body);
-  assert.ok((await storeOAuth.verifyAccessToken(refresh.json().access_token)).scopes.includes('storage:read'));
+  assert.ok((await storeOAuth.verifyAccessToken(refresh.json().access_token)).scopes.includes('services:read'));
   const grants=(await app.inject({url:'/api/extensions/mcp/grants',headers:{cookie}})).json().grants;
   const narrowed=await app.inject({method:'PUT',url:'/api/extensions/mcp/grants/'+grants[0].id,
     headers:{cookie,'x-panel-csrf':csrf},payload:{scopes:['system:read']}});

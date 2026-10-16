@@ -2,8 +2,49 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer']);
+
+function validateView(view,schema,actionId,depth=0) {
+  if(!TYPES.has(view.renderer))throw new Error('Unsupported UI renderer');
+      const checkField = (f, available) => {
+        if (!f || typeof f.key !== 'string' || !Object.hasOwn(available, f.key))
+          throw new Error(`UI references an unknown result field: ${actionId}`);
+        if (f.format && !FORMATS.has(f.format)) throw new Error(`Unsupported field format: ${f.format}`);
+        if (typeof f.label !== 'string' || f.label.length > 100) throw new Error('Invalid field label');
+      };
+      if (view.renderer === 'sections') {
+        if(depth>=3 || !Array.isArray(view.sections) || !view.sections.length || view.sections.length>12)
+          throw new Error('Invalid sections');
+        for(const section of view.sections) {
+          if(!section || typeof section!=='object')throw new Error('Invalid section');
+          if(section.key!==undefined && typeof section.key!=='string')throw new Error('Invalid section key');
+          const nested=section.key===undefined?schema:schema[section.key]?.properties;
+          if(!nested)throw new Error('Section must reference an object result field');
+          validateView(section,nested,actionId,depth+1);
+        }
+      } else if (view.renderer === 'metrics') {
+        if (!Array.isArray(view.fields) || !view.fields.length) throw new Error('Missing metric fields');
+        view.fields.forEach(f => checkField(f, schema));
+      } else if (view.renderer === 'table') {
+        const nested = schema[view.rowsKey]?.items?.properties;
+        if (!nested || !Array.isArray(view.columns) || !view.columns.length)
+          throw new Error('Invalid table fields');
+        view.columns.forEach(f => checkField(f, nested));
+      } else {
+        if (typeof view.valueKey !== 'string' || schema[view.valueKey]?.type !== 'number')
+          throw new Error(`Invalid progress value field: ${actionId}`);
+        for (const key of ['totalKey', 'usedKey', 'availableKey']) {
+          if (view[key] && schema[view[key]]?.type !== 'number')
+            throw new Error(`Invalid progress quantity field: ${actionId}`);
+        }
+        if (view.details) {
+          if (!Array.isArray(view.details)) throw new Error('Invalid detail fields');
+          view.details.forEach(f => checkField(f, schema));
+        }
+      }
+
+}
 
 /**
  * The Web adapter owns UI descriptors. It imports only trusted, bundled module
@@ -43,35 +84,9 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       const interval = item.refreshIntervalMs ?? 0;
       if (!Number.isInteger(interval) || (interval !== 0 && (interval < 3000 || interval > 60000)))
         throw new Error(`Unsafe refresh interval: ${item.actionId}`);
-      // Show only fields declared by the Action output contract, not arbitrary paths.
-      const schema = action.outputSchema?.properties;
-      if (!schema) throw new Error(`Web UI requires an outputSchema: ${item.actionId}`);
-      const checkField = (f, available) => {
-        if (!f || typeof f.key !== 'string' || !Object.hasOwn(available, f.key))
-          throw new Error(`UI references an unknown result field: ${item.actionId}`);
-        if (f.format && !FORMATS.has(f.format)) throw new Error(`Unsupported field format: ${f.format}`);
-        if (typeof f.label !== 'string' || f.label.length > 100) throw new Error('Invalid field label');
-      };
-      if (item.renderer === 'metrics') {
-        if (!Array.isArray(item.fields) || !item.fields.length) throw new Error('Missing metric fields');
-        item.fields.forEach(f => checkField(f, schema));
-      } else if (item.renderer === 'table') {
-        const nested = schema[item.rowsKey]?.items?.properties;
-        if (!nested || !Array.isArray(item.columns) || !item.columns.length)
-          throw new Error('Invalid table fields');
-        item.columns.forEach(f => checkField(f, nested));
-      } else {
-        if (typeof item.valueKey !== 'string' || schema[item.valueKey]?.type !== 'number')
-          throw new Error(`Invalid progress value field: ${item.actionId}`);
-        for (const key of ['totalKey', 'usedKey', 'availableKey']) {
-          if (item[key] && schema[item[key]]?.type !== 'number')
-            throw new Error(`Invalid progress quantity field: ${item.actionId}`);
-        }
-        if (item.details) {
-          if (!Array.isArray(item.details)) throw new Error('Invalid detail fields');
-          item.details.forEach(f => checkField(f, schema));
-        }
-      }
+      const schema=action.outputSchema?.properties;
+      if(!schema)throw new Error('Web UI requires an outputSchema: '+item.actionId);
+      validateView(item,schema,item.actionId);
       // UI values must be inert JSON, with no executable callbacks exposed.
       presentations.push(JSON.parse(JSON.stringify(item)));
       seen.add(item.actionId);

@@ -27,12 +27,8 @@ async function readDiskUsage() {
   return summarizeStatfs(await statfs('/', { bigint: true }));
 }
 
+// Internal collector; only system.info is registered as an Action.
 export default {
-  id: 'storage.usage',
-  title: '根文件系统磁盘占用',
-  description: '读取根文件系统的总容量、已用与可用空间。',
-  kind: 'read', permission: 'storage:read', exposure: { web: true, mcp: true },
-  inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   outputSchema: {
     type: 'object',
     required: ['mountpoint', 'totalBytes', 'usedBytes', 'availableBytes', 'freeBytes', 'usagePercent', 'source'],

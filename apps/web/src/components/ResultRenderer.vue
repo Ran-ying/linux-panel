@@ -53,7 +53,13 @@ function formatted(key, formatKind) {
       当前系统使用 Node.js 空闲内存估算，可能与系统监控工具的口径不同。
     </p>
 
-    <div v-if="presentation?.renderer === 'metrics'" class="metric-grid">
+    <div v-if="presentation?.renderer === 'sections'" class="result-sections">
+      <div v-for="(section,index) in presentation.sections" :key="index" class="result-section">
+        <ResultRenderer :data="section.key === undefined ? data : data[section.key]" :presentation="section" />
+      </div>
+    </div>
+
+    <div v-else-if="presentation?.renderer === 'metrics'" class="metric-grid">
       <div v-for="field in fields" :key="field.key" class="metric-card">
         <div class="metric-label">{{ field.label }}</div>
         <div class="metric-value">{{ formatted(field.key, field.format) }}</div>

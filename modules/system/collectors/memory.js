@@ -30,12 +30,8 @@ let totalBytes = os.totalmem();
   return { totalBytes, freeBytes, availableBytes, usedBytes, usagePercent, source };
 }
 
+// Internal collector; only system.resources is registered as an Action.
 export default {
-  id: 'system.memory',
-  title: '内存使用情况',
-  description: 'Linux 优先使用 /proc/meminfo 的 MemAvailable；macOS 使用 Node.js 近似值。',
-  kind: 'read', permission: 'system:read', exposure: { web: true, mcp: true },
-  inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   outputSchema: {
     type: 'object',
     required: ['totalBytes', 'freeBytes', 'availableBytes', 'usedBytes', 'usagePercent', 'source'],

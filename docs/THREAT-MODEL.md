@@ -1,84 +1,38 @@
-# Linux Panel v0.5 threat model
+# Linux Panel threat model — current main (2026-10-16)
+
+v0.5.0 is published; publication is not independent security certification. Current implementation and observed deployments are recorded in PROJECT-STATUS.md and Issue #54.
 
 ## Assumptions
 
-The adversary can discover the public hostname, read every line of the open-source
-repository, enumerate HTTP endpoints, register an OAuth client while registration
-is enabled, and send arbitrarily malformed requests from multiple IP addresses.
-Knowledge of the domain, source code or scope names is **not** considered secret.
+Public source, hostnames, endpoints and OAuth scope names are not secrets. Attackers may send malformed requests and register clients while registration is enabled. Administrator credentials, root host, pinned upstream and supply chain are assumed uncompromised; compromise of any is a separate incident.
 
-The administrator's password, enrolled TOTP seed, recovery codes, private deploy
-key, root-owned broker and pinned GitHub repository are assumed uncompromised.
-A compromised administrator session or supply-chain compromise is a separate
-incident and may still cause damage. A malicious AI client is not a trusted
-person; its claims of approval have no authority.
+The supported personal model intentionally trusts an OAuth-authorized client as a whole. Chat text or a claimed client name is never parsed as approval. A valid grant can access newly exposed global read Actions and globally enabled updates; this is not per-tool least privilege.
 
-## Trust boundaries
+## Boundaries
 
-1. **Internet → Nginx**: TLS, canonical Host, upstream 127.0.0.1 only;
-   origin IP rules and separate login/OAuth rate limits. Never trust client-
-   supplied X-Forwarded-For without a verified proxy chain.
-2. **Browser → Web API**: SameSite HttpOnly cookie, Origin and session CSRF;
-   explicit password step-up for updates. TOTP additionally required only when the administrator has opted in.
-3. **OAuth Client → MCP**: bearer-only authentication; PKCE, exact registered
-   callback, audience-bound tokens and granted scopes. A client name is
-   unverified. MCP never treats chat text as user approval.
-4. **MCP → Actions**: live policy and OAuth scope checks on tool discovery and
-   *again at execution*. Read-only capabilities stay limited to declared
-   Actions and strict output schemas.
-5. **Shared update Action → Web approval**: Web Session+CSRF or MCP `panel:update` Scope is verified by the respective adapter; one ActionEngine validates input/output. A proposal is not deployment. Approval is a separate Web step-up requiring an administrator session, CSRF and password, plus a fresh TOTP when enrolled. Proposal contains only
-   a 40-character Git SHA and cannot execute a command.
-6. **Web approval → root-owned update broker**: fixed marker file in a private
-   directory triggers a systemd one-shot with no variable shell commands.
-   The broker allows only fast-forward `origin/main` from an operator-pinned
-   GitHub remote. Git/npm/test/build run as `linuxpanel-updater` (not root).
-   Root can stop/start only the fixed panel unit and copy private state.
-   The original panel process cannot write code or modify the broker.
-   A compromised panel process can forge its own approval marker, but still
-   cannot choose an arbitrary command, remote, or revision outside the pinned
-   trusted upstream head. Code/supply-chain signing is a future hardening area.
+1. Internet → operator-managed TLS proxy → loopback panel: canonical Host/Origin, verified forwarded-header chain, application and proxy rate limits. The panel does not provision proxy/TLS/firewall.
+2. Browser → Web API: administrator session, HttpOnly/SameSite/Secure cookie, Origin/CSRF, and password/optional TOTP step-up for sensitive platform changes.
+3. OAuth → MCP: PKCE S256, exact callbacks, audience-bound tokens, live grant revocation and global policy checked at discovery and execution. Historical scope strings remain for compatibility, not per-tool isolation.
+4. Module → ActionEngine: only registered/exposed Actions, input/output schemas, trusted adapter context for existing write policies. Modules are trusted repository code, not sandboxed third-party plugins. JSON presentations cannot grant execution permission.
+5. Web-admin command configuration → ordinary terminal execution: fixed module keys, bounded values, private state/audit ID only, non-root service UID, 5 seconds/128 KiB per command, no sudo/root Broker. Custom Shell can mutate data accessible to the service UID; read is intent, not a sandbox. Exact stdout/stderr remain response-only, separate from decoded result. Web exposes raw; current MCP adapter exposes result only.
+6. Update proposal/direct enqueue → separately installed root Broker: a proposal requires Web confirmation; direct MCP enqueue is allowed only with global direct-execute policy and an active grant. Both pin the trusted origin/main SHA. Fixed root-owned worker performs unprivileged Git/npm/test/build and constrained deployment/health/rollback; it does not accept arbitrary module commands/remotes/privileged scripts.
 
-## Security requirements and verification
+A compromised Web process may forge its own update marker, but cannot escape the Broker's pinned source/fixed execution boundary. Upstream code-signing is future work.
 
-- No anonymous Web Action/MCP tool execution; invalid Origin, CSRF, token,
-  client grant or Scope fail closed.
-- New tools and updates are disabled by default; turning on update policy
-  cannot retroactively increase an existing OAuth token's Scope.
-- No arbitrary SSH/root Shell; updating code can only happen via the fixed
-  constrained broker after local installation.
-- Login rate limits operate by source IP and account; no permanent account lock,
-  but 10-minute throttle may be abused for temporary denial of service.
-- TOTP replay rejected after successful login. Recovery codes SHA-256 hashed,
-  single-use, and shown only once on enrollment. Rebinding increments the
-  credential epoch, revoking old OAuth access.
-- Update requests are time-limited. The Web user sees old SHA → new SHA and
-  must confirm a fresh factor. Failure in test/build/health check restores old
-  code, dependencies and backed-up state.
-- Git and npm are executed as a separate updater user. **Never add an
-  updater-owned path to the root worker's PATH.** Root broker script and systemd
-  unit are installed root-owned outside the checkout.
-- No credential, raw authorization URL, recovery code, password or TOTP seed
-  should be included in logs/PR/Issues.
+## Requirements
 
-## Open risks (not covered by v0.5)
+- Anonymous or revoked clients cannot execute Actions; invalid Origin/CSRF/token/resource fails closed.
+- MCP/registration/high-risk update policies are opt-in; once enabled, global exposed reads intentionally become available to active grants. Revoke the whole grant or disable policy to remove access.
+- Write types are denied by default; only implemented proposal-only and exact broker-enqueue paths are allowed by trusted contexts.
+- TOTP replay is rejected, recovery codes are hashed and single-use, credential epoch changes invalidate old grants. TOTP is not phishing resistant.
+- Root worker/unit are installed root-owned outside the checkout; never place an updater-writable directory in root PATH.
+- No tokens, cookies, client IDs, private commands/outputs, authorization URLs or recovery secrets in public logs, commits, screenshots or Issues.
+- Confirm durable update SHA/status and service health; queued is not success.
 
-No guarantee against unknown parser vulnerabilities, compromised dependencies,
-reverse-proxy misconfiguration, TOTP phishing, account recovery compromise,
-a compromised GitHub upstream or root host. Single-process JSON persistence,
-no multi-user RBAC or independent third-party penetration test. The updater's
-first-time provisioning is privileged and requires a manual operator review; the root worker installer refuses systemd < 240 because silent ignoring of filesystem-sandbox directives is unacceptable.
-The system is not production-safety certified.
+## Verification and limits
 
-## Tests
+Registry/engine, command migration/raw-output, Web API/CSRF, OAuth/MCP global policy/revocation, renderer schema rejection, responsive/PWA and update recovery tests run in CI. Ordinary Linux CI exercises terminal defaults. Test VPS Broker deployment and MCP updates have observed successful results; see Issue #54 for exact SHAs.
 
-- `tests/security-v05.test.js`: TOTP vector, CSRF, setup confirmation,
-  one-time recovery and cross-IP throttling.
-- `tests/update-controller.test.js`: fixed remote SHA, Web step-up and no
-  change to working tree on MCP request.
-- `tests/update-mcp.test.js`: real HTTP MCP scope isolation, approval API
-  rejection and dynamic revocation.
-- Existing OAuth and MCP suites: PKCE replay, callback exact match, token and
-  grant revocation, CSP and Origin enforcement.
-- CI: Node syntax checks, Bash syntax checks, dependency audits and Vue build.
-  A clean-machine privileged broker deployment + rollback drill remains a
-  separate **deployment acceptance** task, not a condition to open-source code.
+No multi-user RBAC, distributed persistence, untrusted plugin isolation or independent third-party penetration test. No guarantee against compromised upstream/root, parser defects, proxy mistakes, phishing or resource exhaustion. Root Broker requires supported systemd (at least 240); platform/real-device QA coverage must be stated from actual evidence.
+
+[Security](security.md) · [Module contract](MODULE-DEVELOPMENT.md) · [Updater](UPDATER.md)

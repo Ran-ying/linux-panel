@@ -71,8 +71,15 @@ try {
       if(name.trim()==='系统概览'){
         await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor();
         await page.getByRole('heading',{name:'资源使用情况',exact:true}).waitFor();
-        assert.equal(await page.locator('.action-card').count(),2,'overview should combine four collectors into two cards');
-        await page.locator('.action-card').first().getByRole('progressbar',{name:'根文件系统',exact:true}).waitFor();
+        assert.equal(await page.locator('.action-card').count(),2,'overview must render exactly two real Actions');
+        const ids=await page.evaluate(async()=>(await (await fetch('/api/actions')).json()).actions.map(a=>a.id));
+        assert.ok(ids.includes('system.resources') && !ids.some(id=>['system.cpu','system.memory','storage.usage'].includes(id)));
+        await page.locator('.action-card').first().getByRole('progressbar',{name:'磁盘占用',exact:true}).waitFor();
+        if(width===390){
+          const cards=page.locator('.action-card').first().locator('.metric-card');
+          assert.ok(Math.abs((await cards.nth(0).boundingBox()).y-(await cards.nth(1).boundingBox()).y)<1,
+            'section renderer must preserve the phone two-column metrics layout');
+        }
       }
       if([390,1280].includes(width) && ['系统概览','服务浏览'].includes(name.trim())){
         const card=page.locator('.action-card').first();
@@ -134,7 +141,7 @@ try {
         assert.equal(await card.locator('.raw-command-table tbody tr').count(),name.trim()==='系统概览'?10:1);
         await card.locator('.raw-json summary').click();
         const raw=JSON.parse(await card.locator('.raw-json .raw-output').innerText());
-        assert.ok(Object.values(raw).every(fields=>Object.values(fields).every(output=>typeof output.stdout==='string' && typeof output.stderr==='string' && output.exitCode===0)));
+        assert.ok(Object.values(raw).every(output=>typeof output.stdout==='string' && typeof output.stderr==='string' && output.exitCode===0));
         await card.getByRole('button',{name:'可视化',exact:true}).click();
         if(name.trim()==='系统概览'){
           const resource=page.locator('.action-card').nth(1);

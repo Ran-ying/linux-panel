@@ -30,12 +30,8 @@ const initial = os.cpus();
   };
 }
 
+// Internal collector; only system.resources is registered as an Action.
 export default {
-  id: 'system.cpu',
-  title: 'CPU 使用情况',
-  description: '短时采样 CPU 累积计数器，估算整个主机的忙碌比例。',
-  kind: 'read', permission: 'system:read', exposure: { web: true, mcp: true },
-  inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   outputSchema: {
     type: 'object',
     required: ['usagePercent', 'logicalCpus', 'sampleWindowMs', 'model', 'source'],

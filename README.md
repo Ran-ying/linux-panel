@@ -4,14 +4,14 @@
 
 *A modular Node.js Linux panel with a web dashboard and an optional OAuth-protected MCP endpoint.*
 
-> v0.5 仍处于开发及发布验收阶段（非独立安全审计通过或 v1.0 稳定发布）。具备可选 TOTP、Web 更新审批、MCP 独立授权的直接更新和受限 root Broker；首次安装默认关闭高权限能力。2026-10-15 的生产 Broker 激活与 OAuth 实际授权进展见 [项目当前状态](docs/PROJECT-STATUS.md)、[长期交接 Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+> [v0.5.0 已发布](https://github.com/Ran-ying/linux-panel/releases/tag/v0.5.0)。main 持续迭代，当前功能和测试/部署证据见 [项目当前状态](docs/PROJECT-STATUS.md)、[Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。发行不代表独立安全审计或 v1.0 稳定性认证。
 
 ## 功能
 
 - 无默认密码的管理员账户、本地初始化、会话、CSRF、可选 TOTP 双因素认证（一次性恢复码）和审计事件。
-- 系统、CPU、内存、磁盘及 systemd 服务只读信息。
-- Web 页面通过独立展示策略把结构化 JSON 渲染成指标/图表/表格。
-- MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、独立客户端权限及撤销。
+- 两个系统 Action：基本信息（system.info，含磁盘）与资源使用情况（system.resources，含 CPU/内存）；另有 services.list。旧拆分 Action 已移除。
+- 模块通过声明式配置复用面板指标、进度条、表格和组合分区；统一命令编辑/保存与原始输出/JSON，无需模块 CSS 或前端业务特判。
+- MCP Streamable HTTP（`/mcp`）、OAuth Authorization Code + PKCE、可信客户端整体授权、全局工具策略及即时撤销。
 - Git + systemd + 独立非 root 服务账户。只提供可配置的 HTTP 监听端口，Nginx/Caddy/HTTPS/防火墙完全由管理员自行管理。
 - 支持浅色/深色/跟随系统的外观切换与响应式移动页面，可通过 PWA 清单添加到手机主屏幕；真实 iOS/Android 设备兼容性仍属于 v0.5 发布验收的一部分。
 - **面板更新是受限 Action**：`panel.update.status`（Web/MCP 可授权只读）、`panel.update.check`（Web 只读检查）、`panel.update.request`（Web/MCP 申请，需 Web 管理员审批）、`panel.update.execute`（MCP 独立高权限直接排队）。Web 也支持核对 SHA 后一次确认。**个人可信 MCP 模式**下，OAuth 登录只负责客户端身份授权：已连接的客户端自动看到注册为 MCP 的只读 Action，以及面板全局开启的申请/直接更新 Action；不再逐客户端、逐工具分配 Scope。直接更新仍须独立开启全局策略与已激活的隔离 systemd Broker，且仅允许可信 origin/main SHA；关闭策略或撤销客户端后立即失效。此能力并非默认对所有新安装开放，也不意味着已完成独立安全审计。
@@ -67,6 +67,8 @@ deployment/        systemd / Nginx 模板
 scripts/           管理员初始化 / 安装 / 更新
 tests/             Node 单元与集成测试
 ```
+
+模块开发先读 **[面板优先的模块开发规范（含复制示例）](docs/MODULE-DEVELOPMENT.md)**。变更契约必须同步当前文档和升级说明；旧过程归档 docs/history。
 
 更多文档：[更新验收清单](docs/UPDATE-ACCEPTANCE.md) · [架构](docs/architecture.md) · [MCP](docs/mcp.md) · [安装](docs/INSTALL.md) · [升级](docs/UPGRADING.md) · [安全](docs/security.md) · [威胁模型](docs/THREAT-MODEL.md) · [MCP 更新器](docs/UPDATER.md) · [v0.5 发布执行计划](docs/V0.5-RELEASE-PLAN.md) · [路线图](docs/roadmap.md) · [公开审查](docs/PUBLIC-RELEASE.md)
 
