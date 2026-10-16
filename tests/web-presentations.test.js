@@ -14,14 +14,16 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 3);
+  assert.equal(presentations.length, 4);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').sections[1].key, 'disk');
   assert.equal(configured.get('system.info').renderer, 'sections');
   assert.equal(configured.get('services.list').renderer, 'table');
   assert.equal(configured.get('system.resources').refreshIntervalMs, 5000);
   assert.equal(configured.get('services.list').refreshIntervalMs, 0);
-  assert.ok(presentations.every(p => p.loadOnEnter === true));
+  assert.ok(presentations.filter(p=>p.actionId!=='terminal.execute').every(p=>p.loadOnEnter===true));
+  assert.equal(configured.get('terminal.execute').loadOnEnter,false);
+  assert.equal(configured.get('terminal.execute').inputs[0].key,'command');
   const actions = registry.list('web');
   for (const action of actions) {
     assert.equal(Object.hasOwn(action, 'presentation'), false);
