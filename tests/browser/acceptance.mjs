@@ -110,6 +110,43 @@ try {
       await route.fulfill({status,contentType:'application/json',
         body:JSON.stringify(status===200?{action:id,result:data}:data)});
     });
+    // Synthetic V2Ray server: browser coverage without changing the CI host.
+    let v2rayInstalled=true,v2rayRunning=true,v2rayEnabled=true,v2rayRevision=0;
+    let v2rayConfig=JSON.stringify({inbounds:[{tag:'socks',listen:'127.0.0.1',
+      port:10080,protocol:'socks'}],outbounds:[{tag:'direct',protocol:'freedom'}],
+      dns:{servers:['1.1.1.1']},routing:{rules:[]},customUnknown:{value:true}},null,2);
+    const v2rayCalls=[];
+    const v2rayDigest=()=>String(v2rayRevision).padStart(64,'b');
+    await page.route('**/api/actions/v2ray.*/execute',async route=>{
+      const id=new URL(route.request().url()).pathname.split('/')[3];
+      const input=route.request().postDataJSON()?.input??{};
+      v2rayCalls.push({id,operation:input.operation??null});
+      let status=200,result;
+      if(id==='v2ray.status')result={installed:v2rayInstalled,version:v2rayInstalled?'V2Ray 5.47.0':'',
+        service:v2rayRunning?'running':'stopped',enabled:v2rayEnabled,binary:v2rayInstalled?'/usr/local/bin/v2ray':'',
+        configPath:'/usr/local/etc/v2ray/config.json',configExists:v2rayInstalled,
+        inbounds:v2rayInstalled?1:0,outbounds:v2rayInstalled?1:0,features:['inbounds','outbounds','routing','dns'],
+        message:v2rayInstalled?'V2Ray 已安装':'未安装'};
+      else if(id==='v2ray.read')result={content:v2rayConfig,revision:v2rayDigest(),
+        configPath:'/usr/local/etc/v2ray/config.json'};
+      else if(id==='v2ray.test')result={ok:true,message:'配置检查通过',output:'V2Ray 5.47.0 test passed'};
+      else if(id==='v2ray.save'){
+        if(input.revision!==v2rayDigest()){status=409;result={error:'配置版本冲突'};}
+        else{v2rayConfig=input.content;v2rayRevision++;
+          result={ok:true,message:'保存成功',output:'V2Ray test passed',revision:v2rayDigest(),restarted:v2rayRunning};}
+      }else if(id==='v2ray.service'){
+        if(input.operation==='stop')v2rayRunning=false;
+        if(input.operation==='start'||input.operation==='restart')v2rayRunning=true;
+        if(input.operation==='enable')v2rayEnabled=true;
+        if(input.operation==='disable')v2rayEnabled=false;
+        result={ok:true,message:'服务操作成功',output:''};
+      }else if(id==='v2ray.install'){
+        v2rayInstalled=true;v2rayRunning=true;v2rayEnabled=true;
+        result={ok:true,message:'已安装',output:'SHA-256 已确认'};
+      }else{status=404;result={error:'No V2Ray fixture handler'};}
+      await route.fulfill({status,contentType:'application/json',body:JSON.stringify(
+        status===200?{action:id,result}:result)});
+    });
     const errors=[];
     page.on('pageerror',e=>errors.push(e.message));
     let releaseAuth;
@@ -835,6 +872,53 @@ try {
         await browser.getByText('已删除',{exact:true}).waitFor();
         await assert.rejects(readFile(join(fileFixture,'renamed-dir-'+width,'child.txt')),{code:'ENOENT'});
         await page.screenshot({path:join(output,'file-browser-'+width+'.png'),fullPage:true});
+      }
+      if(name.trim()==='V2Ray' && [390,1280].includes(width)){
+        const panel=page.locator('.v2ray-manager');
+        await panel.waitFor();
+        await panel.getByText('V2Ray 5.47.0').waitFor();
+        assert.equal(await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).count(),0,
+          'installation must be hidden while V2Ray is installed');
+        await panel.getByRole('tab',{name:'完整 JSON'}).click();
+        const editor=panel.getByRole('textbox',{name:'完整 V2Ray JSON 配置'});
+        await editor.waitFor();
+        assert.ok((await editor.inputValue()).includes('customUnknown'),
+          'the entire JSON should preserve unknown fields');
+        const newConfig=JSON.parse(await editor.inputValue());
+        newConfig.log={loglevel:'info'};
+        await editor.fill(JSON.stringify(newConfig,null,2));
+        await panel.getByRole('button',{name:'校验配置'}).click();
+        await panel.getByText('配置检查通过',{exact:true}).waitFor();
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,0,'testing must not save');
+        await panel.getByRole('button',{name:'保存并应用'}).click();
+        await panel.getByText('保存成功',{exact:true}).waitFor();
+        assert.equal(JSON.parse(v2rayConfig).customUnknown.value,true);
+        assert.equal(JSON.parse(v2rayConfig).log.loglevel,'info');
+        await panel.getByRole('tab',{name:'分项编辑'}).click();
+        await panel.getByRole('combobox',{name:'配置部分'}).selectOption('dns');
+        assert.ok((await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue()).includes('1.1.1.1'));
+        await panel.getByRole('button',{name:'停止',exact:true}).click();
+        const confirm=panel.getByRole('dialog',{name:'确认 V2Ray 服务操作'});
+        await confirm.waitFor();
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.service').length,0,'service action must wait for confirmation');
+        await confirm.getByRole('button',{name:'取消'}).click();
+        await confirm.waitFor({state:'hidden'});
+        assert.equal(v2rayRunning,true);
+        await panel.getByRole('button',{name:'停止',exact:true}).click();
+        await confirm.getByRole('button',{name:'确认操作'}).click();
+        await confirm.waitFor({state:'hidden'});
+        assert.equal(v2rayRunning,false);
+        v2rayInstalled=false;v2rayRunning=false;
+        await panel.getByRole('button',{name:'刷新状态与配置'}).click();
+        await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).waitFor();
+        await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).click();
+        const install=panel.getByRole('dialog',{name:'安装 V2Ray'});
+        await install.waitFor();
+        await install.getByRole('button',{name:'取消'}).click();
+        await install.waitFor({state:'hidden'});
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.install').length,0,
+          'cancel must never install V2Ray');
+        await page.screenshot({path:join(output,'v2ray-panel-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='终端'){
         const card=page.locator('.action-card').first();

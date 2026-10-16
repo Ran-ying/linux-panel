@@ -7,6 +7,8 @@ import {NGINX_CONTRACTS} from './nginx-contracts.js';
 import {createNginxOperations} from './nginx-operations.js';
 import {NGINX_UNIT_CONTRACT} from './nginx-unit-contracts.js';
 import {createNginxUnitOperations} from './nginx-unit-operations.js';
+import {V2RAY_CONTRACTS} from './v2ray-contracts.js';
+import {createV2RayOperations} from './v2ray-operations.js';
 // Add reviewed built-in handlers here, then explicitly reinstall the root package.
 // Never discover/import modules from the checkout or a Web-writable directory.
 export function createPrivilegedHandlers({privileged=true}={}){
@@ -24,5 +26,8 @@ export function createPrivilegedHandlers({privileged=true}={}){
   handlers.set('nginx.repairExecutor',{
     validate:ajv.compile(NGINX_UNIT_CONTRACT.inputSchema),execute:unitRepair.repair
   });
+  const v2ray=createV2RayOperations({requireRoot:privileged});
+  for(const [name,contract] of Object.entries(V2RAY_CONTRACTS))
+    handlers.set('v2ray.'+name,{validate:ajv.compile(contract.inputSchema),execute:v2ray[name]});
   return handlers;
 }

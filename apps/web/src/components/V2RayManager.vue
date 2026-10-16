@@ -1,0 +1,243 @@
+<script setup>
+import {computed,nextTick,onMounted,ref,watch} from 'vue';
+const props=defineProps({
+  initialData:{type:Object,required:true},listAction:{type:String,required:true},
+  operations:{type:Object,required:true},csrf:{type:String,required:true}
+});
+const emit=defineEmits(['unauthorized','listing-change']);
+const data=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref(''),output=ref('');
+const draft=ref(''),revision=ref(''),original=ref(''),loaded=ref(false),tab=ref('overview');
+const section=ref('inbounds'),sectionText=ref(''),confirm=ref(null),confirmDialog=ref(null);
+const sections=['inbounds','outbounds','routing','dns','transport','log','policy','api','stats','reverse','observatory','burstObservatory','metrics','inboundDetour','outboundDetour'];
+const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规则',dns:'DNS',transport:'传输设置',
+  log:'日志',policy:'流量策略',api:'API',stats:'统计',reverse:'反向代理',observatory:'观测',
+  burstObservatory:'突发观测',metrics:'指标',inboundDetour:'旧版入站扩展',outboundDetour:'旧版出站扩展'};
+const enabledFeatures=computed(()=>data.value.features??[]);
+const parse=()=>{const obj=JSON.parse(draft.value);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw Error('配置必须是 JSON 对象');return obj;};
+const dirty=computed(()=>draft.value!==original.value);
+const summary=computed(()=>{
+  try{
+    const cfg=parse();return {inbounds:[...(cfg.inbounds||[]),...(cfg.inboundDetour||[])],
+      outbounds:[...(cfg.outbounds||[]),...(cfg.outboundDetour||[])],routing:cfg.routing?.rules?.length??0,
+      dns:cfg.dns?.servers?.length??0};
+  }catch{return null;}
+});
+watch(()=>props.initialData,v=>{data.value=v;});
+async function call(action,input={}){
+  const reply=await fetch('/api/actions/'+encodeURIComponent(action)+'/execute',{
+    method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
+    body:JSON.stringify({input})
+  });
+  const json=await reply.json();
+  if(reply.status===401)emit('unauthorized');
+  if(!reply.ok)throw Error(json.error||'HTTP '+reply.status);
+  return json.result;
+}
+async function wrap(action){
+  if(busy.value)return;
+  busy.value=true;error.value='';output.value='';
+  try{await action();}catch(e){error.value=e.message||'操作失败';}
+  finally{busy.value=false;}
+}
+async function refreshStatus(){
+  const state=await call(props.listAction);
+  data.value=state;emit('listing-change',state);
+}
+function showSection(key){
+  const obj=parse();
+  section.value=key;
+  sectionText.value=JSON.stringify(obj[key]??(['inbounds','outbounds','inboundDetour','outboundDetour'].includes(key)?[]:{}),null,2);
+}
+function commitSection(){
+  const obj=parse();
+  let value;
+  try{value=JSON.parse(sectionText.value);}catch{throw Error(names[section.value]+'不是合法 JSON');}
+  obj[section.value]=value;
+  draft.value=JSON.stringify(obj,null,2)+'\n';
+}
+function selectSection(key){
+  try{commitSection();showSection(key);error.value='';}catch(e){error.value=e.message;}
+}
+async function load(){
+  const result=await call(props.operations.read);
+  draft.value=result.content;original.value=result.content;revision.value=result.revision;
+  loaded.value=true;showSection('inbounds');
+}
+function refreshAll(){return wrap(async()=>{
+  await refreshStatus();
+  if(data.value.installed&&data.value.configExists)await load();
+  else loaded.value=false;
+  notice.value='已读取当前配置';
+});}
+function chooseTab(value){
+  if(tab.value==='sections'&&value!=='sections'){
+    try{commitSection();error.value='';}catch(e){error.value=e.message;return;}
+  }
+  if(value==='sections'&&tab.value!=='sections'){
+    try{showSection(section.value);}catch(e){error.value=e.message;return;}
+  }
+  tab.value=value;
+}
+function validate(){return wrap(async()=>{
+  if(tab.value==='sections')commitSection();
+  parse();
+  const result=await call(props.operations.test,{content:draft.value});
+  output.value=result.output;
+  notice.value=result.message;
+  if(!result.ok)error.value=result.message;
+});}
+function save(){return wrap(async()=>{
+  if(tab.value==='sections')commitSection();
+  parse();
+  const result=await call(props.operations.save,{content:draft.value,revision:revision.value});
+  output.value=result.output;notice.value=result.message;
+  if(!result.ok){error.value=result.message;return;}
+  await refreshStatus();await load();
+});}
+function ask(operation){
+  if(busy.value)return;
+  confirm.value=operation;
+  nextTick(()=>confirmDialog.value?.showModal());
+}
+function closeConfirm(){if(busy.value)return;confirmDialog.value?.close();confirm.value=null;}
+async function proceed(){
+  const operation=confirm.value;
+  if(!operation)return;
+  return wrap(async()=>{
+    const result=operation==='install'
+      ?await call(props.operations.install,{confirm:true})
+      :await call(props.operations.service,{operation});
+    output.value=result.output;notice.value=result.message;
+    if(!result.ok){error.value=result.message;return;}
+    confirmDialog.value?.close();confirm.value=null;
+    await refreshStatus();
+    if(operation==='install'&&data.value.configExists)await load();
+  });
+}
+onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);});
+</script>
+
+<template>
+  <section class="v2ray-manager" aria-label="V2Ray 控制台">
+    <div class="v2ray-toolbar">
+      <button type="button" :disabled="busy" @click="refreshAll">刷新状态与配置</button>
+      <span v-if="busy" class="muted small" role="status">正在处理…</span>
+    </div>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <p v-if="notice" class="muted small" role="status">{{ notice }}</p>
+    <div class="v2ray-summary">
+      <div><span class="muted small">内核</span><strong>{{ data.installed ? (data.version||'已安装') : '未安装' }}</strong></div>
+      <div><span class="muted small">服务</span><strong>{{ data.installed ? (data.service==='running'?'运行中':'已停止') : '—' }}</strong></div>
+      <div><span class="muted small">开机启动</span><strong>{{ data.installed?(data.enabled?'已启用':'未启用'):'—' }}</strong></div>
+      <div><span class="muted small">入站 / 出站</span><strong>{{ data.inbounds }} / {{ data.outbounds }}</strong></div>
+    </div>
+    <p class="muted small">配置文件：<code>{{ data.configPath }}</code></p>
+    <p v-if="data.installed&&!data.configExists" class="error">没有找到主配置，请先确认 V2Ray 的实际配置文件路径。</p>
+    <div v-if="!data.installed" class="v2ray-empty">
+      <p>未找到 V2Ray 内核。可安装经过 SHA-256 固定校验的 V2Fly 5.47.0。默认只建立本机回环 SOCKS 监听，不开放公网代理端口。</p>
+      <button type="button" class="primary" :disabled="busy" @click="ask('install')">安装 V2Ray 5.47.0</button>
+    </div>
+    <template v-else>
+      <div class="v2ray-toolbar">
+        <button type="button" :disabled="busy||data.service==='running'" @click="ask('start')">启动</button>
+        <button type="button" :disabled="busy||data.service!=='running'" @click="ask('stop')">停止</button>
+        <button type="button" :disabled="busy" @click="ask('restart')">重启</button>
+        <button type="button" :disabled="busy" @click="ask(data.enabled?'disable':'enable')">
+          {{ data.enabled?'关闭开机自启':'启用开机自启' }}
+        </button>
+      </div>
+      <div v-if="loaded" class="v2ray-editor">
+        <div class="v2ray-tabbar" role="tablist" aria-label="V2Ray 管理视图">
+          <button type="button" role="tab" :aria-selected="tab==='overview'" @click="chooseTab('overview')">能力概览</button>
+          <button type="button" role="tab" :aria-selected="tab==='sections'" @click="chooseTab('sections')">分项编辑</button>
+          <button type="button" role="tab" :aria-selected="tab==='raw'" @click="chooseTab('raw')">完整 JSON</button>
+        </div>
+        <template v-if="tab==='overview'">
+          <p class="muted small">已加载的配置字段：{{ enabledFeatures.join(' · ')||'无' }}。以下为配置摘要，不展示认证信息。</p>
+          <div class="v2ray-rows">
+            <div><strong>入站</strong>
+              <p v-for="(item,i) in summary?.inbounds??[]" :key="i">{{ item.tag||'未命名' }} · {{ item.protocol||'—' }} · {{ item.port??'—' }}</p>
+            </div>
+            <div><strong>出站</strong>
+              <p v-for="(item,i) in summary?.outbounds??[]" :key="i">{{ item.tag||'未命名' }} · {{ item.protocol||'—' }}</p>
+            </div>
+            <div><strong>路由 / DNS</strong><p>路由规则：{{ summary?.routing??'—' }}；DNS 服务器：{{ summary?.dns??'—' }}</p></div>
+          </div>
+          <p class="muted small">所有 V2Ray 5.x 配置字段，包括 API、统计、TLS、传输、路由和旧版字段，都可以在“分项编辑”或“完整 JSON”中编辑；不会自动转换或删除未知字段。</p>
+        </template>
+        <template v-if="tab==='sections'">
+          <div class="v2ray-section-picker">
+            <label for="v2ray-section">配置部分</label>
+            <select id="v2ray-section" :value="section" :disabled="busy" @change="selectSection($event.target.value)">
+              <option v-for="key in sections" :key="key" :value="key">{{ names[key] }}（{{ key }}）</option>
+            </select>
+          </div>
+          <label class="v2ray-editor-label">{{ names[section] }} · JSON
+            <textarea v-model="sectionText" rows="16" spellcheck="false" :disabled="busy" aria-label="当前配置部分 JSON" />
+          </label>
+          <p class="muted small">切换分类时保留当前部分的编辑。旧字段和未知字段均原样保留。</p>
+        </template>
+        <label v-if="tab==='raw'" class="v2ray-editor-label">完整 V2Ray JSON 配置
+          <textarea v-model="draft" rows="22" spellcheck="false" :disabled="busy" aria-label="完整 V2Ray JSON 配置" />
+        </label>
+        <div class="v2ray-toolbar">
+          <button type="button" :disabled="busy||!loaded" @click="validate">校验配置</button>
+          <button type="button" class="primary" :disabled="busy||!loaded||(!dirty&&tab!=='sections')" @click="save">保存并应用</button>
+          <button type="button" :disabled="busy" @click="refreshAll">放弃修改并重新读取</button>
+          <span v-if="dirty" class="muted small">存在尚未保存的更改</span>
+        </div>
+      </div>
+      <p v-else-if="data.configExists" class="muted small">配置尚未读取；可点击“刷新状态与配置”。</p>
+    </template>
+    <pre v-if="output" class="v2ray-output" aria-label="V2Ray 命令输出">{{ output }}</pre>
+    <dialog ref="confirmDialog" class="v2ray-dialog" aria-labelledby="v2ray-confirm-title" @close="confirm=null">
+      <div class="v2ray-dialog-content">
+        <h3 id="v2ray-confirm-title">{{ confirm==='install'?'安装 V2Ray':'确认 V2Ray 服务操作' }}</h3>
+        <p v-if="confirm==='install'">将下载安装并校验 V2Fly 5.47.0 官方压缩包，创建本机回环代理配置与 v2ray.service，不会覆盖已有安装。</p>
+        <p v-else>确定{{ {start:'启动',stop:'停止',restart:'重启',enable:'启用开机自启',disable:'停用开机自启'}[confirm] }} V2Ray？停止或重启可能中断当前代理连接。</p>
+        <p v-if="error" class="error">{{ error }}</p>
+        <div class="v2ray-toolbar">
+          <button type="button" :disabled="busy" @click="closeConfirm">取消</button>
+          <button type="button" class="primary" :disabled="busy" @click="proceed">确认操作</button>
+        </div>
+      </div>
+    </dialog>
+  </section>
+</template>
+
+<style scoped>
+.v2ray-manager{min-width:0}
+.v2ray-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:.3rem 0 1rem}
+.v2ray-manager button{box-sizing:border-box;min-height:32px;padding:4px 10px;
+  border:1px solid var(--button-border);border-radius:999px;background:var(--button-bg);
+  color:var(--button-text);font:inherit;font-size:.85rem;cursor:pointer}
+.v2ray-manager button.primary{background:var(--accent-bg);color:var(--button-primary-text);border-color:var(--accent-bg)}
+.v2ray-manager button:disabled{opacity:.5;cursor:not-allowed}
+.v2ray-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,125px),1fr));gap:10px;margin:12px 0}
+.v2ray-summary>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px;
+  border:1px solid var(--border-panel);border-radius:10px}
+.v2ray-summary strong{overflow-wrap:anywhere}
+.v2ray-manager code{overflow-wrap:anywhere}
+.v2ray-empty{display:grid;gap:10px}
+.v2ray-rows{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));margin:1rem 0}
+.v2ray-rows>div{padding:12px;border:1px solid var(--border-panel);border-radius:10px;min-width:0}
+.v2ray-rows p{margin:6px 0;overflow-wrap:anywhere}
+.v2ray-tabbar{display:flex;gap:8px;flex-wrap:wrap;margin:1rem 0}
+.v2ray-tabbar button[aria-selected="true"]{background:var(--accent-bg);border-color:var(--accent-bg);color:var(--button-primary-text)}
+.v2ray-section-picker{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}
+.v2ray-section-picker select{min-width:180px;max-width:100%;padding:7px;border-radius:8px;
+  border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary)}
+.v2ray-editor-label{display:grid;gap:8px;font-weight:600}
+.v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;
+  padding:12px;border-radius:10px;border:1px solid var(--input-border);
+  background:var(--input-bg);color:var(--text-primary);resize:vertical}
+.v2ray-output{padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;
+  background:var(--panel-alt-bg);border:1px solid var(--border-panel);border-radius:10px}
+.v2ray-dialog{background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border-panel);
+  border-radius:12px;padding:18px;width:min(94vw,35rem);max-height:85dvh}
+.v2ray-dialog::backdrop{background:#0008}
+.v2ray-dialog-content{display:grid;gap:12px}
+.v2ray-dialog-content h3{margin:0}
+@media(max-width:730px){.v2ray-dialog{padding:14px}.v2ray-tabbar button{flex:1}}
+</style>
