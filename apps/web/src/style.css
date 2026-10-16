@@ -676,3 +676,53 @@ table{min-width:500px}
   box-shadow:0 5px 22px var(--shadow-color);font-weight:550;text-align:center;
 }
 @media(max-width:730px){.file-action-dialog{padding:18px}.file-toast{bottom:calc(92px + env(safe-area-inset-bottom,0px))}}
+
+
+/* Shared compact controls: same 32px high / .85rem / 999px pills as the
+   system overview refresh button and its adjacent segmented view capsule. */
+:is(.file-browser,.scheduled-tasks,.managed-configs)
+  button:not(.file-entry):not(.config-site-selector){
+  box-sizing:border-box;flex:none;width:auto;height:32px;min-height:32px;
+  padding:4px 8px;border:1px solid var(--button-border);border-radius:999px;
+  background:var(--button-bg);color:var(--button-text);
+  font-family:inherit;font-size:.85rem;font-weight:500;line-height:1.25;
+  white-space:nowrap;cursor:pointer;
+}
+:is(.file-browser,.scheduled-tasks,.managed-configs)
+  button:not(.file-entry):not(.config-site-selector):disabled{
+  cursor:not-allowed;opacity:.5;
+}
+:is(.file-browser,.scheduled-tasks,.managed-configs)
+  button:is(.panel-control-primary,.file-primary):not(.file-entry):not(.config-site-selector){
+  background:var(--accent-bg);border-color:var(--accent-bg);
+  color:var(--button-primary-text);
+}
+.file-browser button.file-danger:not(.file-entry):not(.config-site-selector){
+  background:var(--warning-bg);border-color:var(--warning-border);color:var(--warning-text);
+}
+.scheduled-tasks .task-toolbar.panel-control-capsule{gap:2px}
+.panel-control-capsule{
+  display:inline-flex;align-items:center;flex-wrap:nowrap;gap:2px;
+  width:max-content;max-width:100%;box-sizing:border-box;
+  padding:2px;border:1px solid var(--border-panel);border-radius:999px;background:var(--nav-bg);
+}
+:is(.file-browser,.scheduled-tasks,.managed-configs)
+  .panel-control-capsule button:not(.panel-control-primary){
+  border-color:transparent;background:transparent;
+}
+:is(.file-browser,.scheduled-tasks,.managed-configs)
+  .panel-control-capsule button:hover:not(:disabled){
+  background:var(--hover-bg);
+}
+:is(.file-browser,.scheduled-tasks,.managed-configs)
+  .panel-control-capsule button.panel-control-primary{
+  border-color:var(--accent-bg);background:var(--accent-bg);
+}
+:is(.file-browser,.scheduled-tasks,.managed-configs)
+  .file-permissions-button{height:auto;min-height:32px;white-space:normal}
+.file-path-bar>input{
+  box-sizing:border-box;height:32px;min-height:32px;padding:4px 8px;
+  font-family:inherit;font-size:.85rem;font-weight:500;line-height:1.25;
+}
+/* File names and site selectors are navigation affordances, not commands. */
+.file-table .file-entry{border:0;background:transparent;border-radius:0;padding:4px 0}
