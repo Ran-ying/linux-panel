@@ -303,12 +303,19 @@ try {
           'old multi-column layout and sites-available indicator must be removed');
         assert.ok(!((await manager.innerText()).includes('状态复选框：勾选为启用')),
           'the old instructional paragraph must be removed');
-        const header=page.locator('.module-content > .module-intro');
+        const moduleTitle=page.locator('.module-content > .module-intro');
+        assert.equal(await moduleTitle.locator('.module-header-actions').count(),0,
+          'command buttons must not be beside the module-level Nginx heading');
+        const actionCard=page.locator('.action-card:has(.managed-configs)');
+        const header=actionCard.locator(':scope > .card-heading');
         const headerButtons=header.locator('.module-header-actions');
+        assert.equal(await header.getByRole('heading').count(),1);
+        const title=(await header.getByRole('heading').innerText()).trim();
+        assert.ok(title.includes('Nginx'),'actions must share the website manager heading row');
         assert.deepEqual(await headerButtons.getByRole('button').allTextContents(),
           ['新建网站','刷新数据','检查 Nginx 配置']);
         const headerPositions=await header.evaluate(node=>{
-          const heading=node.querySelector('h2').getBoundingClientRect();
+          const heading=node.querySelector('h3').getBoundingClientRect();
           const actions=node.querySelector('.module-header-actions').getBoundingClientRect();
           return {headingTop:heading.top,headingRight:heading.right,
             actionsTop:actions.top,actionsLeft:actions.left,actionsWidth:actions.width};
@@ -317,13 +324,23 @@ try {
           assert.ok(Math.abs(headerPositions.headingTop-headerPositions.actionsTop)<16,
             'Nginx actions must be in the same header row');
           assert.ok(headerPositions.actionsLeft>headerPositions.headingRight,
-            'Nginx actions must align to the right of the module heading');
+            'Nginx actions must align to the right of the website manager heading');
         }
         assert.equal(await manager.locator('.config-toolbar').count(),0,
-          'action buttons should live in module header, not inside website content');
-        assert.equal(await manager.locator('.config-list-panel').evaluate(
-          node=>getComputedStyle(node).borderTopWidth),'0px',
-          'website list is not surrounded by a framed card');
+          'action buttons should live beside the website manager heading, not within the list');
+        const outerStyles=await actionCard.evaluate(node=>{
+          const cs=getComputedStyle(node);
+          return {border:cs.borderTopWidth,radius:cs.borderTopLeftRadius,background:cs.backgroundColor};
+        });
+        assert.equal(outerStyles.border,'0px','website manager content must have no outer frame');
+        assert.equal(outerStyles.radius,'0px','website manager must not have a rounded container');
+        assert.equal(await manager.evaluate(node=>getComputedStyle(node).borderTopWidth),'0px',
+          'managed-configs nested section must be unframed');
+        const siteListStyle=await manager.locator('.config-list-panel').evaluate(node=>{
+          const cs=getComputedStyle(node);return {border:cs.borderTopWidth,radius:cs.borderTopLeftRadius};
+        });
+        assert.equal(siteListStyle.border,'1px','the website list itself needs a border');
+        assert.equal(siteListStyle.radius,'12px','the website list itself must be rounded');
         await headerButtons.getByRole('button',{name:'新建网站'}).click();
         const editor=page.getByRole('dialog',{name:'新建网站配置'});
         await editor.getByRole('textbox',{name:'配置文件名'}).fill('fixture-site');
