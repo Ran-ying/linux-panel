@@ -103,7 +103,7 @@ try {
         await form.getByRole('button',{name:'保存'}).click();
         await page.getByText('Fixture nightly').waitFor();
         await page.getByRole('button',{name:'停用 Fixture nightly'}).click();
-        await page.getByText('已停用',{exact:true}).waitFor();
+        await page.getByRole('cell',{name:'已停用',exact:true}).waitFor();
         await page.getByRole('button',{name:'删除 Fixture nightly'}).click();
         await page.getByRole('dialog',{name:'删除任务'}).getByRole('button',{name:'删除'}).click();
         await page.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
