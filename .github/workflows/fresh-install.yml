@@ -5,6 +5,9 @@ on:
       - 'scripts/install*.sh'
       - 'scripts/setup.sh'
       - 'scripts/admin-init.js'
+      - 'scripts/verify-cron-executor.js'
+      - 'platform/privileged/**'
+      - 'modules/cron/**'
       - '.github/workflows/fresh-install.yml'
 permissions:
   contents: read
