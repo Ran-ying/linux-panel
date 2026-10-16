@@ -29,7 +29,7 @@ async function fixture(t) {
   const cookie=login.headers['set-cookie'].split(';')[0],csrf=login.json().csrf;
   const enabled=await app.inject({method:'PUT',url:'/api/extensions/mcp/settings',
     headers:{cookie,'x-panel-csrf':csrf},
-    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.cpu':true,'storage.usage':true}}});
+    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.resources':true}}});
   assert.equal(enabled.statusCode,200);
   return {app,store,cookie,csrf};
 }
