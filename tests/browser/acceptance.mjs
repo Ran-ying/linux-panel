@@ -315,6 +315,11 @@ try {
         await permissions.waitFor();
         await permissions.getByRole('textbox',{name:'文件权限',exact:true}).fill('0600');
         await permissions.getByRole('combobox',{name:'文件用户',exact:true}).waitFor({state:'visible'});
+        await page.waitForFunction(()=>{
+          const dialog=document.querySelector('.file-action-dialog[open]');
+          return dialog && [...dialog.querySelectorAll('select')].length===2 &&
+            [...dialog.querySelectorAll('select')].every(select=>select.options.length>1);
+        });
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户',exact:true}).locator('option').count()>1);
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户组',exact:true}).locator('option').count()>1);
         const selectArrow=await permissions.getByRole('combobox',{name:'文件用户',exact:true}).evaluate(select=>{
