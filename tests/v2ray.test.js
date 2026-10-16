@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,stat,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,stat,chmod,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createV2RayOperations} from '../platform/privileged/v2ray-operations.js';
@@ -20,6 +20,7 @@ async function fixture(t,mock){
   await mkdir(join(root,'etc/v2ray'),{recursive:true});
   await writeFile(join(root,'bin/v2ray'),'fixture',{mode:0o755});
   await writeFile(join(root,'etc/v2ray/config.json'),initial,{mode:0o644});
+  await chmod(join(root,'etc/v2ray/config.json'),0o644);
   const calls=[];
   const runner=async(path,args,opts)=>{
     calls.push({path,args});
