@@ -153,7 +153,7 @@ record(){`);
  const script=join(base,'worker.sh'),log=join(base,'events.log');
  // Fault injection lives ONLY in this throwaway copy of the immutable worker.
  worker=swap(worker,'if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then',
-   'if [[ "${TEST_CUT_AFTER_PRIV:-0}" == 1 ]];then kill -KILL "$";fi\nif ! start_panel || ! systemctl is-active --quiet linux-panel.service;then');
+   'if [[ "${TEST_CUT_AFTER_PRIV:-0}" == 1 ]];then kill -KILL "$$";fi\nif ! start_panel || ! systemctl is-active --quiet linux-panel.service;then');
  let sequence=0;
  writeFileSync(log,'');
  writeFileSync(script,worker,{mode:0o700});
