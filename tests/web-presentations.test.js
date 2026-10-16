@@ -14,12 +14,12 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 5);
+  assert.equal(presentations.length, 3);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
-  assert.equal(configured.get('storage.usage').renderer, 'progress');
-  assert.equal(configured.get('system.info').renderer, 'metrics');
+  assert.equal(configured.get('system.info').sections[1].key, 'disk');
+  assert.equal(configured.get('system.info').renderer, 'sections');
   assert.equal(configured.get('services.list').renderer, 'table');
-  assert.equal(configured.get('system.cpu').refreshIntervalMs, 5000);
+  assert.equal(configured.get('system.resources').refreshIntervalMs, 5000);
   assert.equal(configured.get('services.list').refreshIntervalMs, 0);
   assert.ok(presentations.every(p => p.loadOnEnter === true));
   const actions = registry.list('web');
@@ -92,4 +92,20 @@ test('Web adapter rejects non-boolean auto-load flags and write Action auto-load
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
+});
+
+test('sections reject nested fields outside the declared output contract',async()=>{
+  const folder=await mkdtemp(join(tmpdir(),'panel-invalid-sections-'));
+  try {
+    await mkdir(join(folder,'demo','ui'),{recursive:true});
+    await writeFile(join(folder,'package.json'),'{"type":"module"}');
+    await writeFile(join(folder,'demo','ui','presentations.js'),
+      "export default [{actionId:'demo.read',renderer:'sections',sections:[{key:'nested',renderer:'metrics',fields:[{key:'secret',label:'Hidden'}]}]}];");
+    const registry=new ActionRegistry();
+    registry.register('demo',{id:'demo.read',kind:'read',exposure:{web:true},
+      inputSchema:{type:'object',properties:{}},
+      outputSchema:{type:'object',properties:{nested:{type:'object',properties:{count:{type:'number'}}}}},
+      execute:async()=>({nested:{count:1}})});
+    await assert.rejects(loadWebPresentations(folder,[{id:'demo'}],registry),/unknown result field/);
+  } finally {await rm(folder,{recursive:true,force:true});}
 });
