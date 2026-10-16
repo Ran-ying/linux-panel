@@ -104,7 +104,7 @@ function check(){
 
 <template>
   <section class="managed-configs">
-    <Teleport to="#module-header-actions">
+    <Teleport to="#action-heading-actions-nginx-sites">
       <div class="config-toolbar">
         <button type="button" class="panel-control-primary" :disabled="busy" @click="openNew">{{ labels.create||'新建配置' }}</button>
         <button type="button" :disabled="busy" @click="work(refresh)">刷新数据</button>
@@ -214,14 +214,17 @@ function check(){
 </template>
 
 <style scoped>
+.managed-configs{border:0;border-radius:0;background:transparent;box-shadow:none;padding:0;margin:0}
 .config-toolbar,.config-actions,.config-dialog-actions{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap}
 .config-toolbar{margin:0;justify-content:flex-end}
 .config-actions button,.config-dialog-actions button{font:inherit;min-height:2.35rem;padding:.35rem .8rem}
 .config-summary{margin:.1rem 0 .45rem}
 .config-browser{display:grid;grid-template-columns:minmax(0,17rem);align-items:start;gap:1rem;min-width:0}
 .config-browser.has-selection{grid-template-columns:minmax(0,17rem) minmax(0,1fr)}
-.config-list-panel,.config-detail-panel{border:0;border-radius:0;min-width:0;overflow:visible}
-.config-detail-panel{border-left:1px solid var(--border-panel);padding-left:1rem}
+.config-list-panel{border:1px solid var(--border-panel);border-radius:12px;min-width:0;
+  overflow:hidden;background:var(--panel-bg);box-shadow:none;padding:0}
+.config-detail-panel{border:0;border-left:1px solid var(--border-panel);border-radius:0;
+  min-width:0;overflow:visible;background:transparent;box-shadow:none;padding-left:1rem}
 .config-site-list{list-style:none;margin:0;padding:0}
 .config-site-row{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--border,#8885)}
 .config-site-row:last-child{border-bottom:none}

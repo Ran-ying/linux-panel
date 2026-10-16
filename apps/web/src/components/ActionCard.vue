@@ -142,9 +142,11 @@ onUnmounted(()=>{
 </script>
 
 <template>
-  <section class="action-card" :class="{'minimal-action':minimal,'flat-action':flat}" :aria-label="action.title">
+  <section class="action-card" :class="{'minimal-action':minimal,'flat-action':flat,'unboxed-manager':presentation?.headerLayout==='inline'}" :aria-label="action.title">
     <div v-if="!flat" class="card-heading">
       <h3>{{ action.title }}</h3>
+      <div v-if="presentation?.headerLayout==='inline'" class="module-header-actions"
+        :id="'action-heading-actions-'+action.id.replaceAll('.','-')"></div>
       <div v-if="!minimal" class="action-info-tabs" role="tablist" :aria-label="action.title + '信息'">
           <button type="button" role="tab" :id="'description-tab-'+action.id"
             :aria-selected="infoTab==='description'" :aria-controls="'description-'+action.id"

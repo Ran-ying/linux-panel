@@ -226,7 +226,6 @@ onMounted(async () => {
       <div v-else-if="activeGroup" :key="activeGroup.id" class="module-content">
         <div class="module-intro">
           <h2>{{ activeGroup.name }}</h2>
-          <div id="module-header-actions" class="module-header-actions"></div>
         </div>
         <UpdateManager v-if="activeGroup.id === 'panel'" :csrf="session.csrf"
           @unauthorized="signOutLocally" />

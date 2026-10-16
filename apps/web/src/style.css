@@ -763,3 +763,22 @@ table{min-width:500px}
 @media(max-width:730px){
   .module-header-actions{margin-left:0}
 }
+
+/* Inline Action heading: the heading and its commands share a single row.
+   The manager itself is unframed; only its resource list owns a rounded border. */
+.action-card.unboxed-manager{
+  border:0;border-radius:0;background:transparent;box-shadow:none;padding:0;min-width:0;
+}
+.action-card.unboxed-manager>.card-heading{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  flex-wrap:wrap;min-height:32px;margin:0 0 12px;
+}
+.action-card.unboxed-manager>.card-heading h3{margin:0}
+.action-card.unboxed-manager>.result{
+  border:0;border-radius:0;background:transparent;box-shadow:none;
+  padding:0;margin:0;
+}
+@media(max-width:730px){
+  .action-card.unboxed-manager>.card-heading{gap:8px}
+  .action-card.unboxed-manager .module-header-actions{margin-left:0}
+}
