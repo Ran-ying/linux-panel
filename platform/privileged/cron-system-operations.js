@@ -15,7 +15,8 @@ const MACROS=new Set(['@reboot','@yearly','@annually','@monthly','@weekly','@dai
 const cronTime=t=>/^[\d*,/-]+$/.test(t);
 function parseLine(raw,kind){
   const panelDisabled=raw.startsWith('# LP-OFF ');
-  const source=panelDisabled?raw.slice(9):raw;
+  const otherComment=raw.startsWith('# ')&&!panelDisabled;
+  const source=panelDisabled?raw.slice(9):otherComment?raw.slice(2):raw;
   const line=source.trim();
   if(!line || line.startsWith('#') || line.includes('\0'))return null;
   const parts=line.split(/\s+/);
@@ -28,17 +29,18 @@ function parseLine(raw,kind){
   if(kind!=='user'&&!safeUser(user))return null;
   const cmd=parts.slice(count+(kind==='user'?0:1)).join(' ');
   if(!cmd)return null;
-  return {expression,command:cmd,user,enabled:!panelDisabled,editable:!macro};
+  return {expression,command:cmd,user,enabled:!panelDisabled&&!otherComment,editable:!macro&&!otherComment};
 }
 function cronEntry({kind,path,username,revision,index,line,parsed}){
   const id=sha(['cron',kind,path,username??'',index,line].join('\0'));
   const sourceType=kind==='user'?'user-crontab':kind==='master'?'system-crontab':'cron.d';
+  const bounded=line.length<=3000&&parsed.command.length<=3000;
   return {id,revision,sourceType,source:kind==='user'?'crontab:'+username:path,
     name:kind==='user'?username:basename(path),owner:kind==='user'?username:parsed.user,
-    expression:parsed.expression,command:parsed.command,enabled:parsed.enabled,
-    editable:parsed.editable,control:parsed.editable?'cron':'none',nextRun:'',
+    expression:parsed.expression,command:parsed.command.slice(0,3000),enabled:parsed.enabled,
+    editable:parsed.editable&&bounded,control:parsed.editable&&bounded?'cron':'none',nextRun:'',
     detail:kind==='user'?'用户 Crontab':kind==='master'?'系统 Crontab':'系统 Cron 配置',
-    line:index,raw:line};
+    line:index,raw:line.slice(0,3000)};
 }
 const limited=(values,max)=>values.length<=max?values:values.slice(0,max);
 const runFixed=async (binary,args,timeout=8000)=>{
