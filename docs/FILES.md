@@ -1,10 +1,11 @@
 # 文件管理
 
-更新：2026-10-16。文件模块通过九个共享 Action 提供目录浏览、UTF-8 编辑、上传及文件管理，面板负责 GUI，模块没有 CSS/Vue。
+更新：2026-10-16。文件模块通过九个文件操作 Action + 一个 Web 账户查询 Action 提供目录浏览、UTF-8 编辑、上传及文件管理，面板负责 GUI，模块没有 CSS/Vue。
 
 | Action | 输入 | 结果 / 行为 |
 | --- | --- | --- |
 | files.list | path（默认 /）、offset、limit（默认 200，最多 500） | 目录项、父目录、总数、下一页、writeAccess |
+| files.accounts | 无 | 按需从 `getent passwd` / `getent group`（系统 NSS）读取用户名、UID、用户组及 GID，供 Web 下拉框选择；不暴露给 MCP，不需要 root |
 | files.read | path | UTF-8 content、revision、大小、修改时间；最多 1 MiB |
 | files.write | path、content、revision | 保存已读取文件，版本不符返回 409 |
 | files.upload | path、contentBase64 | 创建新文件，最多 8 MiB，同名文件返回 409 |
@@ -22,7 +23,7 @@
 
 ## 操作与权限
 
-files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied，按实际执行身份检查目录权限。root 执行层未配置时走普通账户（受默认 ProtectSystem/ProtectHome 限制）；显式启用后 Web 的九个文件 Actions 通过固定 root executor 访问系统目录，包括 /etc、/root。已配置但执行服务离线时返回 503，不悄悄改为普通执行。GUI 显示实际权限模式；权限/所有者列可点击，编辑 mode、用户名/UID、组名/GID。chown 先执行，随后 chmod，保存失败时刷新真实列表；两个变更并非原子事务。
+files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied，按实际执行身份检查目录权限。root 执行层未配置时走普通账户（受默认 ProtectSystem/ProtectHome 限制）；显式启用后 Web 的九个文件 Actions 通过固定 root executor 访问系统目录，包括 /etc、/root。已配置但执行服务离线时返回 503，不悄悄改为普通执行。GUI 不再显示“文件权限：root”等内部执行身份提示。权限/所有者列点击后打开独立的权限弹窗，编辑八进制 mode，并从系统账户下拉框选择用户和用户组；当前属主若无法在枚举结果中找到，将作为选项保留。账户列表首次打开弹窗才加载，页面缓存本次结果。chown 先执行，随后 chmod，保存失败时刷新真实列表；两个变更并非原子事务。
 
 七个写 Action 只在认证 Web 管道开放；MCP 文件工具 list/read 始终使用普通服务身份。启用 root socket 即信任整个 linuxpanel UID：同 UID 终端、PTY、自定义 Shell 可直接调用受控 root 文件操作。全面系统文件编辑可间接修改执行代码，不是对不可信终端的沙箱。完整安装与边界见 [权限执行层](PRIVILEGED.md)。
 
@@ -32,11 +33,11 @@ files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied�
 
 ## 面板展示契约
 
-主展示声明 chrome:minimal，隐藏通用说明/命令胶囊和操作结果、刷新、可视化/原始数据控件，保留标题及文件浏览界面。面板在 files.list 的结果区加载通用 FileBrowser，operations 引用同模块已暴露的 read/write/upload/create/rename/delete/chmod/chown Action；八个辅助 Action 声明 embedded，不单独占据卡片，但仍走同一 ActionEngine。Web presentation 校验所有引用。
+主展示声明 chrome:minimal，隐藏通用说明/命令胶囊和操作结果、刷新、可视化/原始数据控件，保留标题及文件浏览界面。面板在 files.list 的结果区加载通用 FileBrowser，operations 引用同模块已暴露的 read/write/upload/create/rename/delete/chmod/chown Action；九个辅助 Action 声明 embedded，不单独占据卡片，但仍走同一 ActionEngine。Web presentation 校验所有引用。
 
 操作成功提示只在目录刷新完成、忙碌状态解除时发布，避免看到保存成功后紧接上传被忽略。
 
-导航第一排依次为上一级、路径输入框、打开目录，三者同高且保持一行；路径仅保留可访问名称。第二排依次为上传文件、新建文件、新建文件夹。路径框、上一级和加载更多负责导航，点击文件编辑；编辑器有未保存状态与放弃提示。新建与重命名使用面板内名称表单，行操作提供重命名/删除。支持文件选择和拖入当前目录上传，可一次上传多个文件，各文件仍限 8 MiB；前面已上传的文件不会因后续失败被回滚，界面会刷新列表并显示失败原因。不支持目录整体拖入上传。
+导航第一排依次为上一级、路径输入框、打开目录，三者同高且保持一行；第二排依次为上传文件、新建文件、新建文件夹，两个工具栏的按钮使用一致的高度及字体。去掉“可将文件拖入此处上传”的常驻提示，但仍保留拖放功能。路径框、上一级和加载更多负责导航，点击文件编辑；编辑器有未保存状态与放弃提示。新建使用原有内联表单；权限、重命名、删除都使用独立原生 modal 弹窗，删除明确确认不可撤销及目录递归行为。删除成功后仅在底部短暂显示“已删除”通知，不再显示常驻成功文字。支持文件选择和拖入当前目录上传，可一次上传多个文件，各文件仍限 8 MiB；前面已上传的文件不会因后续失败被回滚，界面会刷新列表并显示失败原因。不支持目录整体拖入上传。
 
 API 的 execute 路由允许最多 12 MiB JSON，以容纳 Base64 上传；其他路由保留原有请求限制，Action Schema 继续独立限制输入。反向代理也可能有自己的上传限制；如需 8 MiB 上传，代理应允许至少 12 MiB 请求，例如 Nginx client_max_body_size 12m。代理设置不会被面板擅自修改。
 
