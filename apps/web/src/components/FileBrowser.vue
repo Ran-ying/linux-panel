@@ -148,10 +148,10 @@ function dateParts(value){
     <form class="file-path-bar" @submit.prevent="task(()=>list(address))">
       <button type="button" :disabled="busy || !listing.parent" @click="task(()=>list(listing.parent))">上一级</button>
       <input v-model="address" aria-label="目录路径" :disabled="busy" />
-      <button type="submit" :disabled="busy">打开目录</button>
+      <button type="submit" class="panel-control-primary" :disabled="busy">打开目录</button>
     </form>
-    <div class="file-toolbar">
-      <button type="button" :disabled="busy || !canWrite" @click="uploadInput.click()">上传文件</button>
+    <div class="file-toolbar panel-control-capsule">
+      <button type="button" class="panel-control-primary" :disabled="busy || !canWrite" @click="uploadInput.click()">上传文件</button>
       <input ref="uploadInput" class="file-upload-input" type="file" multiple aria-label="上传文件" :disabled="busy || !canWrite" @change="upload" />
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('file')">新建文件</button>
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('directory')">新建文件夹</button>
