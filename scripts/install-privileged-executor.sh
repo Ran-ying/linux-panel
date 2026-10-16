@@ -17,7 +17,8 @@ same fixed root file Actions directly; Web-only is NOT an OS isolation boundary.
 System file administration is a broad root capability. No root Shell endpoint.
 Installs fixed root-owned code/dependencies, starts a separate executor and
 restarts Web. Does not modify the update Broker, proxies or other services.
-New privileged handlers require rerunning this command after review/update.
+Once the immutable Broker is upgraded, pinned main updates synchronize the fixed
+root package automatically. Existing installations need one operator bootstrap.
 EOF
 }
 LP_MODE='';LP_NODE=/opt/node24/bin/node
@@ -55,22 +56,35 @@ PY
 "$LP_NODE" -e 'const [a,b]=process.versions.node.split(".").map(Number);if(a<22 || a===22&&b<12)process.exit(1)'
 [[ ! -L "$LP_DEST" ]] || { echo 'Refuse symlinked executor package' >&2;exit 1; }
 install -d -o root -g root -m 0755 /usr/local/lib
+LP_SHA="$(git -c safe.directory="$LP_ROOT" -C "$LP_ROOT" rev-parse HEAD)"
+[[ "$LP_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
 LP_STAGE=$(mktemp -d /usr/local/lib/.linux-panel-privileged.XXXXXX)
-trap 'rm -rf "$LP_STAGE"' EXIT
+LP_PREVIOUS=''
+trap 'rm -rf -- "$LP_STAGE"' EXIT
+mkdir -m 0700 "$LP_STAGE/releases"
+mkdir -m 0700 "$LP_STAGE/releases/$LP_SHA"
+LP_PACKAGE="$LP_STAGE/releases/$LP_SHA"
 for file in server.js handlers.js file-contracts.js file-operations.js cron-contracts.js cron-operations.js;do
-  install -o root -g root -m 0600 "$LP_ROOT/platform/privileged/$file" "$LP_STAGE/$file"
+  install -o root -g root -m 0600 "$LP_ROOT/platform/privileged/$file" "$LP_PACKAGE/$file"
 done
-printf '{"type":"module"}\n' > "$LP_STAGE/package.json"
-mkdir "$LP_STAGE/node_modules"
+printf '{"type":"module"}\n' > "$LP_PACKAGE/package.json"
+mkdir "$LP_PACKAGE/node_modules"
 for package in ajv fast-deep-equal fast-uri json-schema-traverse require-from-string;do
-  cp -R -L "$LP_ROOT/node_modules/$package" "$LP_STAGE/node_modules/$package"
+  cp -R -L "$LP_ROOT/node_modules/$package" "$LP_PACKAGE/node_modules/$package"
 done
 chown -R root:root "$LP_STAGE"
 chmod -R go-rwx "$LP_STAGE"
-"$LP_NODE" --input-type=module -e 'const h=await import(process.argv[1]);if(h.createPrivilegedHandlers().size<1)process.exit(1)' "file://$LP_STAGE/handlers.js"
+"$LP_NODE" --input-type=module -e 'const h=await import(process.argv[1]);if(h.createPrivilegedHandlers().size<1)process.exit(1)' "file://$LP_PACKAGE/handlers.js"
+printf '%s\n' "$LP_SHA" > "$LP_PACKAGE/.ready"
+chmod 0600 "$LP_PACKAGE/.ready"
+ln -s "releases/$LP_SHA" "$LP_STAGE/current"
 systemctl stop linux-panel-privileged.service 2>/dev/null || true
-rm -rf "$LP_DEST"
-mv "$LP_STAGE" "$LP_DEST"
+if [[ -e "$LP_DEST" ]];then
+  LP_PREVIOUS="$(mktemp -d /usr/local/lib/.linux-panel-previous.XXXXXX)"
+  rmdir "$LP_PREVIOUS"
+  mv -T "$LP_DEST" "$LP_PREVIOUS"
+fi
+mv -T "$LP_STAGE" "$LP_DEST"
 if ! getent group linux-panel-privileged >/dev/null;then groupadd --system linux-panel-privileged;fi
 LP_GID=$(getent group linux-panel-privileged | cut -d: -f3)
 sed -e "s|ExecStart=/opt/node24/bin/node |ExecStart=$LP_NODE |" \
@@ -105,4 +119,5 @@ if(result.accessMode!=="root")process.exit(1);
 ' "file://$LP_ROOT/platform/privileged/client.js"
 systemctl restart linux-panel.service
 systemctl is-active --quiet linux-panel.service
-echo 'Enabled reviewed root Actions; Web remains linuxpanel. The same UID terminal is trusted to use these controlled operations.'
+if [[ -n "$LP_PREVIOUS" ]];then rm -rf -- "$LP_PREVIOUS";fi
+echo 'Enabled versioned root Actions; Web remains linuxpanel.'
