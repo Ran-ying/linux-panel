@@ -14,7 +14,7 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 13);
+  assert.equal(presentations.length, 14);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').renderer, 'metrics');
   assert.equal(configured.get('system.resources').layout,'grid');
@@ -39,11 +39,14 @@ test('each module owns its Web render configuration separately from Action metad
     assert.ok(action.outputSchema);
   }
   const mcpActions = registry.list('mcp');
-  assert.equal(mcpActions.length, actions.length-7);
+  assert.equal(mcpActions.length, actions.length-8);
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('files.list').renderer,'files');
   assert.equal(configured.get('files.list').chrome,'minimal');
+  assert.equal(configured.get('files.list').operations.accounts,'files.accounts');
+  assert.equal(configured.get('files.accounts').embedded,true);
+  assert.equal(registry.get('files.accounts').exposure.mcp,false);
   assert.ok(mcpActions.every(a => !Object.hasOwn(a, 'presentation')));
 });
 
