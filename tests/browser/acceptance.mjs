@@ -244,12 +244,17 @@ try {
           && row.padding==='0px'),'sections must be unboxed, without rounded container backgrounds/padding');
         const chrome=await schedule.locator('xpath=ancestor::section[contains(@class,"action-card")]').evaluate(node=>{
           const style=getComputedStyle(node);
-          return {flat:node.classList.contains('flat-action'),radius:style.borderTopLeftRadius,
-            background:style.backgroundColor,border:style.borderTopStyle,padding:style.paddingLeft};
+          return {minimal:node.classList.contains('minimal-action'),
+            flat:node.classList.contains('flat-action'),
+            radius:style.borderTopLeftRadius,background:style.backgroundColor,
+            border:style.borderTopStyle,borderWidth:style.borderTopWidth,padding:style.paddingLeft};
         });
-        assert.ok(chrome.flat && chrome.radius==='0px' && chrome.border==='none'
-          && chrome.background==='rgba(0, 0, 0, 0)' && chrome.padding==='0px',
-          'no surrounding action card may box the two lists');
+        assert.ok(chrome.minimal && !chrome.flat && parseFloat(chrome.radius)>0
+          && chrome.border==='solid' && chrome.borderWidth==='1px'
+          && chrome.background!=='rgba(0, 0, 0, 0)' && parseFloat(chrome.padding)>0,
+          'the whole scheduled-tasks module must retain exactly one rounded outer ActionCard');
+        assert.equal(await schedule.locator(':scope > .task-group').count(),2,
+          'the two inner groups must live directly inside that outer ActionCard content');
         assert.equal(await managed.getByRole('button',{name:'新建任务'}).count(),1);
         assert.equal(await system.getByRole('button',{name:'新建任务'}).count(),0);
         const systemTable=system.locator('.system-task-table');
