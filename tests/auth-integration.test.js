@@ -249,7 +249,7 @@ test('command configuration is authenticated, CSRF/Origin protected and changes 
   const headers={cookie,'x-panel-csrf':payload.csrf,origin:'http://127.0.0.1:5173'};
   const config=(await app.inject({url,headers})).json();
   assert.equal(config.editable,true);
-  assert.equal(config.fields.length,9);
+  assert.equal(config.fields.length,10);
   const commands=Object.fromEntries(config.fields.map(field=>[field.key,field.value]));
   commands.hostname='printf configured-host';
   assert.equal((await app.inject({method:'PUT',url,headers:{cookie},payload:{commands}})).statusCode,403);
@@ -262,4 +262,6 @@ test('command configuration is authenticated, CSRF/Origin protected and changes 
   const result=await app.inject({method:'POST',url:'/api/actions/system.info/execute',headers,payload:{input:{}}});
   assert.equal(result.statusCode,200,result.body);
   assert.equal(result.json().result.hostname,'configured-host');
+  assert.equal(typeof result.json().result.disk.usagePercent,'number');
+  assert.equal(result.json().raw.filesystem.exitCode,0);
 });
