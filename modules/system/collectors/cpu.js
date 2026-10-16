@@ -24,6 +24,7 @@ const initial = os.cpus();
   return {
     usagePercent: cpuUsageBetween(start, end),
     logicalCpus: initial.length,
+    availableParallelism: os.availableParallelism(),
     sampleWindowMs: 250,
     model: initial[0]?.model ?? 'Unknown',
     source: 'node-os-sample'
@@ -34,10 +35,11 @@ const initial = os.cpus();
 export default {
   outputSchema: {
     type: 'object',
-    required: ['usagePercent', 'logicalCpus', 'sampleWindowMs', 'model', 'source'],
+    required: ['usagePercent', 'logicalCpus', 'availableParallelism', 'sampleWindowMs', 'model', 'source'],
     properties: {
       usagePercent: { type: 'number', minimum: 0, maximum: 100 },
       logicalCpus: { type: 'integer', minimum: 1 },
+      availableParallelism: { type: 'integer', minimum: 1 },
       sampleWindowMs: { type: 'integer', minimum: 1 },
       model: { type: 'string' }, source: { type: 'string' }
     },
@@ -48,6 +50,7 @@ export default {
     fields:{
       sample:'head -n 1 /proc/stat; sleep 0.25; head -n 1 /proc/stat',
       logicalCpus:'getconf _NPROCESSORS_ONLN',
+      availableParallelism:'nproc',
       model:"awk -F ': ' '/^model name/ {print $2; exit}' /proc/cpuinfo"
     },
     decode: (values,{durations}) => {
@@ -57,7 +60,7 @@ export default {
         return {total:numbers.reduce((sum,value)=>sum+value,0),idle:numbers[3]+numbers[4]};
       });
       if (samples.length!==2) throw new Error('Expected two CPU snapshots');
-      return {usagePercent:cpuUsageBetween(samples[0],samples[1]),logicalCpus:Number(values.logicalCpus),
+      return {usagePercent:cpuUsageBetween(samples[0],samples[1]),logicalCpus:Number(values.logicalCpus),availableParallelism:Number(values.availableParallelism),
         sampleWindowMs:Math.max(1,Math.round(durations.sample)),model:values.model || 'Unknown',source:'proc-stat-command'};
     }
   },

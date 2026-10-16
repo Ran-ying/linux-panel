@@ -85,13 +85,20 @@ try {
         const layout=await resource.locator('.gauge-card').evaluateAll(nodes=>nodes.map(n=>{
           const r=n.getBoundingClientRect(),ring=n.querySelector('.gauge-ring').getBoundingClientRect();
           const label=n.querySelector('.metric-label').getBoundingClientRect();
-          const quantity=n.querySelector('.gauge-quantity').getBoundingClientRect();
+          const quantity=n.querySelector('.gauge-quantity,.gauge-details').getBoundingClientRect();
           return {width:r.width,left:r.left,top:r.top,round:parseFloat(getComputedStyle(n).borderRadius),
             ordered:label.bottom<=ring.top && ring.bottom<=quantity.top,
-            text:n.querySelector('.gauge-quantity').textContent};
+            text:n.querySelector('.gauge-quantity,.gauge-details').textContent};
         }));
         assert.ok(Math.abs(layout[0].top-layout[1].top)<1,'resource cards must sit side by side');
-        assert.ok(layout.every(card=>card.round>0 && card.ordered && card.text.includes('/')));
+        assert.ok(layout.every(card=>card.round>0 && card.ordered));
+        assert.equal(await resource.locator('.gauge-card').first().locator('.gauge-quantity').count(),0);
+        await resource.locator('.gauge-card').first().getByText('可用并行度',{exact:true}).waitFor();
+        const basic=page.locator('.action-card').nth(1);
+        const labels=await basic.locator('.metric-label').allTextContents();
+        assert.ok(!labels.some(label=>['主机名','物理内存','可用并行度'].includes(label)));
+        assert.ok(labels.includes('内核版本'));
+        assert.ok((await basic.locator('.metric-card').first().locator('.metric-value').innerText()).length>0);
         await page.screenshot({path:join(output,'resource-gauges-'+width+'.png'),fullPage:true});
         if(width===390){
           const cards=page.locator('.action-card').nth(1).locator('.metric-card');
@@ -116,31 +123,32 @@ try {
         if(name.trim()==='服务浏览')
           assert.equal(await card.getByRole('textbox',{name:'命令 units',exact:true}).inputValue(),'systemctl list-units --type=service --all --no-pager --no-legend --plain');
         else {
-          assert.equal(await card.locator('.command-table tbody tr').count(),9);
-          const hostname=card.getByRole('textbox',{name:'命令 hostname',exact:true});
-          assert.equal(await hostname.inputValue(),'hostname');
-          const shortHeight=await hostname.evaluate(n=>n.getBoundingClientRect().height);
-          await hostname.fill(Array.from({length:8},(_,i)=>'# line '+i).join('\n'));
-          await page.waitForFunction(()=>{const n=document.querySelector('.command-table textarea');return n.clientHeight>=n.scrollHeight;});
-          const tallHeight=await hostname.evaluate(n=>n.getBoundingClientRect().height);
+          assert.equal(await card.locator('.command-table tbody tr').count(),6);
+          const release=card.getByRole('textbox',{name:'命令 release',exact:true});
+          const defaultRelease=await release.inputValue();
+          assert.equal(defaultRelease,'uname -r');
+          const shortHeight=await release.evaluate(n=>n.getBoundingClientRect().height);
+          await release.fill(Array.from({length:8},(_,i)=>'# line '+i).join('\n'));
+          await page.waitForFunction(()=>{const n=document.querySelector('.command-table textarea[aria-label="命令 release"]');return n.clientHeight>=n.scrollHeight;});
+          const tallHeight=await release.evaluate(n=>n.getBoundingClientRect().height);
           assert.ok(tallHeight>shortHeight+60,'command input must grow with content');
-          await hostname.fill('hostname');
-          await page.waitForFunction(height=>document.querySelector('.command-table textarea').getBoundingClientRect().height<=height+1,shortHeight);
+          await release.fill(defaultRelease);
+          await page.waitForFunction(height=>document.querySelector('.command-table textarea[aria-label="命令 release"]').getBoundingClientRect().height<=height+1,shortHeight);
           await card.getByRole('tab',{name:'命令',exact:true}).click();
           await card.getByRole('tab',{name:'命令',exact:true}).click();
           const clipped=await card.locator('.command-table textarea').evaluateAll(nodes=>nodes.some(n=>n.scrollHeight>n.clientHeight+1));
           assert.equal(clipped,false,'loaded and reopened command inputs must fit wrapped values');
           if(width===1280){
-            await hostname.fill("printf 'panel-command-test\\n'; printf 'fixture-stderr\\n' >&2");
+            await release.fill("printf 'panel-command-test\\n'; printf 'fixture-stderr\\n' >&2");
             let saved=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/commands') && r.request().method()==='PUT');
             await card.getByRole('button',{name:'保存',exact:true}).click();
             assert.equal((await saved).status(),200);
             let executed=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/execute') && r.request().method()==='POST');
             await card.getByRole('button',{name:'刷新数据',exact:true}).click();
             const payload=await (await executed).json();
-            assert.equal(payload.result.hostname,'panel-command-test','saved command must really drive execution');
-            assert.deepEqual(payload.raw.hostname,{stdout:'panel-command-test\n',stderr:'fixture-stderr\n',exitCode:0});
-            await hostname.fill('hostname');
+            assert.equal(payload.result.release,'panel-command-test','saved command must really drive execution');
+            assert.deepEqual(payload.raw.release,{stdout:'panel-command-test\n',stderr:'fixture-stderr\n',exitCode:0});
+            await release.fill(defaultRelease);
             saved=page.waitForResponse(r=>r.url().endsWith('/api/actions/system.info/commands') && r.request().method()==='PUT');
             await card.getByRole('button',{name:'保存',exact:true}).click();
             assert.equal((await saved).status(),200);
@@ -159,7 +167,7 @@ try {
         assert.ok(!(await card.locator('.commands-panel').innerText()).includes('命令以面板普通用户执行'));
         await card.getByRole('button',{name:'原始数据',exact:true}).click();
         await card.locator('.raw-command-table').first().waitFor();
-        assert.equal(await card.locator('.raw-command-table tbody tr').count(),name.trim()==='系统概览'?9:1);
+        assert.equal(await card.locator('.raw-command-table tbody tr').count(),name.trim()==='系统概览'?6:1);
         await card.locator('.raw-json summary').click();
         const raw=JSON.parse(await card.locator('.raw-json .raw-output').innerText());
         assert.ok(Object.values(raw).every(output=>typeof output.stdout==='string' && typeof output.stderr==='string' && output.exitCode===0));
@@ -168,7 +176,7 @@ try {
           const resource=page.locator('.action-card').first();
           await resource.getByRole('button',{name:'原始数据',exact:true}).click();
           await resource.locator('.raw-command-table').first().waitFor();
-          assert.equal(await resource.locator('.raw-command-table tbody tr').count(),5,'CPU, memory and disk must share the resource Action command keys');
+          assert.equal(await resource.locator('.raw-command-table tbody tr').count(),6,'CPU, memory and disk must share the resource Action command keys');
           await resource.getByRole('button',{name:'可视化',exact:true}).click();
         }
         await card.getByRole('button',{name:'原始数据',exact:true}).click();
@@ -250,7 +258,7 @@ try {
         const side=sidebar.getBoundingClientRect(), box=content.getBoundingClientRect();
         const nodes=[...content.querySelectorAll(':scope > .module-intro,:scope > .action-card,:scope > .settings-section,:scope > .action-flow > .action-card,:scope > .action-flow > .terminal-console')];
         const rects=nodes.map(n=>n.getBoundingClientRect());
-        return {centerError:Math.abs(box.right+side.left-innerWidth),width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
+        return {centerError:innerWidth>730?Math.abs(box.right+side.left-innerWidth):Math.abs(box.left+box.right-innerWidth),width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
           radius:getComputedStyle(sidebar).borderTopLeftRadius,
           cards:nodes.map(n=>{const s=getComputedStyle(n);return {radius:s.borderTopLeftRadius,
             borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};}),
@@ -260,7 +268,7 @@ try {
       assert.ok(frames.centerError<1,width+' sidebar and content must be centered together');
       assert.ok(Math.abs(frames.gutter-24)<1,width+' sidebar-to-content gap must be 24px');
       assert.ok(frames.cards.length>0,'module title/card frame missing');
-      assert.ok(frames.cards.every(c=>c.radius===frames.radius && c.borders.every(b=>b==='1px')),
+      assert.ok(frames.cards.every(c=>(width<=730?parseFloat(c.radius)>0:c.radius===frames.radius) && c.borders.every(b=>b==='1px')),
         width+' '+name+' cards must match the rounded sidebar frame');
       assert.ok(frames.gaps.every(g=>Math.abs(g-24)<1),width+' '+name+' card gaps must match sidebar gap');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
@@ -375,11 +383,14 @@ try {
         const row=sidebar.querySelector('.module-nav button').getBoundingClientRect();
         return {rowLeft:row.left-frame.left,rowRight:frame.right-row.right,rowRadius:parseFloat(getComputedStyle(sidebar.querySelector('.module-nav button')).borderTopLeftRadius),tabRadius:parseFloat(getComputedStyle(sidebar.querySelector('.sidebar-tabs')).borderTopLeftRadius),
           tabLeft:tabs.left-frame.left,tabRight:frame.right-tabs.right,tabTop:tabs.top-brand.bottom,
-          themeLeft:theme.left,nameRight:name.right,toggleBottom:toggle.bottom,position:getComputedStyle(sidebar).position};
+          themeLeft:theme.left,nameRight:name.right,toggleBottom:toggle.bottom,toggleHeight:toggle.height,tabPadding:getComputedStyle(sidebar.querySelector('.sidebar-tabs')).paddingLeft,tabBorder:getComputedStyle(sidebar.querySelector('.sidebar-tabs')).borderLeftWidth,position:getComputedStyle(sidebar).position};
       });
       assert.equal(placement.position,'fixed');
       assert.ok(placement.rowLeft>=12 && placement.rowRight>=12 && placement.rowRadius>0,'expanded module rows need rounded frames and side gutters');
-      assert.ok(placement.tabRadius>0 && placement.tabLeft>=12 && placement.tabRight>=12 && placement.tabTop>=8,'phone tabs need an inset rounded frame');
+      assert.equal(placement.tabRadius,0);
+      assert.ok(Math.abs(placement.tabLeft)<1 && Math.abs(placement.tabRight)<1 && placement.tabTop>=8,'phone tabs must be flush with the square frame');
+      assert.equal(placement.tabPadding,'0px');assert.equal(placement.tabBorder,'0px');
+      assert.ok(placement.toggleHeight<44,'navigation toggle must be compact');
       assert.ok(placement.themeLeft>=placement.nameRight,'theme control must sit right of the panel name');
       assert.ok(placement.toggleBottom<=viewport.height-16,'collapse button must stay within bottom gutter');
     }
@@ -388,12 +399,13 @@ try {
       const region=sidebar.querySelector('.sidebar-modules');
       const account=sidebar.querySelector('.sidebar-account').getBoundingClientRect();
       return {left:box.left,top:box.top,bottom:box.bottom,height:innerHeight,
-        radius:parseFloat(getComputedStyle(sidebar).borderTopLeftRadius),
+        radius:parseFloat(getComputedStyle(sidebar).borderTopLeftRadius),sideBorder:getComputedStyle(sidebar).borderLeftWidth,
         overflowing:region.scrollHeight>region.clientHeight,accountBottom:account.bottom};
     });
-    assert.ok(layout.radius>0,'sidebar must keep rounded outer frame');
+    assert.ok(viewport.width<=730?layout.radius===0:layout.radius>0,'mobile frame square, desktop frame rounded');
+    if(viewport.width<=730)assert.equal(layout.sideBorder,'0px');
     assert.ok(Math.abs(layout.top-16)<1,'sidebar must preserve its top gutter');
-    assert.ok(Math.abs(layout.left-(Math.max(0,(viewport.width-1200)/2)+16))<1,'sidebar must follow the centered shell');
+    assert.ok(Math.abs(layout.left-(viewport.width<=730?0:Math.max(0,(viewport.width-1200)/2)+16))<1,'mobile sidebar spans viewport, desktop follows shell');
     assert.ok(layout.bottom<=layout.height-16+1,'sidebar must preserve bottom gutter');
     assert.ok(layout.accountBottom<=layout.bottom,'account controls must remain inside sidebar');
     assert.ok(layout.overflowing,'many modules must overflow the independent module region');

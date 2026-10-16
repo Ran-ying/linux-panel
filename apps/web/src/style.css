@@ -568,3 +568,14 @@ table{min-width:500px}
 .card-heading>.action-info-tabs{flex-shrink:0}
 .action-card>.action-information{margin-top:16px}
 .action-card>.action-information>.info-panel{margin-top:0}
+
+/* Compact mobile navigation spans the viewport while keeping vertical gutters. */
+@media(max-width:730px){
+  .module-sidebar{left:0;right:0;border-radius:0;border-left-width:0;border-right-width:0}
+  .sidebar-tabs{margin-left:0;margin-right:0;padding:0;gap:0;border-radius:0;border-left-width:0;border-right-width:0}
+  .sidebar-tabs button{border-radius:0;min-height:34px;padding:4px 8px}
+  .sidebar-collapse{min-height:30px;padding:4px 10px;font-size:.85rem}
+}
+.gauge-details{width:100%;margin:0;display:grid;gap:5px;font-size:.8rem;font-variant-numeric:tabular-nums}
+.gauge-details>div{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+.gauge-details dd{font-weight:650}

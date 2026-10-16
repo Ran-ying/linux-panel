@@ -46,3 +46,15 @@ test('cpu snapshot delta calculates busy fraction and handles zero elapsed', () 
   assert.equal(cpuUsageBetween(before, after), 75);
   assert.equal(cpuUsageBetween(before, before), 0);
 });
+
+
+test('distribution label includes the OS release version without evaluating shell content',async()=>{
+  const {parseDistribution,default:info}=await import('../modules/system/actions/info.js');
+  assert.equal(parseDistribution('NAME="Ubuntu"\nPRETTY_NAME="Ubuntu 24.04.3 LTS"\nVERSION_ID="24.04"\n'),'Ubuntu 24.04.3 LTS');
+  assert.equal(parseDistribution("NAME='Debian GNU/Linux'\nVERSION_ID=12"),'Debian GNU/Linux 12');
+  assert.equal(parseDistribution('PRETTY_NAME="$(touch ignored)"'),'$(touch ignored)');
+  assert.equal(parseDistribution('','Fallback OS'),'Fallback OS');
+  const data=await info.execute();
+  assert.equal(typeof data.distribution,'string');
+  for(const key of ['hostname','cpuCount','totalMemoryBytes','freeMemoryBytes'])assert.ok(!Object.hasOwn(data,key));
+});

@@ -108,7 +108,7 @@ test('protected Action requests require a valid session, CSRF and permission che
     payload: { input: {} }
   });
   assert.equal(ok.statusCode, 200);
-  assert.equal(typeof ok.json().result.hostname, 'string');
+  assert.equal(typeof ok.json().result.distribution, 'string');
   const invalid = await app.inject({ method: 'POST', url,
     headers: { cookie, 'x-panel-csrf': payload.csrf },
     payload: { input: { extra: true } }
@@ -249,19 +249,19 @@ test('command configuration is authenticated, CSRF/Origin protected and changes 
   const headers={cookie,'x-panel-csrf':payload.csrf,origin:'http://127.0.0.1:5173'};
   const config=(await app.inject({url,headers})).json();
   assert.equal(config.editable,true);
-  assert.equal(config.fields.length,9);
+  assert.equal(config.fields.length,6);
   const commands=Object.fromEntries(config.fields.map(field=>[field.key,field.value]));
-  commands.hostname='printf configured-host';
+  commands.distribution='printf configured-host';
   assert.equal((await app.inject({method:'PUT',url,headers:{cookie},payload:{commands}})).statusCode,403);
   assert.equal((await app.inject({method:'PUT',url,headers:{...headers,origin:'https://evil.example'},payload:{commands}})).statusCode,403);
   assert.equal((await app.inject({method:'PUT',url,headers,payload:{commands:{...commands,extra:'id'}}})).statusCode,400);
   assert.equal((await app.inject({method:'PUT',url,headers,payload:{commands}})).statusCode,200);
-  assert.equal((await store.snapshot()).actionCommands['system.info'].hostname,'printf configured-host');
+  assert.equal((await store.snapshot()).actionCommands['system.info'].distribution,'printf configured-host');
   const preview=await app.inject({method:'POST',url:'/api/actions/system.info/preview',headers,payload:{input:{}}});
   assert.equal(preview.json().steps[0].command,'printf configured-host');
   const result=await app.inject({method:'POST',url:'/api/actions/system.info/execute',headers,payload:{input:{}}});
   assert.equal(result.statusCode,200,result.body);
-  assert.equal(result.json().result.hostname,'configured-host');
+  assert.equal(result.json().result.distribution,'configured-host');
   assert.ok(!Object.hasOwn(result.json().result,'disk'));
   assert.ok(!Object.hasOwn(result.json().raw,'filesystem'));
   const resources=await app.inject({method:'POST',url:'/api/actions/system.resources/execute',headers,payload:{input:{}}});

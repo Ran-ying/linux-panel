@@ -23,6 +23,9 @@ test('each module owns its Web render configuration separately from Action metad
   assert.deepEqual(registry.list('web').filter(a=>a.moduleId==='system').map(a=>a.id),
     ['system.resources','system.info']);
   assert.equal(configured.get('services.list').renderer, 'table');
+  const cpu=configured.get('system.resources').sections[0];
+  assert.equal(cpu.totalKey,undefined);
+  assert.ok(cpu.details.some(f=>f.key==='availableParallelism'));
   assert.equal(configured.get('system.resources').refreshIntervalMs, 5000);
   assert.equal(configured.get('services.list').refreshIntervalMs, 0);
   assert.ok(presentations.filter(p=>p.actionId!=='terminal.execute').every(p=>p.loadOnEnter===true));
