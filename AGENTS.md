@@ -23,6 +23,8 @@
 - This repo is public: **no private hostnames/IPs, tokens, OAuth client IDs, passwords, cookies, account state, personal server configurations, or restore secrets** in issues, commits, logs or tests.
 - Check current `main`, open issues/PRs and active tool list. Do not assume a previously described tool is still exposed or that old status notes remain accurate. Use small reviewed branches/PRs with CI; report source evidence versus operator-reported evidence separately.
 
+- **Panel-first modules:** read [docs/MODULE-DEVELOPMENT.md](docs/MODULE-DEVELOPMENT.md). Built-in system Actions are system.info (including disk) and system.resources (CPU/memory); old split Actions/storage module are retired. Generic metrics/progress/table/sections drive rendering; do not add business Action-ID branches or module CSS to App.vue.
+
 ## Agent routing for the next release gates
 
 For coding, repo-wide fixes, installation CLI and CI integration, **prefer Codex Cloud** working in small PRs. For browser-oriented acceptance, cross-app issue/release evidence, and documentation packages, **use ChatGPT Work**. ChatGPT coordinates milestone gates, reviews the exact CI and only performs production MCP deploys under the owner's explicit authorization. The owner is responsible for physical iPhone/Android testing and root-only VPS decisions. No cloud-only screenshot can substitute for actual device QA. Keep the phase checklists and exit criteria in [the v0.5 release plan](docs/V0.5-RELEASE-PLAN.md).
@@ -32,7 +34,7 @@ For coding, repo-wide fixes, installation CLI and CI integration, **prefer Codex
 Before declaring a substantive feature, fix, production incident, deployment or release milestone complete:
 
 1. Re-read current `main`, PR/CI and any production evidence available **in this conversation**. Clearly mark **merged**, **CI passed**, **deployed**, and **verified on production** as different states. Do not infer live actions from GitHub merges or a `queued` receipt.
-2. Update [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md): date and current main SHA, what was fixed and why, linked PR/test results, production version last **observed** (or unknown), outstanding failures, priorities, and concrete next verification steps.
+2. Keep affected current docs synchronized in the implementation PR (README/architecture/module/MCP/upgrade/security). Archive superseded status chronologies under docs/history with dated banners; do not stack contradictory current-state snapshots. Keep [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md) one concise current snapshot: date and current main SHA, what was fixed and why, linked PR/test results, production version last **observed** (or unknown), outstanding failures, priorities, and concrete next verification steps.
 3. Add a **brief dated evidence entry** to [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54), linking any release/feature issue (#23/#35 where appropriate). Do not duplicate a full report in this file.
 4. Change `AGENTS.md` **only when enduring architecture, safety boundaries or working protocol changes**. It is the short stable entrypoint, not a chronological log.
 5. Do source/document writes via a PR and verify CI, then report whether it actually merged. Production writes require separate operator authorization and explicit observation; never silently update this multi-service host.
