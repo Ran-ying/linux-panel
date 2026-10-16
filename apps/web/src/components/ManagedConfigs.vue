@@ -237,7 +237,7 @@ function check(){
 .config-site-name{font-weight:600;overflow-wrap:anywhere}
 .config-domains,.config-detail-section{display:flex;flex-direction:column;gap:.2rem;min-width:0}
 .config-domain{display:block;font-size:.87rem;color:var(--text-muted,#888);overflow-wrap:anywhere}
-.config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:0 0 0 .2rem;
+.config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:0 0 0 .75rem;
   cursor:pointer;accent-color:var(--accent,#538ad7)}
 .config-status-checkbox:disabled{cursor:not-allowed;opacity:.65}
 .config-empty{padding:1rem;margin:0}
