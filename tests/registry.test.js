@@ -37,7 +37,7 @@ test('generic module reordering preserves absent IDs without hardcoded module na
   manager.loaded.push({id:'panel',name:'Panel'});
   const before=manager.loaded.filter(module=>module.id!=='panel').map(module=>module.id);
   assert.deepEqual(before,['files','system','terminal','services','cron','nginx']);
-  const planned=manager.planOrder(['system','files','terminal','services','cron']);
+  const planned=manager.planOrder(['system','files','terminal','services','cron','nginx']);
   assert.deepEqual(planned,['system','missing-future-module','files','terminal','services','cron','nginx']);
   manager.applyOrder(planned);
   assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','cron','nginx','panel']);

@@ -57,6 +57,42 @@ try {
       await route.fulfill({status,contentType:'application/json',body:JSON.stringify(
         status===200?{action:id,result}:result)});
     });
+    // Disposable Nginx fixture: browser exercises real controls without root writes.
+    let nginxSites=[],nginxVersions=0,nginxSyntaxGood=true;
+    const revision=()=>String(++nginxVersions).padStart(64,'0');
+    await page.route('**/api/actions/nginx.*/execute',async route=>{
+      const id=new URL(route.request().url()).pathname.split('/')[3];
+      const input=route.request().postDataJSON()?.input??{};
+      let data,status=200;
+      const target=nginxSites.find(site=>site.name===input.name);
+      if(id==='nginx.sites')data={source:'fixture',count:nginxSites.length,
+        enabledCount:nginxSites.filter(site=>site.enabled==='启用链接').length,
+        sites:nginxSites.map(({content,revision,...site})=>site),warnings:[]};
+      else if(id==='nginx.check')data={ok:nginxSyntaxGood,status:nginxSyntaxGood?'配置检查通过':'配置检查失败',
+        exitCode:nginxSyntaxGood?0:1,output:'fixture -t',identity:'root'};
+      else if(id==='nginx.read'){
+        if(!target){status=404;data={error:'配置不存在'};}
+        else data={name:target.name,content:target.content,revision:target.revision,enabled:target.enabled==='启用链接'};
+      }else if(id==='nginx.apply'){
+        if(input.operation==='create'){
+          if(target){status=409;data={error:'站点已存在'};}
+          else{nginxSites.push({name:input.name,location:'sites-available',enabled:'未启用',
+            serverNames:'fixture.test',listens:'80',file:'/etc/nginx/sites-available/'+input.name,
+            editable:true,content:input.content,revision:revision()});}
+        }else if(!target||target.revision!==input.revision){status=409;data={error:'版本冲突'};}
+        else if(input.operation==='remove')nginxSites=nginxSites.filter(s=>s!==target);
+        else{
+          if(input.operation==='edit')target.content=input.content;
+          if(input.operation==='enable')target.enabled='启用链接';
+          if(input.operation==='disable')target.enabled='未启用';
+          target.revision=revision();
+        }
+        if(status===200)data={ok:true,status:'修改成功',revision:target?.revision??'',
+          validated:true,reloaded:true,output:'fixture'};
+      }else{status=404;data={error:'Unknown action'};}
+      await route.fulfill({status,contentType:'application/json',
+        body:JSON.stringify(status===200?{action:id,result:data}:data)});
+    });
     const errors=[];
     page.on('pageerror',e=>errors.push(e.message));
     let releaseAuth;
@@ -107,6 +143,28 @@ try {
         await page.getByRole('button',{name:'删除 Fixture nightly'}).click();
         await page.getByRole('dialog',{name:'删除任务'}).getByRole('button',{name:'删除'}).click();
         await page.getByText('暂无由 Linux Panel 管理的定时任务').waitFor();
+      }
+      if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
+        const manager=page.locator('.managed-configs');
+        await manager.getByRole('button',{name:'新建网站'}).click();
+        const editor=page.getByRole('dialog',{name:'新建网站配置'});
+        await editor.getByRole('textbox',{name:'配置文件名'}).fill('fixture-site');
+        await editor.getByRole('textbox',{name:'Nginx 配置内容'}).fill('server { listen 80; server_name fixture.test; }');
+        await editor.getByRole('button',{name:'保存配置'}).click();
+        await manager.getByRole('cell',{name:'未启用',exact:true}).waitFor();
+        await manager.getByRole('button',{name:'编辑 fixture-site'}).click();
+        const updated=page.getByRole('dialog',{name:'编辑网站配置'});
+        await updated.getByRole('textbox',{name:'Nginx 配置内容'}).fill('server { listen 8080; server_name fixture.test; }');
+        await updated.getByRole('button',{name:'保存配置'}).click();
+        await manager.getByRole('button',{name:'启用 fixture-site'}).click();
+        await page.getByRole('dialog',{name:'启用网站'}).getByRole('button',{name:'确认操作'}).click();
+        await manager.getByRole('cell',{name:'启用链接',exact:true}).waitFor();
+        await manager.getByRole('button',{name:'检查 Nginx 配置'}).click();
+        await manager.getByText('配置检查通过',{exact:true}).waitFor();
+        await manager.getByRole('button',{name:'删除 fixture-site'}).click();
+        await page.getByRole('dialog',{name:'删除网站配置'}).getByRole('button',{name:'确认操作'}).click();
+        await manager.getByText('没有找到站点配置文件').waitFor();
+        await page.screenshot({path:join(output,'nginx-manager-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='系统概览'){
         await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor();
