@@ -37,8 +37,12 @@ const taskLine=task=>task.expression+' linuxpanel '+task.command;
 function encode(tasks){
   return HEADER+tasks.map(task=>{
     const json=Buffer.from(JSON.stringify(task)).toString('base64url');
-    const line=taskLine(task);
-    return '# LP-TASK:'+json+'\n'+(task.enabled?line:'# DISABLED '+line)+'\n';
+    const line=task.enabled?taskLine(task):'# DISABLED '+taskLine(task);
+    // Debian Cron has a bounded physical line length. Limit UTF-8 bytes (not
+    // JS code units) for both executable lines and the metadata comment.
+    if(Buffer.byteLength(line)>900 || Buffer.byteLength('# LP-TASK:'+json)>900)
+      throw fail('任务命令或名称过长，超过 Cron 单行限制',413);
+    return '# LP-TASK:'+json+'\n'+line+'\n';
   }).join('');
 }
 function decode(content){
