@@ -8,7 +8,17 @@ const c=new PrivilegedActionClient({socketPath:'/run/linux-panel-privileged/exec
 const ctx={authenticated:true,userId:'disposable-unit-acceptance',channel:'web'};
 const action=(id,input)=>c.execute({id,privileged:{channels:['web']}},input,ctx);
 const confirm='APPLY_REVIEWED_NGINX_UNIT';
-const initial=await action('nginx.check',{});
+// systemd Type=simple can report active before Node re-creates and chowns
+// the Unix socket after the deliberately simulated legacy-unit restart.
+let initial;
+for(let attempt=0;attempt<100;attempt++){
+  try{initial=await action('nginx.check',{});break;}
+  catch(error){
+    if(![503,502].includes(error.statusCode))throw error;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+}
+assert.ok(initial,'root socket must be accessible again');
 assert.equal(initial.ok,false,'initial Nginx check must be blocked by legacy AF_UNIX unit');
 assert.match(initial.output,/Address family not supported by protocol/i);
 const status=await action('nginx.repairExecutor',{mode:'status',confirmation:confirm});
