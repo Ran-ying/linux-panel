@@ -374,7 +374,8 @@ recover(){
     # A durable success result is not proof Web can start after reboot.
     # The recovery unit has no Before=Web ordering; the journal guard blocks
     # untrusted starts, and only this root worker grants a temporary permit.
-    if ensure_web_read_access && start_panel &&
+    if priv_switch "$TARGET" && priv_verify_target &&
+       ensure_web_read_access && start_panel &&
        systemctl is-active --quiet linux-panel.service && panel_healthy;then
       finish_transaction || return 1
       log "Previously committed healthy deployment $ID cleaned up"
@@ -417,6 +418,9 @@ recover(){
   fi
   # Never request a start if Git, dependencies or private state failed
   # recovery: serving a partially restored app would hide a failed rollback.
+  if ((restored==1));then
+    if ! priv_recover_old;then restored=0;fi
+  fi
   if ((restored==1));then
     # No ordering edge to Web: the root journal ConditionPathExists guard
     # denies ordinary boot and this worker alone grants the volatile permit.
@@ -470,6 +474,11 @@ EXPECTED="$(cat "$EXPECTED_REMOTE")"
 [[ -z "$(as_updater git -C "$ROOT" status --porcelain)" ]] || { record failed;exit 2; }
 OLD="$(as_updater git -C "$ROOT" rev-parse HEAD)"
 [[ "$OLD" =~ ^[a-f0-9]{40}$ ]] || { record failed;exit 2; }
+if ! priv_preflight;then
+  log "Installed root package is not versioned at old SHA; explicit operator bootstrap required"
+  record failed
+  exit 2
+fi
 log "Fetch pinned origin/main commit $TARGET"
 as_updater git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
 REMOTE="$(as_updater git -C "$ROOT" rev-parse refs/remotes/origin/main)"
@@ -559,11 +568,16 @@ build(){
 rollback(){ recover; }
 if ! build;then rollback;exit 1;fi
 if ! ensure_web_read_access;then rollback;exit 1;fi
+# Only the immutable root worker copies the pinned/reviewed handler set. A
+# failed privileged package swap must roll back the app and package together.
+if ! priv_stage "$TARGET" || ! priv_switch "$TARGET";then
+  rollback;exit 1
+fi
 if ! start_panel || ! systemctl is-active --quiet linux-panel.service;then
   rollback
   exit 1
 fi
-if ! panel_healthy;then
+if ! panel_healthy || ! priv_verify_target;then
   rollback
   exit 1
 fi
