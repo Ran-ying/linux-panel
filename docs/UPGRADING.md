@@ -1,3 +1,9 @@
+# 文件管理与本地筛选（2026-10-16）
+
+基本信息关闭每 15 秒自动刷新。服务筛选改为 Web 对已读数据即时过滤，输入/选择条件不再发请求，只有刷新重新采集；API 的可选筛选参数继续兼容。
+
+新增 files.list/read/write/upload。前两项可供可信 MCP 读取；写入和上传仅 Web、普通服务账户、拒绝 UID 0，无 root Broker 权限。目录分页默认 200 项，文本最多 1 MiB，上传最多 8 MiB、不覆盖同名文件；execute 路由 JSON 上限 12 MiB，反向代理上传限制需单独核对。详见 [文件管理](FILES.md)。
+
 # 服务读取筛选（2026-10-16）
 
 services.list 新增可选 nameKeyword、active、sub 字符串输入，空值表示全部；名称按忽略大小写的字面子串匹配，两个状态精确匹配，条件同时成立。结果新增 activeStates/subStates（本次完整采集中的状态选项），count 是筛选后的记录数。原始 units 输出仍保留完整命令原文。

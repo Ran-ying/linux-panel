@@ -57,3 +57,7 @@ Linux 的 system.info（基本信息）、system.resources（含 CPU/内存/磁�
 terminal.execute 是显式 user-shell 写能力，仅普通服务身份，拒绝 root；已授权可信 MCP 客户端可直接使用。命令长度/超时/输出有界，非零退出作为命令结果返回。Web 真实 PTY 复用会话/Origin/CSRF，绑定登录会话，撤销后清理；有限连接/时长/缓冲，不持久化 history 或输出。它不增加服务账户权限，不调用 root Broker，其他写策略仍默认拒绝。详见 [TERMINAL.md](TERMINAL.md)。
 
 交互终端使用面板 HTML 的随机 CSP style nonce，仅由面板组件给 xterm 动态样式使用；脚本策略仍为 self，不放开 unsafe-inline。HTML 不缓存。
+
+## 普通用户文件操作
+
+文件模块通过原生 fs API，以面板服务身份浏览/读写/上传，不通过 Shell 或 Broker，拒绝 UID 0。files.write/upload 为明确的 user-files 写策略，仅 Web 已认证管理员可经既有 CSRF/Origin 检查执行；MCP 暴露的 files.list/read 是已有可信个人客户端的读取能力，不是路径沙箱。文本保存检查 revision、保留权限/属主；上传创建新文件而不覆盖。大小、分页与代理边界见 [文件管理](FILES.md)。路径、内容不写审计或公开日志。

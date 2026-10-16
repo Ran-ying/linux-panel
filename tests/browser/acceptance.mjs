@@ -1,6 +1,6 @@
 // Disposable browser acceptance: no production accounts or update execution.
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,mkdir} from 'node:fs/promises';
+import {mkdtemp,rm,mkdir,writeFile,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
@@ -16,6 +16,8 @@ const password=randomBytes(32).toString('hex');
 const origin='http://127.0.0.1:49273';
 const output=process.env.PANEL_BROWSER_OUTPUT || join(temp,'screenshots');
 await mkdir(output,{recursive:true});
+const fileFixture=join(temp,'files-fixture');await mkdir(join(fileFixture,'child'),{recursive:true});
+await writeFile(join(fileFixture,'note.txt'),'file-fixture-original');
 await new AuthService(new StateStore(statePath)).bootstrap('admin',password);
 const app=await createApp({root,statePath,publicOrigin:origin,production:true,
   listener:{host:'127.0.0.1',port:49273}});
@@ -98,6 +100,7 @@ try {
         const labels=await basic.locator('.metric-label').allTextContents();
         assert.ok(!labels.some(label=>['主机名','物理内存','可用并行度'].includes(label)));
         assert.ok(labels.includes('内核版本'));
+        assert.equal(await basic.locator('.refresh-choice').count(),0,'basic information must not offer periodic refresh');
         assert.ok((await basic.locator('.metric-card').first().locator('.metric-value').innerText()).length>0);
         await page.screenshot({path:join(output,'resource-gauges-'+width+'.png'),fullPage:true});
         if(width===390){
@@ -233,22 +236,49 @@ try {
         const keyword=card.getByRole('textbox',{name:'服务名称关键词',exact:true});
         const active=card.getByRole('combobox',{name:'运行状态',exact:true});
         const sub=card.getByRole('combobox',{name:'子状态',exact:true});
+
+        let reads=0;
+        const countReads=request=>{if(request.url().endsWith('/api/actions/services.list/execute'))reads++;};
+        page.on('request',countReads);
         await keyword.fill('NGINX');await active.selectOption('active');await sub.selectOption('running');
-        const filtered=await read();
-        assert.deepEqual(filtered.result.services.map(s=>s.name),['nginx.service']);
-        assert.equal(filtered.result.count,1);
-        assert.ok(filtered.result.subStates.includes('dead'),'choices must survive filtering');
         await page.waitForFunction(()=>document.querySelectorAll('.table-wrap tbody tr').length===1 && document.querySelector('.table-wrap tbody')?.textContent.includes('nginx.service'));
-        assert.equal(await card.locator('.table-wrap tbody tr').count(),1);
+        assert.equal(reads,0,'changing filters must not fetch data');
         await card.getByRole('tab',{name:'命令',exact:true}).click();
         await page.screenshot({path:join(output,'service-filters-'+width+'.png'),fullPage:true});
         await keyword.fill('no-match-fixture');
-        assert.equal((await read()).result.count,0);
+        await card.getByText('没有可显示的记录',{exact:true}).waitFor();
+        assert.equal(reads,0);
         await keyword.fill('');await active.selectOption('');await sub.selectOption('');
-        assert.equal((await read()).result.count,3);
+        await page.waitForFunction(()=>document.querySelectorAll('.table-wrap tbody tr').length===3);
+        assert.equal(reads,0,'clearing filters must stay local');
+        assert.equal((await read()).result.count,3,'refresh still collects a fresh complete result');
+        assert.equal(reads,1);page.off('request',countReads);
         await card.getByRole('tab',{name:'命令',exact:true}).click();
         await units.fill(original);await save();await read();
         await card.getByRole('tab',{name:'命令',exact:true}).click();
+      }
+
+      if(name.trim()==='文件管理' && [390,1280].includes(width)){
+        assert.equal(await page.locator('.action-card').count(),1,'helper Actions belong inside the file browser');
+        const browser=page.locator('.file-browser');
+        await browser.getByRole('textbox',{name:'目录路径',exact:true}).fill(fileFixture);
+        await browser.getByRole('button',{name:'打开目录',exact:true}).click();
+        await browser.getByRole('button',{name:'note.txt',exact:true}).click();
+        const editor=browser.getByRole('textbox',{name:'文件内容',exact:true});
+        await editor.fill('edited-file-fixture-'+width);
+        await browser.getByRole('button',{name:'保存文件',exact:true}).click();
+        await browser.getByText('已保存',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'note.txt'),'utf8'),'edited-file-fixture-'+width);
+        await browser.getByLabel('上传文件',{exact:true}).setInputFiles({
+          name:'upload-'+width+'.txt',mimeType:'text/plain',buffer:Buffer.from('upload-fixture')});
+        await browser.getByText('上传完成',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'upload-'+width+'.txt'),'utf8'),'upload-fixture');
+        await browser.getByRole('button',{name:'关闭编辑',exact:true}).click();
+        await browser.getByRole('button',{name:'child/',exact:true}).click();
+        await browser.getByText('空目录',{exact:true}).waitFor();
+        await browser.getByRole('button',{name:'上一级',exact:true}).click();
+        await browser.getByRole('button',{name:'note.txt',exact:true}).waitFor();
+        await page.screenshot({path:join(output,'file-browser-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='终端'){
         const card=page.locator('.action-card').first();

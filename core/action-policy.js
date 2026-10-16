@@ -3,3 +3,9 @@ export function isUserShellAction(action) {
   return action?.id==='terminal.execute' && action.kind==='write' &&
     action.permission==='terminal:execute' && action.executionPolicy==='user-shell';
 }
+
+/** Source-approved ordinary-user file writes, authenticated Web only. */
+export function isUserFileAction(action) {
+  return ['files.write','files.upload'].includes(action?.id) && action.kind==='write' &&
+    action.permission==='files:write' && action.executionPolicy==='user-files';
+}

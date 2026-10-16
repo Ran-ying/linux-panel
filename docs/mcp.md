@@ -15,6 +15,7 @@ Web 设置开启 MCP、按需开启客户端注册；OAuth Authorization Code + 
 | system.info | 主机基本字段 |
 | system.resources | cpu、memory、disk 对象 |
 | services.list | systemd 服务列表 |
+| files.list / files.read | 目录分页 / 文本内容；写入和上传仅 Web |
 | terminal.execute | 普通服务账户执行 command，返回 stdout/stderr/exitCode 等 |
 
 旧 system.cpu/system.memory/storage.usage 不再注册，无隐藏别名。升级后刷新 tools/list；ChatGPT 工具名可能把点变为下划线。Web/MCP 共用命令配置、执行、解析和 schema 校验。MCP 当前只返回 result；引擎 raw 原文由 Web 原始数据表格/JSON 展示，不自动加入现有 MCP 公开返回。

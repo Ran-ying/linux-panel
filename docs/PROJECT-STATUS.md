@@ -4,7 +4,9 @@
 
 ## 本次实现
 
-- 服务浏览 services.list 支持可选名称关键词/运行状态/子状态组合筛选，逻辑位于 Action；状态选项取完整采集，raw 保持原始完整输出。面板新增通用 text/select 输入和经过校验的输出选项引用，模块只提供声明。
+- 基本信息取消定时刷新，服务浏览的 Web 条件变化只筛选已读取数据，不发送请求；刷新按钮仍负责重新采集。
+- 新增文件模块：目录分页浏览、UTF-8 编辑保存、上传；四个 Action 复用同一引擎与普通服务账户，面板提供通用文件界面，详见 [文件管理](FILES.md)。
+- 服务浏览 services.list 支持可选名称关键词/运行状态/子状态组合筛选，逻辑位于 Action；状态选项取完整采集，raw 保持原始完整输出。面板提供通用 text/select 输入和经过校验的输出选项引用，模块只提供声明。
 - 基本信息的 Action、命令和 Schema 已移除主机名、内存、cpuCount；新增发行版及版本，内核版本单独展示。并行度迁入 resources.cpu.availableParallelism，沿用旧自定义命令。CPU 不再显示折算小数核数，改为百分比及整数计数。
 - 手机导航外框/选项卡直角且左右贴边、无左右边框，缩小选项卡内边距与展开/收起按钮高度；上下安全边距和滚动/覆盖行为保留。
 - 真正的 system.resources（cpu + memory + disk，排在最前）与 system.info（基本信息）。原 system.cpu/system.memory/storage.usage 和独立 storage 模块删除，无隐藏 Action 别名。

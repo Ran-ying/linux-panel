@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
+import { defineAsyncComponent, onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
 import ResultRenderer from './ResultRenderer.vue';
 
+const FileBrowser=defineAsyncComponent(()=>import('./FileBrowser.vue'));
 const props=defineProps({
   action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
@@ -10,6 +11,17 @@ const inputText=ref('{}'),response=ref(null),error=ref(''),busy=ref(false);
 const view=ref('visual'),autoRefresh=ref(false),infoTab=ref(null);
 const formInput=ref(Object.fromEntries((props.presentation?.inputs ?? []).map(field=>[field.key,props.action.inputSchema?.properties?.[field.key]?.default ?? ''])));
 const inputReady=computed(()=>(props.action.inputSchema?.required ?? []).every(key=>!props.presentation?.inputs || String(formInput.value[key] ?? '').trim().length>0));
+const filePath=ref('/');
+const displayedResult=computed(()=>{
+  const result=response.value?.content.result,filters=props.presentation?.clientFilters;
+  if(!result || !filters)return result;
+  const rowsKey=props.presentation.rowsKey;
+  const rows=(result[rowsKey] ?? []).filter(row=>filters.every(filter=>{
+    const value=String(formInput.value[filter.key] ?? '').trim();
+    return !value || (filter.match==='contains'?String(row[filter.field]).toLowerCase().includes(value.toLowerCase()):String(row[filter.field])===value);
+  }));
+  return {...result,[rowsKey]:rows,count:rows.length};
+});
 const fields=ref([]),commandsLoaded=ref(false),commandsEditable=ref(false);
 const commandBusy=ref(false),commandError=ref(''),commandMessage=ref('');
 const refreshSeconds=computed(()=>(props.presentation?.refreshIntervalMs ?? 0)/1000);
@@ -87,7 +99,7 @@ async function run(operation,refresh=false) {
   try {
     const reply=await fetch('/api/actions/'+encodeURIComponent(props.action.id)+'/'+operation,{
       method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
-      body:JSON.stringify({input:props.presentation?.inputs ? formInput.value : JSON.parse(inputText.value)}),signal:controller.signal
+      body:JSON.stringify({input:props.presentation?.renderer==='files'?{path:filePath.value}:props.presentation?.clientFilters?{}:props.presentation?.inputs ? formInput.value : JSON.parse(inputText.value)}),signal:controller.signal
     });
     const payload=await reply.json();
     if(reply.status===401)emit('unauthorized');
@@ -176,14 +188,14 @@ onUnmounted(()=>{
         </select>
         <input v-else-if="field.type==='text'" :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]"
           type="text" :placeholder="field.placeholder" :maxlength="action.inputSchema.properties[field.key].maxLength"
-          :required="action.inputSchema.required?.includes(field.key)" :disabled="busy" @keydown.enter.prevent="run('execute')" />
+          :required="action.inputSchema.required?.includes(field.key)" :disabled="busy" @keydown.enter.prevent="presentation.clientFilters ? null : run('execute')" />
         <textarea v-else :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]" rows="4"
           :placeholder="field.placeholder" :maxlength="action.inputSchema.properties[field.key].maxLength"
           :required="action.inputSchema.required?.includes(field.key)" :disabled="busy" spellcheck="false" />
       </label>
     </div>
-    <label v-else-if="hasInputFields" :for="'input-'+action.id">JSON 参数</label>
-    <textarea v-if="hasInputFields && !presentation?.inputs" :id="'input-'+action.id" v-model="inputText" rows="3" spellcheck="false" />
+    <label v-else-if="hasInputFields && presentation?.renderer!=='files'" :for="'input-'+action.id">JSON 参数</label>
+    <textarea v-if="hasInputFields && !presentation?.inputs && presentation?.renderer!=='files'" :id="'input-'+action.id" v-model="inputText" rows="3" spellcheck="false" />
 
     <div class="result">
       <div class="result-header">
@@ -204,7 +216,10 @@ onUnmounted(()=>{
         <span class="muted">（默认关闭）</span>
       </label>
       <template v-if="response">
-        <ResultRenderer v-if="view==='visual'" :data="response.content.result" :presentation="presentation" />
+        <FileBrowser v-if="view==='visual' && presentation?.renderer==='files'" :initial-data="response.content.result"
+          :list-action="action.id" :operations="presentation.operations" :csrf="csrf"
+          @path-change="filePath=$event" @unauthorized="emit('unauthorized')" />
+        <ResultRenderer v-else-if="view==='visual'" :data="displayedResult" :presentation="presentation" />
         <div v-else class="raw-data">
           <template v-if="response.content.raw">
             <table class="command-table raw-command-table">

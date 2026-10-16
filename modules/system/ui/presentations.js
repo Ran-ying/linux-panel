@@ -49,7 +49,7 @@ export default [
     "actionId": "system.info",
     "renderer": "metrics",
     "loadOnEnter": true,
-    "refreshIntervalMs": 15000,
+    "refreshIntervalMs": 0,
     "fields": [
       {
         "key": "distribution",
