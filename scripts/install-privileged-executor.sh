@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Explicit operator bootstrap/update for root-owned reviewed Action handlers.
 set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 LP_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 LP_DEST=/usr/local/lib/linux-panel-privileged
