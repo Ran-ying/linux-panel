@@ -56,10 +56,10 @@ export class ActionCommands {
     const {fields}=await this.config(action);
     return fields.map(({key,value})=>({key,type:'shell',command:value}));
   }
-  async execute(action) {
-    return (await this.executeWithRaw(action)).result;
+  async execute(action,input={}) {
+    return (await this.executeWithRaw(action,input)).result;
   }
-  async executeWithRaw(action) {
+  async executeWithRaw(action,input={}) {
     const {fields}=await this.config(action);
     const values={},durations={},raw={};
     for (const {key,value} of fields) {
@@ -76,7 +76,7 @@ export class ActionCommands {
       durations[key]=performance.now()-start;
     }
     try {
-      const result=action.terminal.decode(values,{durations});
+      const result=action.terminal.decode(values,{durations,input});
       const finite=value=>typeof value==='number'?Number.isFinite(value):
         value && typeof value==='object'?Object.values(value).every(finite):true;
       if(!finite(result)) throw new Error('Invalid numeric output');

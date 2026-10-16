@@ -10,11 +10,13 @@
 - modules/services：services.list。
 - modules/terminal：terminal.execute（显式 user-shell 写能力），命令输入和 PTY GUI 均由面板提供。
 - apps/api：Fastify、业务 API、数据型 presentation 校验。配置不能携带样式/脚本。
-- apps/web：布局、主题、固定导航、卡片、命令编辑保存、刷新、raw 表格/JSON、通用 metrics/progress/gauge/table/sections/terminal、声明式 textarea 输入与真实 PTY。没有系统 Action ID 特判和跨模块卡片拼装。
+- apps/web：布局、主题、固定导航、卡片、命令编辑保存、刷新、raw 表格/JSON、通用 metrics/progress/gauge/table/sections/terminal、声明式 textarea/text/select 输入与真实 PTY。没有系统 Action ID 特判和跨模块卡片拼装。
 - extensions/mcp：独立可选 Streamable HTTP/OAuth，无 Vue 依赖；调用同一引擎，当前工具只返回 result，Web 还能展示 raw。
 - root Broker：独立安装，可信 main SHA、非 root 构建、固定 systemd 部署/健康检查/回滚，不能接受任意模块命令。
 
 ## 执行与展示
+
+终端命令 decode 接收同一引擎校验过的 input；服务筛选由 Action 在完整解析结果上完成，状态选项来自完整采集，raw 保留完整原文。
 
 一个 Action 对应一个卡片、一个保存入口、一次刷新请求和原始 key 列表。组合结果在 outputSchema 定义子对象，由 sections.key 选取展示；协议及复制示例见 [模块规范](MODULE-DEVELOPMENT.md)。
 

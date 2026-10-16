@@ -579,3 +579,11 @@ table{min-width:500px}
 .gauge-details{width:100%;margin:0;display:grid;gap:5px;font-size:.8rem;font-variant-numeric:tabular-nums}
 .gauge-details>div{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
 .gauge-details dd{font-weight:650}
+
+/* Panel-owned optional filters reuse Action input contracts. */
+.compact-inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px}
+.compact-inputs>strong{grid-column:1/-1}
+.compact-inputs label{margin:0;min-width:0}
+.action-inputs input,.action-inputs select{width:100%;min-height:38px;padding:8px 10px;border:1px solid var(--input-border);
+  border-radius:8px;background:var(--input-bg);color:var(--text-primary);font:inherit}
+.action-inputs input:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}

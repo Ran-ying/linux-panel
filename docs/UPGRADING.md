@@ -1,3 +1,9 @@
+# 服务读取筛选（2026-10-16）
+
+services.list 新增可选 nameKeyword、active、sub 字符串输入，空值表示全部；名称按忽略大小写的字面子串匹配，两个状态精确匹配，条件同时成立。结果新增 activeStates/subStates（本次完整采集中的状态选项），count 是筛选后的记录数。原始 units 输出仍保留完整命令原文。
+
+筛选发生在同一个 Action 的解析结果中，输入不拼接进 Shell。ActionCommands 的 decode 第二参数现包含经过引擎校验的 input，已有仅使用 durations 的模块保持兼容。Web 复用面板 text/select 输入控件，输入条件后刷新数据，关键词框也可回车读取；清空条件恢复全部。
+
 # 基本信息与 CPU 字段调整（2026-10-16）
 
 system.info 新增 distribution（Linux os-release 的发行版及版本），保留 platform/release/arch/uptimeSeconds/nodeVersion；移除 hostname/cpuCount/totalMemoryBytes/freeMemoryBytes 的采集、命令和结果字段。内核版本独立展示；内存只在资源 Action 展示。
