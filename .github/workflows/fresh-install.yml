@@ -34,6 +34,7 @@ jobs:
           # runtime specifically for the privileged service.
           sudo install -d -o root -g root -m 0755 /usr/lib/linux-panel-root-test-runtime
           sudo install -o root -g root -m 0755 "$(command -v node)" /usr/lib/linux-panel-root-test-runtime/node
+          trap 'sudo systemctl status linux-panel-privileged.service linux-panel.service --no-pager --lines=25 || true; sudo journalctl -u linux-panel-privileged.service -n 35 --no-pager || true' ERR
           sudo bash scripts/setup.sh --apply --host 127.0.0.1 --port 49331 \
             --node-bin "$(command -v node)" --ref "$INSTALL_REF" \
             --enable-privileged --privileged-node-bin /usr/lib/linux-panel-root-test-runtime/node \
