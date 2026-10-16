@@ -114,14 +114,14 @@ function remove(){
     <p v-if="error && !draft && !removeTarget" class="error" role="alert">{{ error }}</p>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
     <div class="task-group managed-task-group" aria-labelledby="managed-schedule-heading">
-      <h3 id="managed-schedule-heading" class="task-group-title">Linux Panel 托管的定时任务</h3>
-      <div class="task-toolbar">
-        <div class="panel-control-capsule">
+      <div class="task-group-heading">
+        <h3 id="managed-schedule-heading" class="task-group-title">Linux Panel 托管的定时任务</h3>
+        <div class="task-heading-actions">
           <button type="button" class="panel-control-primary" :disabled="busy" @click="openForm(null)">新建任务</button>
           <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
         </div>
-        <span class="muted small">共 {{ listing.count }} 项</span>
       </div>
+      <p class="muted small task-count">共 {{ listing.count }} 项</p>
 
     <p class="muted small">新建任务写入独立的 /etc/cron.d/linux-panel，以 linuxpanel 用户运行。</p>
     <div class="table-wrap">
@@ -145,9 +145,13 @@ function remove(){
     </div>
     </div>
     <div class="task-group system-task-group" aria-labelledby="system-schedule-heading">
-      <h3 id="system-schedule-heading" class="task-group-title">系统现有定时任务</h3>
+      <div class="task-group-heading">
+        <h3 id="system-schedule-heading" class="task-group-title">系统现有定时任务</h3>
+        <div class="task-heading-actions">
+          <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
+        </div>
+      </div>
       <div class="task-toolbar system-filters">
-        <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
         <label>搜索
         <input v-model="systemQuery" placeholder="任务名称、用户或命令" aria-label="搜索系统任务" />
       </label>
@@ -282,7 +286,12 @@ function remove(){
 }
 .task-group + .task-group{margin-top:var(--content-space,24px)}
 @media(max-width:730px){.task-group{padding:14px}}
-.task-group-title{font-size:1.05rem;margin:0 0 .85rem;font-weight:650}
+.task-group-heading{display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:8px 12px;margin:0 0 .85rem}
+.task-group-title{font-size:1.05rem;margin:0;font-weight:650;min-width:0;overflow-wrap:anywhere}
+.task-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;
+  flex-wrap:wrap;margin-left:auto;min-width:0}
+.task-count{margin:0 0 .6rem}
 .system-origin{display:block;margin-top:.25rem;font-size:.78rem;opacity:.7;overflow-wrap:anywhere}
 .system-filters label{display:flex;align-items:center;gap:.4rem}
 .system-filters input{min-height:2.35rem;max-width:18rem;font:inherit}
@@ -290,7 +299,7 @@ function remove(){
 .task-filter-heading select{width:100%;min-width:7rem;max-width:15rem;min-height:2.35rem;font:inherit}
 .task-toolbar,.task-row-actions,.task-dialog-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .task-toolbar{margin:.2rem 0 1rem}
-.task-toolbar button,.task-row-actions button,.task-dialog-actions button{min-height:2.35rem;font:inherit;padding:.35rem .8rem}
+.task-row-actions button,.task-dialog-actions button{min-height:2.35rem;font:inherit;padding:.35rem .8rem}
 .task-table{width:100%;text-align:left}
 .task-table th,.task-table td{vertical-align:top}
 .task-command{white-space:pre-wrap;overflow-wrap:anywhere;max-width:28rem;display:block}
@@ -306,5 +315,9 @@ function remove(){
 .task-switch input{width:auto!important}
 .task-dialog-actions{justify-content:flex-end}
 .task-notice{padding:.6rem 0}
-@media(max-width:730px){.task-table{min-width:650px}.system-task-table{min-width:950px}.task-toolbar{align-items:stretch}}
+@media(max-width:730px){
+  .task-table{min-width:650px}.system-task-table{min-width:950px}
+  .task-toolbar{align-items:stretch}
+  .task-heading-actions{justify-content:flex-end}
+}
 </style>
