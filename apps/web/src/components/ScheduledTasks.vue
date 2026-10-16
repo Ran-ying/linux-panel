@@ -9,7 +9,7 @@ const listing=ref(props.initialData),busy=ref(false),error=ref(''),message=ref('
 const dialog=ref(null),deleteDialog=ref(null),draft=ref(null),removeTarget=ref(null);
 const systemEditDialog=ref(null),systemConfirmDialog=ref(null),systemDraft=ref(null),systemConfirm=ref(null);
 const systemSource=ref('all'),systemQuery=ref('');
-const sources=[['all','全部'],['system-crontab','系统 Crontab'],['cron.d','Cron 配置'],['user-crontab','用户 Crontab'],['periodic','周期脚本'],['systemd-timer','systemd Timers']];
+const sources=[['all','全部'],['system-crontab','系统 Crontab'],['cron.d','Cron 配置'],['user-crontab','用户 Crontab'],['periodic','周期脚本'],['anacron','Anacron'],['at-job','AT 一次性任务'],['systemd-timer','systemd Timers']];
 const systemRows=computed(()=>(listing.value.systemTasks??[]).filter(x=>
   (systemSource.value==='all'||x.sourceType===systemSource.value)&&
   (!systemQuery.value||[x.source,x.name,x.owner,x.expression,x.command].some(v=>String(v??'').toLowerCase().includes(systemQuery.value.trim().toLowerCase())))
