@@ -13,7 +13,7 @@ const systemTask=object({
   detail:{type:'string',maxLength:300},line:{type:'integer',minimum:0},raw:{type:'string',maxLength:3000}
 });
 export const CRON_CONTRACTS={
-  list:{title:'系统定时任务',description:'列出面板任务及系统 Cron、用户 Crontab、周期脚本和 systemd timers。',
+  list:{title:'Linux Panel 托管的定时任务',description:'列出面板任务及系统 Cron、用户 Crontab、周期脚本和 systemd timers。',
     inputSchema:object({}),outputSchema:object({
       tasks:{type:'array',items:{...task,required:[...task.required,'id']}},
       revision,count:{type:'integer',minimum:0},
