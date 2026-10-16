@@ -137,6 +137,6 @@ loadOnEnter 仅允许无需必填参数的 read；自动刷新默认关闭，由
 5. 浏览器测保存后生效、原始 key/原文、说明默认隐藏、主题与手机布局；新增普通模块无需修改 App.vue。
 6. 运行 npm run check、npm test、npm run build:web，按 CI 配置做浏览器验收。工件不能包含真实凭据/主机数据/私有命令。
 7. 同一 PR 同步受影响 README/架构/模块/MCP/升级/安全文档及 PROJECT-STATUS。旧过程移 docs/history 并标明日期，当前状态不反复叠加矛盾旧快照。
-8. CI 通过后按授权合并/部署；queued 不是成功，核对持久化 SHA 和服务状态，最终证据记 Issue #54。未观察的状态写待验证。
+8. CI 通过后按授权合并/部署；queued 不是成功，核对持久化 SHA 和服务状态，最终部署证据统一记 Issue #54，当前文档链接该记录，避免重复缓存失效的运行版本。未观察的状态写待验证。
 
 源码入口：core/module-manager.js、action-registry.js、action-engine.js，platform/action-commands.js，apps/api/src/web-presentations.js，ActionCard.vue、ResultRenderer.vue、modules/system。不要发明不存在的模块 API。
