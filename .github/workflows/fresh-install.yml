@@ -57,7 +57,7 @@ jobs:
           # installation, the real service sandbox and authenticated Web calls.
           sudo install -d -o root -g root -m 0755 /usr/lib/linux-panel-root-test-runtime
           sudo install -o root -g root -m 0755 "$(command -v node)" /usr/lib/linux-panel-root-test-runtime/node
-          sudo bash scripts/install-privileged-executor.sh --enable --node-bin /usr/lib/linux-panel-root-test-runtime/node
+          sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable --node-bin /usr/lib/linux-panel-root-test-runtime/node
           test "$(systemctl show -P User linux-panel.service)" = linuxpanel
           test "$(systemctl show -P User linux-panel-privileged.service)" = root
           sudo runuser -u linuxpanel -- /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-privileged-executor.js
