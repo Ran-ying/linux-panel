@@ -7,7 +7,7 @@ export async function setup({actions,moduleId}){
       permission:read?'cron:read':'cron:write',
       executionPolicy:read?undefined:'privileged',
       exposure:{web:true,mcp:false},privileged:{channels:['web']},
-      explain:'管理专用 /etc/cron.d/linux-panel 文件；任务只以 linuxpanel 身份运行。需要显式安装新版受控 root handler，关闭 root 通道时不可使用。',
+      explain:'系统级读取 Cron、用户 crontab、周期脚本与 systemd timers。新建的面板任务仍使用专用 linuxpanel 配置；原有系统任务只通过匹配来源与 revision 的受控操作修改，不覆盖其他条目。',
       execute:async()=>{throw Object.assign(new Error('需要启用并安装定时任务 root 执行器'),{statusCode:503});}
     });
   }
