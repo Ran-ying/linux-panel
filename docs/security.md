@@ -51,3 +51,7 @@ Linux 的 system.info（含磁盘）、system.resources（含 CPU/内存）、se
 ## 当前模块与原始输出
 
 遵循 [模块规范](MODULE-DEVELOPMENT.md)。内置业务模块为 system/services，不支持不可信代码隔离。成功命令的 stdout/stderr/exitCode 只在当次响应保留，不持久化执行历史；Web 可查看，现有 MCP 仅返回 result。raw 可能含敏感内容，按结果数据保护。旧配置按 migrateFrom 映射，迁移不执行命令。
+
+## 终端模块
+
+terminal.execute 是显式 user-shell 写能力，仅普通服务身份，拒绝 root；已授权可信 MCP 客户端可直接使用。命令长度/超时/输出有界，非零退出作为命令结果返回。Web 真实 PTY 复用会话/Origin/CSRF，绑定登录会话，撤销后清理；有限连接/时长/缓冲，不持久化 history 或输出。它不增加服务账户权限，不调用 root Broker，其他写策略仍默认拒绝。详见 [TERMINAL.md](TERMINAL.md)。
