@@ -6,7 +6,9 @@
     "file-contracts.js",
     "file-operations.js",
     "cron-contracts.js",
-    "cron-operations.js"
+    "cron-operations.js",
+    "nginx-contracts.js",
+    "nginx-operations.js"
   ],
   "dependencies": [
     "ajv",
