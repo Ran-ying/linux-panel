@@ -15,6 +15,34 @@ const hasInputFields=computed(()=>Object.keys(props.action.inputSchema?.properti
 let refreshTimer,controller,commandController;
 let generation=0,disposed=false;
 
+// Fit both edited values and wrapped lines after loading or resizing.
+const autoHeightState=new WeakMap();
+function fitCommand(node) {
+  node.style.height='0px';
+  const style=getComputedStyle(node);
+  node.style.height=(node.scrollHeight+parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth))+'px';
+}
+const vAutoHeight={
+  mounted(node) {
+    const fit=()=>fitCommand(node);
+    let width=node.clientWidth;
+    const observer=new ResizeObserver(()=>{
+      if(node.clientWidth!==width){width=node.clientWidth;fit();}
+    });
+    autoHeightState.set(node,{fit,observer});
+    node.addEventListener('input',fit);
+    observer.observe(node);
+    fit();
+  },
+  updated:fitCommand,
+  beforeUnmount(node) {
+    const state=autoHeightState.get(node);
+    state?.observer.disconnect();
+    node.removeEventListener('input',state?.fit);
+    autoHeightState.delete(node);
+  }
+};
+
 async function commandRequest(method='GET') {
   commandController=new AbortController();
   const reply=await fetch('/api/actions/'+encodeURIComponent(props.action.id)+'/commands',{
@@ -129,8 +157,8 @@ onUnmounted(()=>{
               <thead><tr><th>key</th><th>value（终端命令）</th></tr></thead>
               <tbody><tr v-for="field in fields" :key="field.key">
                 <td><code>{{ field.key }}</code></td>
-                <td><textarea v-model="field.value" :aria-label="'命令 '+field.key"
-                  required maxlength="2048" rows="2" spellcheck="false" :disabled="commandBusy" /></td>
+                <td><textarea v-auto-height v-model="field.value" :aria-label="'命令 '+field.key"
+                  required maxlength="2048" rows="1" spellcheck="false" :disabled="commandBusy" /></td>
               </tr></tbody>
             </table>
             <button type="submit" class="command-save primary form-button" :disabled="commandBusy">保存</button>
