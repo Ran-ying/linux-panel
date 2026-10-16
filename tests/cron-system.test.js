@@ -28,6 +28,7 @@ async function fixture(t){
        {unit_file:'apt-daily.timer',state:timerState},{unit_file:'static@.timer',state:'static'}]);
      if(['enable','disable'].includes(args[0])){timerState=args[0]==='enable'?'enabled':'disabled';return '';}
    }
+   if(binary==='/usr/bin/atq')return '';
    if(binary==='/usr/bin/crontab'){
      const content=await fs.readFile(args[2],'utf8');
      await fs.writeFile(user,content);
