@@ -386,7 +386,7 @@ test('SIGKILL immediately after privileged release pointer switch restores old r
  const f=prepare({withPrivileged:true});
  try{
   const crashed=f.run({powerCut:true});
-  assert.equal(crashed.process.signal,'SIGKILL');
+  assert.equal(crashed.process.signal,'SIGKILL',JSON.stringify({status:crashed.process.status,signal:crashed.process.signal,stderr:crashed.process.stderr,stdout:crashed.process.stdout,result:crashed.result,head:crashed.head}));
   assert.equal(readlinkSync(join(f.privRoot,'current')),'releases/'+f.target);
   assert.equal(existsSync(join(f.base,'backup','active-transaction')),true);
   const recovered=spawnSync('bash',[f.script,'--recover-only'],{
