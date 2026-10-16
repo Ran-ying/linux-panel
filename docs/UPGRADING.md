@@ -1,3 +1,14 @@
+# 自动升级受控 root handler（需要一次初始迁移，2026-10-16）
+
+旧版本的 `linux-panel-update-worker` 是 root-owned 固定程序，因此普通 Web/MCP 更新**不能**自行安装新的 Broker 权限。将本版本源码通过现有授权 Broker 正常更新后，使用 VPS root/sudo 终端执行**一次**：
+
+```bash
+sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --check
+sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --enable
+```
+
+脚本要求干净的 main、remote pin 一致、已有可用 root Broker 和 root Action 服务且没有未完成恢复事务。它暂时停止更新 watcher，安装与当前 SHA 对应的 versioned root handler（自动包括 Cron/Nginx）、更新 root-only Broker worker 及其 systemd sandbox 配置，最后恢复 watcher；不改变管理员密码、MCP 策略、其他服务或现有 Cron/Nginx 配置。`--check` 只读。**未来**更新可信 main 会使用固定 manifest 自动 stage/切换/回滚 root handler 文件及 Node 依赖，不开放任意 root 命令；若升级系统服务权限/单元，仍需明确独立安装。源码合并和普通 Web 更新成功不代表旧 root 包已同步。
+
 
 # 托管 Cron 模块（2026-10-16，开发中）
 
