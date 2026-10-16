@@ -109,6 +109,11 @@ jobs:
           if [ "$(sudo git -c safe.directory=/opt/linux-panel -C /opt/linux-panel branch --show-current)" != main ]; then
             sudo git -c safe.directory=/opt/linux-panel -C /opt/linux-panel branch -m main
           fi
+          # Fresh installer uses the selected test Node, whereas the Broker
+          # deliberately expects its own isolated /opt/node24 toolchain.
+          sudo install -d -o root -g root -m 0755 /opt/node24/bin
+          sudo ln -s /usr/lib/linux-panel-root-test-runtime/node /opt/node24/bin/node
+          sudo ln -s "$(command -v npm)" /opt/node24/bin/npm
           sudo bash /opt/linux-panel/scripts/install-update-broker.sh --apply
           sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --check
           sudo bash /opt/linux-panel/scripts/enable-privileged-auto-updates.sh --enable
