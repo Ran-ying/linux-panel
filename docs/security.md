@@ -55,3 +55,5 @@ Linux 的 system.info（含磁盘）、system.resources（含 CPU/内存）、se
 ## 终端模块
 
 terminal.execute 是显式 user-shell 写能力，仅普通服务身份，拒绝 root；已授权可信 MCP 客户端可直接使用。命令长度/超时/输出有界，非零退出作为命令结果返回。Web 真实 PTY 复用会话/Origin/CSRF，绑定登录会话，撤销后清理；有限连接/时长/缓冲，不持久化 history 或输出。它不增加服务账户权限，不调用 root Broker，其他写策略仍默认拒绝。详见 [TERMINAL.md](TERMINAL.md)。
+
+交互终端使用面板 HTML 的随机 CSP style nonce，仅由面板组件给 xterm 动态样式使用；脚本策略仍为 self，不放开 unsafe-inline。HTML 不缓存。
