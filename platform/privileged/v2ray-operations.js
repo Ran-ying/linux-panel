@@ -209,9 +209,20 @@ export function createV2RayOperations({
         const st=await fs.lstat(join(out,name));
         if(!st.isFile()||st.isSymbolicLink())throw error('安装包内容不是普通文件',503);
       }
-      await fs.mkdir(dirname(localBin),{recursive:true});
-      await fs.mkdir(dirname(localConfig),{recursive:true});
-      await fs.mkdir(localAsset,{recursive:true});
+      // systemd runs V2Ray as nobody; new directories must remain traversable
+      // even if the privileged executor process has umask 077.
+      const ensureDir=async path=>{
+        if(!await exists(path)){
+          await fs.mkdir(path,{recursive:true,mode:0o755});
+          await fs.chmod(path,0o755);
+        }
+      };
+      await ensureDir(dirname(localBin));
+      await ensureDir(join(root,'etc'));
+      await ensureDir(dirname(localConfig));
+      await ensureDir(join(root,'share'));
+      await ensureDir(localAsset);
+      await ensureDir(dirname(serviceFile));
       const publish=async(src,dest,mode)=>{
         if(await exists(dest))throw error('目标文件已存在，拒绝覆盖：'+dest,409);
         await fs.copyFile(src,dest,fs.constants.COPYFILE_EXCL);
@@ -226,13 +237,15 @@ export function createV2RayOperations({
           settings:{auth:'noauth',udp:false}}],
         outbounds:[{tag:'direct',protocol:'freedom',settings:{}}]
       },null,2)+'\n';
-      await fs.writeFile(localConfig,initial,{flag:'wx',mode:0o644});added.push(localConfig);
+      await fs.writeFile(localConfig,initial,{flag:'wx',mode:0o644});
+      added.push(localConfig);await fs.chmod(localConfig,0o644);
       const unit='[Unit]\nDescription=V2Ray Service\nAfter=network-online.target\nWants=network-online.target\n\n'+
         '[Service]\nType=simple\nUser=nobody\nEnvironment=V2RAY_LOCATION_ASSET=/usr/local/share/v2ray\n'+
         'ExecStart=/usr/local/bin/v2ray run -config /usr/local/etc/v2ray/config.json\n'+
         'Restart=on-failure\nRestartSec=3\nNoNewPrivileges=true\n\n'+
         '[Install]\nWantedBy=multi-user.target\n';
-      await fs.writeFile(serviceFile,unit,{flag:'wx',mode:0o644});added.push(serviceFile);
+      await fs.writeFile(serviceFile,unit,{flag:'wx',mode:0o644});
+      added.push(serviceFile);await fs.chmod(serviceFile,0o644);
       const tested=await runner(localBin,['test','-c',localConfig],{timeout:30000});
       if(!tested.ok)throw error('新安装 V2Ray 的默认配置检查失败：'+tested.output.slice(0,400),503);
       const reload=await runner(systemctl,['daemon-reload']);
