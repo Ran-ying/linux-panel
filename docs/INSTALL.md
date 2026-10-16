@@ -122,7 +122,7 @@ sudo bash scripts/install.sh --preflight \
 
 通过预检后，安装器克隆受信任的 Git 仓库到 `/opt/linux-panel`、安装和测试 Node 依赖、构建 Vue 前端，创建非 root `linuxpanel` 账户与 `/var/lib/linux-panel` 私有目录，交互设置管理员密码，把监听参数写进 `/etc/linux-panel/panel.env`，安装并启动 `linux-panel.service`。
 
-**不会执行** `apt upgrade`、替换现有 Node、修改 Nginx/Caddy、配置域名、证书或防火墙，也不会自动安装 root 更新 Broker。克隆/构建已开始后的失败可能留下部分文件，不能把它当作可无损重试的事务。每个首次安装仅初始化管理员一次。
+**不会执行** `apt upgrade`、替换现有 Node、修改 Nginx/Caddy、配置域名、证书或防火墙，也不会自动安装 root 更新 Broker。root 文件 Action 执行层默认关闭；首次安装时显式加 `--enable-privileged`，可在同一安装流程中安装并启用，无须手动运行第二个安装脚本。克隆/构建已开始后的失败可能留下部分文件，不能把它当作可无损重试的事务。每个首次安装仅初始化管理员一次。
 
 ### 4.4 首次安装在测试或构建阶段中断：安全续装
 
@@ -372,11 +372,13 @@ curl -i http://127.0.0.1:4188/api/auth/status
 
 ## 7. 引导安装与无人值守 CI
 
-首次使用可运行 `sudo bash scripts/setup.sh`，依次填写地址、端口、Node 路径和公开 Origin。向导先执行只读预检、展示实际命令，只有输入 `INSTALL` 才安装应用。它不会安装或启用 Broker，也不会打开 MCP 策略。
+首次使用可运行 `sudo bash scripts/setup.sh`，依次填写地址、端口、Node 路径、公开 Origin，并选择是否启用 root 文件管理。向导先执行只读预检、展示实际命令，只有输入 `INSTALL` 才安装应用。root 文件执行层默认关闭，仅明确选择时才作为首次安装的一部分安装；不会安装或启用更新 Broker，也不会打开 MCP 策略。
 
 - `bash scripts/setup.sh --plan --port 4888`：只打印命令。
 - `sudo bash scripts/setup.sh --check --node-bin /opt/node24/bin/node`：只读检查。
 - `sudo bash scripts/setup.sh --apply ...`：明确执行首次应用安装；已有实例仍拒绝覆盖。
+- `sudo bash scripts/setup.sh --apply --node-bin /opt/node24/bin/node --enable-privileged ...`：新装一次完成 Web + 独立 root 文件执行层安装（可继续带监听、Origin 等参数）。
+- Node 运行时不处于受 root 保护的路径时，可另传 `--privileged-node-bin /root-owned/node`；此参数不得在未启用 root 执行层时单独使用。
 
 CI 使用 `--admin-password-stdin` 从标准输入提供**一行 12–256 UTF-8 字节**密码。不要把密码写入命令参数、环境变量或仓库；使用 CI secret manager 提供的受保护输入流。安装器不把输入传给 Git/npm，初始化后丢弃内存中的值。普通终端安装仍使用两次隐藏输入。密码输入错误须修正后重试，不要删已有账号或状态。
 
@@ -388,7 +390,9 @@ CI 使用 `--admin-password-stdin` 从标准输入提供**一行 12–256 UTF-8 
 
 ## 可选：启用系统级文件管理
 
-先将已安装面板更新到包含 Issue #111 实现的 main，再在服务器以 root/sudo 执行一次：
+**全新安装**：在 `install.sh` 或 `setup.sh --apply` 命令中加入 `--enable-privileged`，会在普通 Web 已安装并启动后自动运行固定 root executor 安装器、再次检查服务运行状态。如果 root 安装失败，Web 应用可能已安装；请修复原因并重新执行下述独立命令，**不要重新运行首次安装覆盖已有账号**。不选择则 root 服务默认关闭。
+
+**已有安装**：先将已安装面板更新到包含 Issue #111 实现的 main，再在服务器以 root/sudo 执行一次：
 
 ```bash
 sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
