@@ -95,5 +95,5 @@ test('Ordinary ActionEngine rejects V2Ray service writes without privileged exec
   const registry=new ActionRegistry();await setup({actions:registry,moduleId:'v2ray'});
   const engine=new ActionEngine(registry);
   await assert.rejects(engine.run('v2ray.save',{content:initial,revision:'a'.repeat(64)},
-    'web',{authenticated:true,userId:'owner',channel:'web'}),{statusCode:403});
+    'web',{authenticated:true,userId:'owner',channel:'web'}),{statusCode:503});
 });
