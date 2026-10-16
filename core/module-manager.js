@@ -10,6 +10,30 @@ export class ModuleManager {
     this.loaded = [];
   }
 
+  /** Reorder currently installed business modules without losing positions
+   * reserved for temporarily missing modules. The panel platform is not a
+   * business module and never takes part in this preference. */
+  planOrder(ids) {
+    const present=this.loaded.filter(module=>module.id!=='panel').map(module=>module.id);
+    if(!Array.isArray(ids) || ids.length!==present.length ||
+       ids.some(id=>typeof id!=='string' || !present.includes(id)) ||
+       new Set(ids).size!==present.length)
+      throw Object.assign(new Error('Module order must list every installed module exactly once'),{statusCode:400});
+    const active=new Set(present);
+    let i=0;
+    return this.order.map(id=>active.has(id)?ids[i++]:id);
+  }
+
+  applyOrder(order) {
+    this.order=[...order];
+    this.loaded.sort((a,b)=>{
+      if(a.id==='panel')return 1;
+      if(b.id==='panel')return -1;
+      return this.order.indexOf(a.id)-this.order.indexOf(b.id);
+    });
+    return this.loaded;
+  }
+
   async loadAll(savedOrder) {
     // Removing all optional business modules must not disable Auth or Panel Settings.
     let entries;
