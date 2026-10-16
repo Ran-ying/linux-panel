@@ -1,3 +1,22 @@
+# 当前升级说明：系统 Action 合并（2026-10-16）
+
+| 旧接口 | 新接口 |
+| --- | --- |
+| system.info + storage.usage | system.info，新增 result.disk |
+| system.cpu + system.memory | system.resources，返回 result.cpu/result.memory |
+
+仅注册两个系统 Action，不保留旧别名；storage 模块删除。Web 直接按模块展示配置渲染；MCP 客户端刷新 tools/list，改用新 ID。旧 OAuth grant 无需逐工具重新授权。
+
+保存的 system.info 原字段优先保留；filesystem 从旧 storage.usage 读取；CPU/meminfo 从旧 system.cpu/system.memory 读取。统一保存写入当前 Action，并优先于旧配置。旧私有条目保留，不写公开日志；迁移不执行。升级后在命令页核对自定义值并刷新验证。
+
+新增通用 sections，其他模块的 metrics/progress/table 不受影响。Web raw 按原 key 展示 stdout/stderr/exitCode、底部 JSON 同源；MCP 保持解析后 result 契约。
+
+[状态](PROJECT-STATUS.md) · [模块规范](MODULE-DEVELOPMENT.md)
+
+---
+
+## 既有安装与升级流程
+
 # 更新与回滚 · Git 部署
 
 要求：`/opt/linux-panel/.git` 存在，systemd 的 `linux-panel.service` 是唯一运行实例，`/var/lib/linux-panel` 保存真实账号和 OAuth 数据。**不要使用 `scripts/install.sh` 覆盖已有部署。**
