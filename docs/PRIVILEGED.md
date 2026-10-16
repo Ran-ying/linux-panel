@@ -78,3 +78,9 @@ const action={
 CI 的 npm test 验证输入/未知操作/通道边界、HTTP 鉴权与 CSRF、socket 文件操作、离线 503 和普通 MCP 路径；专门的 sudo PANEL_ROOT_ACCEPTANCE=1 Node 测试仅在可丢弃 CI 主机执行，使用 /etc、/root 下随机临时目录，验证跨 UID/group、读取/修改/版本冲突、mode、用户名/组名及数字 UID/GID、重命名/递归删除，结束清理。浏览器在手机/桌面验证权限表单。
 
 服务器必须实际执行安装命令，确认服务身份、socket 与根端读写结果，才能宣称已激活。仅合并 PR、普通更新 success 或根端 CI 通过不代表目标服务器已有 root 能力。最终证据记录在 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+
+## 托管 Cron 定时任务
+
+新模块 `cron.list/save/remove` 沿用相同固定注册表/IPC/Web 身份校验，但**只能**读写 `/etc/cron.d/linux-panel` 且每条任务静态以 `linuxpanel` 用户运行。不得接受文件路径或任意运行身份，不修改其他人的 crontab。此功能不会变成任意 root Shell API。任务本身是持久的普通账户命令能力；保存配置不等于执行已成功。
+
+升级后必须由管理员再次运行 `install-privileged-executor.sh --enable` 安装更新的 root-owned Cron handler，普通 Git 更新不会改动特权包。没有 root 通道时此模块返回 503 而非绕过权限。见 [Cron 操作规范](CRON.md)。
