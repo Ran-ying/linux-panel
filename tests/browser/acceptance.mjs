@@ -238,7 +238,7 @@ try {
         assert.deepEqual(filtered.result.services.map(s=>s.name),['nginx.service']);
         assert.equal(filtered.result.count,1);
         assert.ok(filtered.result.subStates.includes('dead'),'choices must survive filtering');
-        await page.waitForFunction(()=>document.querySelector('.table-wrap tbody')?.textContent.includes('nginx.service'));
+        await page.waitForFunction(()=>document.querySelectorAll('.table-wrap tbody tr').length===1 && document.querySelector('.table-wrap tbody')?.textContent.includes('nginx.service'));
         assert.equal(await card.locator('.table-wrap tbody tr').count(),1);
         await card.getByRole('tab',{name:'命令',exact:true}).click();
         await page.screenshot({path:join(output,'service-filters-'+width+'.png'),fullPage:true});
