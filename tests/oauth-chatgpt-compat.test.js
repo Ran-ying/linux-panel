@@ -54,7 +54,7 @@ test('ChatGPT OAuth extension params and origin-only resource do not bypass PKCE
   assert.doesNotMatch(panelContentSecurityPolicy(),/https:\/\/chatgpt\.com/);
   assert.match(consent.body,/<meta name="referrer" content="origin">/);
   assert.match(consent.body,/system:read/);
-  assert.match(consent.body,/storage:read/);
+  assert.match(consent.body,/services:read/);
   assert.doesNotMatch(consent.body,/value="undefined"/);
   const rejected=await app.inject({method:'POST',url:'/oauth/authorize',
     headers:{cookie,origin,'content-type':'application/x-www-form-urlencoded'},
