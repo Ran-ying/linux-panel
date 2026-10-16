@@ -1,5 +1,8 @@
 # Linux Panel 当前状态
 
+> 进行中（未合并、未部署）：Nginx 站点概览首阶段见 `feat/nginx-site-inventory` 分支。它拟新增固定无参数的 `nginx.sites`、`nginx.check` 只读 Actions，以及 root executor 显式安装包中的受审查 handler；不可把该分支当作目前 main 或 VPS 已具备的功能。后续需 CI 与显式 root 端升级验收。参见 [Nginx 设计](NGINX.md)。
+
+
 更新：2026-10-16。v0.5.0 已发布，main 持续迭代。root 执行层已由 PR #112 合并进 main 697ff4698607008aa672c7db1164a39b9c4242b5，本轮补齐首次安装可选启用入口，关联 [Issue #111](https://github.com/Ran-ying/linux-panel/issues/111)。准确 CI、合并、普通 Web 部署与 root 激活证据统一见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
 ## 当前实现

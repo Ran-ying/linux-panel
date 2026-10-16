@@ -14,7 +14,7 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 14);
+  assert.equal(presentations.length, 16);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').renderer, 'metrics');
   assert.equal(configured.get('system.resources').layout,'grid');
@@ -23,13 +23,15 @@ test('each module owns its Web render configuration separately from Action metad
   assert.deepEqual(registry.list('web').filter(a=>a.moduleId==='system').map(a=>a.id),
     ['system.resources','system.info']);
   assert.equal(configured.get('services.list').renderer, 'table');
+  assert.equal(configured.get('nginx.sites').renderer, 'sections');
+  assert.equal(configured.get('nginx.check').loadOnEnter,false);
   assert.deepEqual(configured.get('services.list').inputs.map(f=>f.type),['text','select','select']);
   const cpu=configured.get('system.resources').sections[0];
   assert.equal(cpu.totalKey,undefined);
   assert.ok(cpu.details.some(f=>f.key==='availableParallelism'));
   assert.equal(configured.get('system.resources').refreshIntervalMs, 5000);
   assert.equal(configured.get('services.list').refreshIntervalMs, 0);
-  assert.ok(presentations.filter(p=>!p.embedded && p.actionId!=='terminal.execute').every(p=>p.loadOnEnter===true));
+  assert.ok(presentations.filter(p=>!p.embedded && p.actionId!=='terminal.execute' && p.actionId!=='nginx.check').every(p=>p.loadOnEnter===true));
   assert.equal(configured.get('terminal.execute').loadOnEnter,false);
   assert.equal(configured.get('terminal.execute').inputs[0].key,'command');
   const actions = registry.list('web');

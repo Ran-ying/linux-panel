@@ -48,6 +48,10 @@ Action 元数据显式指定 privileged.channels。ActionEngine 只在客户端�
 
 未配置 socket 时，模块普通 execute 生效。已配置但根服务离线时返回 503，不悄悄退回普通执行。预览不调用根端。Web 输出仍经原 Action Schema 校验。根端审计只记 Action ID、成功和错误码，Web 沿用现有 Action/actor 元数据审计，不记路径、参数、内容或原始输出。
 
+## Nginx 首批只读操作（进行中）
+
+Nginx 的两项只读 Action `nginx.sites` 与 `nginx.check` 计划在固定 root handler 中注册。站点发现只扫描固定配置根目录的标准位置，不提供任意文件路径输入；检查只允许 `/usr/sbin/nginx -t`，无 shell、reload、restart、写入等入口。普通身份可执行 fallback，但校验可能被证书文件权限阻止；启用 root executor 后 Web 通过审查的 root handler 运行，MCP 仍为普通身份。新的 root package 必须在代码部署后由操作员显式重装才生效，不通过更新 Broker 自动提权。详情见 [Nginx 模块](NGINX.md)。
+
 ## 文件模块
 
 九个标准 Actions 共用 file-contracts.js 和 createFileOperations：list/read/write/upload/create/rename/delete/chmod/chown。只有独立根 handler 以 privileged:true 建立实现，普通模块实现拒绝 UID 0。list 返回 accessMode:root/user 和真实 writeAccess。
