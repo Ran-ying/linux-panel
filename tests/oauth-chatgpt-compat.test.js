@@ -26,7 +26,7 @@ test('ChatGPT OAuth extension params and origin-only resource do not bypass PKCE
   const cookie=login.headers['set-cookie'].split(';')[0],csrf=login.json().csrf;
   assert.equal((await app.inject({method:'PUT',url:'/api/extensions/mcp/settings',
     headers:{cookie,'x-panel-csrf':csrf},
-    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true,'storage.usage':true}}})).statusCode,200);
+    payload:{enabled:true,registrationEnabled:true,tools:{'system.info':true,'system.resources':true}}})).statusCode,200);
   const reg=await app.inject({method:'POST',url:'/oauth/register',
     payload:{client_name:'ChatGPT test',redirect_uris:['https://chatgpt.com/connector_platform_oauth_redirect']}});
   assert.equal(reg.statusCode,201);
