@@ -1,5 +1,5 @@
 <script setup>
-import {ref,watch,onUnmounted} from 'vue';
+import {ref,computed,watch,onUnmounted} from 'vue';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true}
@@ -7,6 +7,13 @@ const props=defineProps({
 const emit=defineEmits(['unauthorized','listing-change']);
 const listing=ref(props.initialData),busy=ref(false),error=ref(''),message=ref('');
 const dialog=ref(null),deleteDialog=ref(null),draft=ref(null),removeTarget=ref(null);
+const systemEditDialog=ref(null),systemConfirmDialog=ref(null),systemDraft=ref(null),systemConfirm=ref(null);
+const systemSource=ref('all'),systemQuery=ref('');
+const sources=[['all','全部'],['system-crontab','系统 Crontab'],['cron.d','Cron 配置'],['user-crontab','用户 Crontab'],['periodic','周期脚本'],['systemd-timer','systemd Timers']];
+const systemRows=computed(()=>(listing.value.systemTasks??[]).filter(x=>
+  (systemSource.value==='all'||x.sourceType===systemSource.value)&&
+  (!systemQuery.value||[x.source,x.name,x.owner,x.expression,x.command].some(v=>String(v??'').toLowerCase().includes(systemQuery.value.trim().toLowerCase())))
+));
 let noticeTimer;
 watch(()=>props.initialData,value=>{listing.value=value;});
 onUnmounted(()=>clearTimeout(noticeTimer));
@@ -57,6 +64,38 @@ function toggle(record){
     await refresh();notify(record.enabled?'已停用':'已启用');
   });
 }
+function openSystemEdit(record){
+  if(record.control!=='cron'||!record.editable)return;
+  error.value='';
+  systemDraft.value={...record};
+  systemEditDialog.value?.showModal();
+}
+function closeSystemEdit(){if(busy.value)return;systemEditDialog.value?.close();systemDraft.value=null;error.value='';}
+function beginSystemAction(record,operation){
+  if(record.control==='none')return;
+  error.value='';systemConfirm.value={record,operation};
+  systemConfirmDialog.value?.showModal();
+}
+function closeSystemConfirm(){if(busy.value)return;systemConfirmDialog.value?.close();systemConfirm.value=null;error.value='';}
+function performSystemAction(){
+  return task(async()=>{
+    const {record,operation}=systemConfirm.value;
+    await request(props.operations.systemSet,{id:record.id,revision:record.revision,operation});
+    await refresh();
+    systemConfirmDialog.value?.close();systemConfirm.value=null;notify('系统任务操作成功');
+  });
+}
+function saveSystemEdit(){
+  return task(async()=>{
+    const record=systemDraft.value;
+    await request(props.operations.systemSet,{
+      id:record.id,revision:record.revision,operation:'edit',
+      expression:record.expression,command:record.command
+    });
+    await refresh();
+    systemEditDialog.value?.close();systemDraft.value=null;notify('已修改系统任务');
+  });
+}
 function remove(){
   return task(async()=>{
     await request(props.operations.remove,{revision:listing.value.revision,id:removeTarget.value.id});
@@ -70,11 +109,49 @@ function remove(){
     <div class="task-toolbar">
       <button type="button" :disabled="busy" @click="openForm(null)">新建任务</button>
       <button type="button" :disabled="busy" @click="task(refresh)">刷新数据</button>
-      <span class="muted small">共 {{ listing.count }} 项 · 执行用户 linuxpanel</span>
+      <span class="muted small">系统 {{ listing.systemCount??0 }} 项 · 面板任务 {{ listing.count }} 项</span>
     </div>
     <div v-if="message" class="task-notice" role="status">{{ message }}</div>
     <p v-if="error && !draft && !removeTarget" class="error" role="alert">{{ error }}</p>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
+    <h3 class="system-title">系统现有定时任务</h3>
+    <div class="task-toolbar system-filters">
+      <label>来源
+        <select v-model="systemSource" aria-label="按任务来源筛选">
+          <option v-for="[value,text] in sources" :key="value" :value="value">{{ text }}</option>
+        </select>
+      </label>
+      <label>筛选
+        <input v-model="systemQuery" placeholder="任务名称、用户或命令" aria-label="筛选系统任务" />
+      </label>
+      <span class="muted small">显示 {{ systemRows.length }} / {{ listing.systemCount??0 }} 项</span>
+    </div>
+    <p v-if="listing.systemWarnings?.length" class="muted small" role="status">
+      部分来源读取受限：{{ listing.systemWarnings.join('；') }}
+    </p>
+    <div class="table-wrap">
+      <table class="task-table">
+        <thead><tr><th>来源 / 任务</th><th>执行用户</th><th>计划 / 下次执行</th><th>命令</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr v-for="record in systemRows" :key="record.id">
+            <td><strong>{{ record.name }}</strong><span class="system-origin">{{ record.sourceType }} · {{ record.source }}</span></td>
+            <td>{{ record.owner }}</td>
+            <td><code>{{ record.expression }}</code><span v-if="record.nextRun" class="system-origin">{{ record.nextRun }}</span></td>
+            <td><code class="task-command">{{ record.command }}</code></td>
+            <td>{{ record.enabled?'已启用':'已停用' }}</td>
+            <td><div class="task-row-actions">
+              <button v-if="record.control==='cron'&&record.editable" type="button" :disabled="busy" @click="openSystemEdit(record)">编辑</button>
+              <button v-if="record.control!=='none'" type="button" :disabled="busy" @click="beginSystemAction(record,record.enabled?'disable':'enable')">{{ record.enabled?'停用':'启用' }}</button>
+              <button v-if="record.control==='cron'" type="button" :disabled="busy" @click="beginSystemAction(record,'remove')">删除</button>
+              <span v-if="record.control==='none'" class="muted small" :title="record.detail">只读</span>
+            </div></td>
+          </tr>
+          <tr v-if="!systemRows.length"><td colspan="6">该来源没有发现系统任务</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="system-title">Linux Panel 托管的定时任务</h3>
+    <p class="muted small">新建任务写入独立的 /etc/cron.d/linux-panel，以 linuxpanel 用户运行。系统原有任务显示在上方。</p>
     <div class="table-wrap">
       <table class="task-table">
         <thead><tr><th>名称</th><th>计划（服务器本地时间）</th><th>命令</th><th>状态</th><th>操作</th></tr></thead>
@@ -94,6 +171,35 @@ function remove(){
         </tbody>
       </table>
     </div>
+    <dialog ref="systemEditDialog" class="task-dialog" aria-labelledby="system-edit-title" @close="systemDraft=null">
+      <form v-if="systemDraft" class="task-form" @submit.prevent="saveSystemEdit">
+        <h3 id="system-edit-title">编辑现有系统 Cron 任务</h3>
+        <p class="muted small">{{ systemDraft.source }} · 执行用户 {{ systemDraft.owner }}。仅修改选中的任务行，不更改其他条目。</p>
+        <label>Cron 表达式（分 时 日 月 星期）
+          <input v-model="systemDraft.expression" required maxlength="100" :disabled="busy" />
+        </label>
+        <label>执行命令
+          <textarea v-model="systemDraft.command" rows="5" required maxlength="2000" :disabled="busy" />
+        </label>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <div class="task-dialog-actions">
+          <button type="button" :disabled="busy" @click="closeSystemEdit">取消</button>
+          <button type="submit" :disabled="busy">保存</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog ref="systemConfirmDialog" class="task-dialog" aria-labelledby="system-confirm-title" @close="systemConfirm=null">
+      <div v-if="systemConfirm" class="task-form">
+        <h3 id="system-confirm-title">确认修改系统任务</h3>
+        <p>确定{{ {enable:'启用',disable:'停用',remove:'删除'}[systemConfirm.operation] }} <strong>{{ systemConfirm.record.name }}</strong>？</p>
+        <p class="muted small">来源：{{ systemConfirm.record.source }}。执行用户：{{ systemConfirm.record.owner }}。这可能影响操作系统更新、维护或其他服务的调度。</p>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <div class="task-dialog-actions">
+          <button type="button" :disabled="busy" @click="closeSystemConfirm">取消</button>
+          <button type="button" :disabled="busy" @click="performSystemAction">确认操作</button>
+        </div>
+      </div>
+    </dialog>
     <dialog ref="dialog" class="task-dialog" aria-labelledby="task-form-title" @close="draft=null">
       <form v-if="draft" class="task-form" @submit.prevent="save">
         <h3 id="task-form-title">{{ draft.id?'编辑定时任务':'新建定时任务' }}</h3>
@@ -132,6 +238,10 @@ function remove(){
 </template>
 
 <style scoped>
+.system-title{margin:1.15rem 0 .7rem}
+.system-origin{display:block;margin-top:.25rem;font-size:.78rem;opacity:.7;overflow-wrap:anywhere}
+.system-filters label{display:flex;align-items:center;gap:.4rem}
+.system-filters input,.system-filters select{min-height:2.35rem;max-width:18rem;font:inherit}
 .task-toolbar,.task-row-actions,.task-dialog-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .task-toolbar{margin:.2rem 0 1rem}
 .task-toolbar button,.task-row-actions button,.task-dialog-actions button{min-height:2.35rem;font:inherit;padding:.35rem .8rem}
