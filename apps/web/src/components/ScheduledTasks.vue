@@ -276,8 +276,12 @@ function remove(){
 
 <style scoped>
 .scheduled-tasks{border:0;border-radius:0;box-shadow:none;background:transparent;padding:0;min-width:0}
-.task-group{border:0;border-radius:0;box-shadow:none;background:transparent;padding:0;min-width:0}
-.task-group + .task-group{margin-top:2rem;padding-top:1.2rem;border-top:1px solid var(--border-rule)}
+.task-group{
+  border:1px solid var(--border-panel);border-radius:14px;
+  background:var(--panel-bg);box-shadow:none;padding:18px;min-width:0;
+}
+.task-group + .task-group{margin-top:var(--content-space,24px)}
+@media(max-width:730px){.task-group{padding:14px}}
 .task-group-title{font-size:1.05rem;margin:0 0 .85rem;font-weight:650}
 .system-origin{display:block;margin-top:.25rem;font-size:.78rem;opacity:.7;overflow-wrap:anywhere}
 .system-filters label{display:flex;align-items:center;gap:.4rem}
