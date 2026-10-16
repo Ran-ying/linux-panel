@@ -752,7 +752,7 @@ try {
         const rects=nodes.map(n=>n.getBoundingClientRect());
         return {centerError:innerWidth>730?Math.abs(box.right+side.left-innerWidth):Math.abs(box.left+box.right-innerWidth),width:box.width, gutter:innerWidth>730?box.left-side.right:box.top-side.bottom,
           radius:getComputedStyle(sidebar).borderTopLeftRadius,
-          cards:nodes.map(n=>{const s=getComputedStyle(n);return {radius:s.borderTopLeftRadius,
+          cards:nodes.map(n=>{const s=getComputedStyle(n);return {radius:s.borderTopLeftRadius,flat:n.classList.contains('flat-action'),
             borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};}),
           gaps:rects.slice(1).map((r,i)=>r.top-rects[i].bottom)};
       });
@@ -760,8 +760,10 @@ try {
       assert.ok(frames.centerError<1,width+' sidebar and content must be centered together');
       assert.ok(Math.abs(frames.gutter-24)<1,width+' sidebar-to-content gap must be 24px');
       assert.ok(frames.cards.length>0,'module title/card frame missing');
-      assert.ok(frames.cards.every(c=>(width<=730?parseFloat(c.radius)>0:c.radius===frames.radius) && c.borders.every(b=>b==='1px')),
-        width+' '+name+' cards must match the rounded sidebar frame');
+      assert.ok(frames.cards.every(c=>c.flat
+          ? c.radius==='0px'&&c.borders.every(b=>b==='0px')
+          : (width<=730?parseFloat(c.radius)>0:c.radius===frames.radius)&&c.borders.every(b=>b==='1px')),
+        width+' '+name+' cards must follow declared rounded or flat chrome');
       assert.ok(frames.gaps.every(g=>Math.abs(g-24)<1),width+' '+name+' card gaps must match sidebar gap');
       await page.screenshot({path:join(output,width+'-'+names.indexOf(name)+'.png'),fullPage:true});
       if(name.trim()==='面板设置' && width===1280){
