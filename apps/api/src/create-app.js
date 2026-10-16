@@ -1,3 +1,4 @@
+import {TerminalSessions} from '../../../platform/terminal.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
@@ -293,6 +294,29 @@ export async function createApp({
     // Store only metadata, never input parameters, raw outputs or secrets.
     await store.mutate(state => addAudit(state, 'action.execute', request.panelIdentity.user.id, action.id));
     return result;
+  });
+
+  const terminals=new TerminalSessions({registry,auth,presentations});
+  app.addHook('onClose',async()=>terminals.shutdown());
+  app.post('/api/terminal/sessions',async request=>{
+    const body=request.body;
+    if(!body || Object.keys(body).some(key=>!['actionId','cols','rows'].includes(key)))throw badRequest('Invalid terminal request');
+    const result=await terminals.open(request.panelIdentity,readSessionCookie(request.headers.cookie),body);
+    await store.mutate(state=>addAudit(state,'terminal.open',request.panelIdentity.user.id,body.actionId));
+    return result;
+  });
+  app.get('/api/terminal/sessions/:id/output',async request=>
+    terminals.output(request.panelIdentity,request.params.id,Number(request.query.after ?? 0)));
+  app.post('/api/terminal/sessions/:id/input',async request=>{
+    if(!request.body || Object.keys(request.body).length!==1)throw badRequest('Invalid terminal input');
+    terminals.input(request.panelIdentity,request.params.id,request.body.data);return {ok:true};
+  });
+  app.post('/api/terminal/sessions/:id/resize',async request=>{
+    if(!request.body || Object.keys(request.body).some(key=>!['cols','rows'].includes(key)))throw badRequest('Invalid terminal resize');
+    terminals.resize(request.panelIdentity,request.params.id,request.body.cols,request.body.rows);return {ok:true};
+  });
+  app.delete('/api/terminal/sessions/:id',async request=>{
+    terminals.close(request.panelIdentity,request.params.id);return {ok:true};
   });
 
   app.setErrorHandler((error, request, reply) => {
