@@ -23,7 +23,7 @@ A compromised Web process may forge its own update marker, but cannot escape the
 
 - Anonymous or revoked clients cannot execute Actions; invalid Origin/CSRF/token/resource fails closed.
 - MCP/registration/high-risk update policies are opt-in; once enabled, global exposed reads intentionally become available to active grants. Revoke the whole grant or disable policy to remove access.
-- Write types are denied by default; only implemented proposal-only and exact broker-enqueue paths are allowed by trusted contexts.
+- Write types are denied by default; implemented proposal-only, exact broker-enqueue and terminal.execute user-shell paths require trusted contexts. The terminal capability runs only under the existing non-root service UID, and is available to valid trusted MCP grants when its module exposes it. It never grants root/Broker access.
 - TOTP replay is rejected, recovery codes are hashed and single-use, credential epoch changes invalidate old grants. TOTP is not phishing resistant.
 - Root worker/unit are installed root-owned outside the checkout; never place an updater-writable directory in root PATH.
 - No tokens, cookies, client IDs, private commands/outputs, authorization URLs or recovery secrets in public logs, commits, screenshots or Issues.
@@ -36,3 +36,7 @@ Registry/engine, command migration/raw-output, Web API/CSRF, OAuth/MCP global po
 No multi-user RBAC, distributed persistence, untrusted plugin isolation or independent third-party penetration test. No guarantee against compromised upstream/root, parser defects, proxy mistakes, phishing or resource exhaustion. Root Broker requires supported systemd (at least 240); platform/real-device QA coverage must be stated from actual evidence.
 
 [Security](security.md) · [Module contract](MODULE-DEVELOPMENT.md) · [Updater](UPDATER.md)
+
+## Interactive PTY boundary
+
+The Web PTY is a panel-owned transport, bound to the creating authenticated session, with Origin/CSRF on writes and live session checks on output. Revocation/idle/absolute lifetime and app shutdown clean up sessions; buffers/connections are bounded. Commands/output stay in response or memory, not persistent history/audit payloads. Python 3 PTY and xterm provide a real terminal; arbitrary commands may still mutate service-accessible data or launch their own background processes. This is not OS isolation.
