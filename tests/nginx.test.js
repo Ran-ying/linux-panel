@@ -10,6 +10,7 @@ import {dispatchPrivileged} from '../platform/privileged/server.js';
 import {ActionRegistry} from '../core/action-registry.js';
 import {ActionEngine} from '../core/action-engine.js';
 import {setup} from '../modules/nginx/index.js';
+import {NGINX_UNIT_CONTRACT} from '../platform/privileged/nginx-unit-contracts.js';
 
 test('fixed root unit allows address families and bind capability needed by nginx -t',async()=>{
   const unit=await readFile(new URL('../deployment/systemd/linux-panel-privileged.service',import.meta.url),'utf8');
@@ -111,6 +112,12 @@ test('Nginx safety: no arbitrary links, files, arguments, overlarge configs or e
     await assert.rejects(dispatchPrivileged({version:1,channel:'mcp',action:'nginx.'+name,input:{}},handlers),{statusCode:403});
   }
   assert.deepEqual(Object.keys(NGINX_CONTRACTS),['sites','read','check','apply']);
+  assert.equal(handlers.has('nginx.repairExecutor'),true);
+  for(const input of [{mode:'restart'}, {mode:'bad',confirmation:'APPLY_REVIEWED_NGINX_UNIT'},
+    {mode:'stage',confirmation:'APPLY_REVIEWED_NGINX_UNIT',path:'/etc/systemd/system/ssh.service'}]){
+    await assert.rejects(dispatchPrivileged({version:1,channel:'web',action:'nginx.repairExecutor',input},handlers),{statusCode:400});
+  }
+  assert.deepEqual(NGINX_UNIT_CONTRACT.inputSchema.required,['mode','confirmation']);
 });
 
 test('Nginx Web routes follow shared write policy; MCP only gets selected ordinary reads',async()=>{

@@ -17,6 +17,14 @@
 
 下一步：Nginx root 包显式升级与实际受控 Web 操作验收、真实 iPhone/Android QA、其它模块。Nginx 语法和 reload 检查不保证公网代理/HTTPS 上游的端到端健康；异常断电无 Nginx 独立恢复日志。没有不可信插件沙箱、多管理员或独立安全审计。
 
+## 固定 root systemd 权限在线修复
+
+在修复旧版 AF_UNIX 单元模板（PR #121）后，新增固定 `nginx.repairExecutor`：
+`status`（仅查有效权限）→ `stage`（写固定 root drop-in + daemon-reload，
+不重启）→ `restart`（只调度特权 executor 本身重启）。
+它不接收文件路径/单元名称/自定义命令，仍走现有 Web-only root Action。
+合并与现场激活需另行确认；只更新 Handler 不会自动修复旧 unit。
+
 ## 受控 root 包自动更新（PR #120）
 
 通用 manifest + 版本化 root-owned releases + 原子 current 切换，作为可信 origin/main Broker 部署事务的一部分，出错时与 Web 一并恢复。**2026-10-16 现场核查**：测试 VPS main 为 `8d31bbd55e061942f587cb0e778bfe88feece327`，版本化 root releases 中存在相同 SHA，`nginx.sites` 和 `cron.list` 已由实际 root socket 成功执行，说明一次性迁移已完成且 root Handler 同步生效。**已发现的独立缺陷**：已安装的特权 unit 仍只允许 `AF_UNIX`，实际 `nginx.check` 返回失败（禁止 AF_INET socket）；修复见后续 Nginx root unit 回归 PR。版本化 Handler 更新不等于 root unit 自动升级；现场修复必须对 unit 另行安全激活，不能靠重发普通 Broker 更新假定生效。

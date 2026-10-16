@@ -7,6 +7,7 @@ on:
       - 'scripts/admin-init.js'
       - 'scripts/verify-cron-executor.js'
       - 'scripts/verify-nginx-executor.js'
+      - 'scripts/verify-nginx-unit-repair.js'
       - 'deployment/systemd/linux-panel-privileged.service'
       - 'modules/nginx/**'
       - 'platform/privileged/**'
@@ -81,6 +82,13 @@ jobs:
           sudo test ! -e /etc/cron.d/linux-panel
           sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env PANEL_CRON_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-cron-executor.js
           sudo rm -f /etc/cron.d/linux-panel
+          # Simulate old installed systemd unit only on this disposable runner,
+          # then prove the fixed root socket Action can repair/restart itself.
+          sudo sed -i -e 's/RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6/RestrictAddressFamilies=AF_UNIX/' \
+            -e 's/ CAP_NET_BIND_SERVICE$//' /etc/systemd/system/linux-panel-privileged.service
+          sudo systemctl daemon-reload
+          sudo systemctl restart linux-panel-privileged.service
+          sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env CI=true PANEL_NGINX_UNIT_REPAIR_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-nginx-unit-repair.js
           sudo runuser -u linuxpanel -g linuxpanel -G linux-panel-privileged -- env CI=true PANEL_NGINX_ACCEPTANCE=1 /usr/lib/linux-panel-root-test-runtime/node /opt/linux-panel/scripts/verify-nginx-executor.js
           PANEL_TEST_PASSWORD_PATH="$secret" node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
