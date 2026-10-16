@@ -75,6 +75,11 @@ try {
         const ids=await page.evaluate(async()=>(await (await fetch('/api/actions')).json()).actions.map(a=>a.id));
         assert.ok(ids.includes('system.resources') && !ids.some(id=>['system.cpu','system.memory','storage.usage'].includes(id)));
         await page.locator('.action-card').first().getByRole('progressbar',{name:'磁盘占用',exact:true}).waitFor();
+        if(width===390){
+          const cards=page.locator('.action-card').first().locator('.metric-card');
+          assert.ok(Math.abs((await cards.nth(0).boundingBox()).y-(await cards.nth(1).boundingBox()).y)<1,
+            'section renderer must preserve the phone two-column metrics layout');
+        }
       }
       if([390,1280].includes(width) && ['系统概览','服务浏览'].includes(name.trim())){
         const card=page.locator('.action-card').first();
