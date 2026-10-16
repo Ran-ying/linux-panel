@@ -15,6 +15,7 @@ test('file paths must be absolute and root runtime refuses filesystem operations
 });
 test('file listing, text revisions, UTF-8 bounds, uploads and HTTP write guards',async t=>{
   if(process.getuid?.()===0){t.skip('requires ordinary service user');return;}
+  const previousMask=process.umask(0o077);t.after(()=>process.umask(previousMask));
   const folder=await mkdtemp(join(tmpdir(),'panel-files-'));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const dir=join(folder,'data');await mkdir(dir);
@@ -24,10 +25,11 @@ test('file listing, text revisions, UTF-8 bounds, uploads and HTTP write guards'
   assert.equal(listing.total,2);assert.equal(listing.nextOffset,1);
   assert.equal((await listFiles({path:dir,offset:1})).entries.length,1);
   await assert.rejects(readText({path:join(dir,'missing')}),{statusCode:404});
+  const originalMode=(await stat(path)).mode & 0o777;
   const initial=await readText({path});
   await writeText({path,content:'edited',revision:initial.revision});
   assert.equal(await readFile(path,'utf8'),'edited');
-  assert.equal((await stat(path)).mode & 0o777,0o640);
+  assert.equal((await stat(path)).mode & 0o777,originalMode);
   await assert.rejects(writeText({path,content:'stale',revision:initial.revision}),{statusCode:409});
   const binary=join(dir,'binary');await writeFile(binary,Buffer.from([0,255]));
   await assert.rejects(readText({path:binary}),{statusCode:415});
