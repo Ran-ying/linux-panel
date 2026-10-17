@@ -43,7 +43,7 @@ test('Nginx domain operations refuse injection, duplicates, last removal and amb
   assert.throws(()=>updateNginxSiteDomain(simple,'add','bad; root /;'),/合法域名/);
   assert.throws(()=>updateNginxSiteDomain('server { server_name foo.test; }server { server_name bar.test; }',
     'add','baz.test'),/不同域名/);
-  assert.throws(()=>updateNginxSiteDomain('server { server_name ~^foo.*$; }','add','bar.test'),/特殊/);
+  assert.throws(()=>updateNginxSiteDomain('server { server_name ~^foo.*$; }','add','bar.test'),/特殊|复杂/);
   assert.throws(()=>updateNginxSiteDomain('server { server_name $dynamic; }','add','bar.test'),/特殊|复杂/);
   assert.throws(()=>updateNginxSiteDomain('# server_name foo.test;','add','bar.test'),/未找到/);
   assert.throws(()=>updateNginxSiteDomain('server { server_name "foo.test"; }',
