@@ -2,9 +2,10 @@
 
 ## 当前项目状态（2026-10-17）
 
-- **最后实机部署确认**：main `9f131b7307f5a7643ddc1b5ff276b63f7f265308`（[PR #158](https://github.com/Ran-ying/linux-panel/pull/158)），Broker durable success、Web/privileged/V2Ray/update.path active、HTTP 200、Git clean。最新部署证据见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
-- 当前开发 PR（合并及上线需单独核验）：入站连接（inbounds）与出站连接（outbounds）**各自只显示自己的列表**，不再在现代分类内嵌入历史 inboundDetour/outboundDetour。旧版入站/出站只有在候选 JSON **存在对应键**时才作为左侧独立项目显示，操作仅针对各自数据。缺失字段不创建旧入口；已有 `null` 保留在独立 JSON 编辑器为 `null`，避免伪装为 `[]`。浏览器回归包含现代/旧版数据彼此隔离、编辑往返、动态显示/隐藏旧版导航和空值兼容。
-- 此迭代只改 Web 与测试及文档，不修改服务器当前 V2Ray 配置或 root Handler。主分支合并不等于 VPS 部署，必须查询 Broker 最终成功并独立验证服务。
+- **最近实机部署核验**：main `96ae79f5b8316ca3d3ad7ffc813f7b85a8e69de6`（[PR #159](https://github.com/Ran-ying/linux-panel/pull/159)）；受限 Broker durable success、Web/privileged/V2Ray/update.path active、HTTP 200、Git clean；后续交接见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 本开发 PR（未合并/部署前不应宣称上线）：左侧仅保留根 JSON **实际存在的支持字段**，顶部独立「添加字段」按钮打开模态选择，仅显式确认后创建缺失项，完整内容下方增加间距。现代/旧版出入站依然分开；原有未知字段不丢失。
+- 已检查 root V2Ray 保存逻辑：`read` 返回配置原始字节 SHA-256 作为 revision；`save` 对当前字节复算，不相等即 409 `配置已在外部修改`，防止并发覆盖。用户表示仅通过面板操作；不能断言外部程序修改。当前补强前端保存成功后立即记下新 revision，优先重读配置，摘要刷新失败不丢失同步；真正冲突仍保留草稿与 SHA 防覆盖。以一次成功保存后连续再次保存、模拟状态查询失败及真正冲突的浏览器/单元测试覆盖。**实际诱因尚未从用户现场页面确认**。
+- 本次仅 Web UI/测试/文档，不触碰真实 V2Ray 配置、root Handler 或其服务。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 
