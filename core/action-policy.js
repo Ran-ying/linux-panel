@@ -9,3 +9,11 @@ export function isUserFileAction(action) {
   return ['files.write','files.upload','files.create','files.rename','files.delete','files.chmod','files.chown'].includes(action?.id) && action.kind==='write' &&
     action.permission==='files:write' && action.executionPolicy==='user-files';
 }
+
+
+/** Fixed low-privilege bot interaction through a loopback-only Telegram MCP bridge. */
+export function isTelegramInteractionAction(action) {
+  return ['telegram.send','telegram.press'].includes(action?.id) &&
+    action.kind==='write' && action.permission==='telegram:write' &&
+    action.executionPolicy==='telegram-interaction' && action.exposure?.mcp===true;
+}
