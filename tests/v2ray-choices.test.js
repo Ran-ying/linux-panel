@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {v2raySelectChoices} from '../apps/web/src/components/v2ray-choices.js';
+import {v2raySelectChoices,v2rayRoutingTagChoices} from '../apps/web/src/components/v2ray-choices.js';
 
 test('V2Ray visual selectors offer common protocols, addresses and transport choices',()=>{
   for(const [kind,wanted] of [
@@ -27,4 +27,21 @@ test('existing custom protocol, external bind IP and transport values are preser
   const original=v2raySelectChoices('listen','0.0.0.0');
   assert.equal(original.filter(x=>x.value==='0.0.0.0').length,1);
   assert.throws(()=>v2raySelectChoices('untrusted-kind','x'),/未知/);
+});
+
+test('routing selectors include active and legacy inbound/outbound tags without renaming unknown values',()=>{
+  const config={
+    inbounds:[{tag:'front'},{tag:'front'},{tag:''},null],
+    inboundDetour:[{tag:'legacy-front'}],
+    outbounds:[{tag:'direct'},{tag:'proxy'}],
+    outboundDetour:[{tag:'legacy-out'}]
+  };
+  assert.deepEqual(v2rayRoutingTagChoices(config,'inbound','missing-front').map(x=>x.value),
+    ['','front','legacy-front','missing-front']);
+  assert.deepEqual(v2rayRoutingTagChoices(config,'outbound','retired-out').map(x=>x.value),
+    ['','direct','proxy','legacy-out','retired-out']);
+  assert.deepEqual(v2rayRoutingTagChoices(config,'outbound','proxy').map(x=>x.value),
+    ['','direct','proxy','legacy-out']);
+  assert.deepEqual(v2rayRoutingTagChoices({inbounds:null,outboundDetour:null},'inbound').map(x=>x.value),['']);
+  assert.throws(()=>v2rayRoutingTagChoices(config,'unknown','x'),/未知/);
 });

@@ -33,3 +33,22 @@ export function v2raySelectChoices(kind,current){
     value,label:value===''?'未设置（保留默认）':labels[value]??value
   }));
 }
+
+/**
+ * Route targets come from the CURRENT unsaved visual/JSON draft, including
+ * legacy detours. Keep unfamiliar values selected so changing views never
+ * silently rewrites a custom, stale, or future-version tag.
+ */
+export function v2rayRoutingTagChoices(config,direction,current=''){
+  if(direction!=='inbound'&&direction!=='outbound')throw Error('未知的路由标签类型');
+  const sources=direction==='inbound'?['inbounds','inboundDetour']:['outbounds','outboundDetour'];
+  const tags=new Set();
+  for(const key of sources){
+    if(!Array.isArray(config?.[key]))continue;
+    for(const entry of config[key]){
+      if(typeof entry?.tag==='string'&&entry.tag)tags.add(entry.tag);
+    }
+  }
+  if(typeof current==='string'&&current)tags.add(current);
+  return [{value:'',label:'请选择标签'},...[...tags].map(tag=>({value:tag,label:tag}))];
+}
