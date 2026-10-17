@@ -112,8 +112,9 @@ try {
     });
     // Synthetic V2Ray server: browser coverage without changing the CI host.
     let v2rayInstalled=true,v2rayRunning=true,v2rayEnabled=true,v2rayRevision=0;
-    let v2rayConfig=JSON.stringify({inbounds:[{tag:'socks',listen:'127.0.0.1',
-      port:10080,protocol:'socks'}],outbounds:[{tag:'direct',protocol:'freedom'}],
+    let v2rayConfig=JSON.stringify({inbounds:[{tag:'socks',listen:'192.0.2.55',
+      port:10080,protocol:'socks',streamSettings:{network:'ws',security:'tls'},
+      settings:{clients:[{id:'client-uuid-visible',level:1}]}}],outbounds:[{tag:'direct',protocol:'freedom'}],
       dns:{servers:['1.1.1.1']},routing:{rules:[]},inboundDetour:null,customUnknown:{value:true}},null,2);
     const v2rayCalls=[];
     const v2rayDigest=()=>String(v2rayRevision).padStart(64,'b');
@@ -988,6 +989,34 @@ try {
         assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
           'null legacy inboundDetour is skipped rather than breaking visual editing');
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),1);
+        const choices={
+          protocol:inboundVisual.getByRole('combobox',{name:'协议',exact:true}),
+          listen:inboundVisual.getByRole('combobox',{name:'监听地址',exact:true}),
+          network:inboundVisual.getByRole('combobox',{name:'传输网络',exact:true}),
+          security:inboundVisual.getByRole('combobox',{name:'传输安全',exact:true})
+        };
+        assert.equal(await choices.protocol.inputValue(),'socks');
+        assert.equal(await choices.listen.inputValue(),'192.0.2.55',
+          'uncommon current bind addresses must remain an actual selected option');
+        assert.equal(await choices.listen.locator('option[value="192.0.2.55"]').count(),1);
+        assert.equal(await choices.network.inputValue(),'ws');
+        assert.equal(await choices.security.inputValue(),'tls');
+        const clientId=inboundVisual.getByRole('textbox',{name:'客户端 1 · ID'});
+        assert.equal(await clientId.getAttribute('type'),'text',
+          'the client identifier must no longer be a password input');
+        assert.equal(await clientId.inputValue(),'client-uuid-visible');
+        await choices.protocol.selectOption('vmess');
+        await choices.listen.selectOption('127.0.0.1');
+        await choices.network.selectOption('tcp');
+        await choices.security.selectOption('none');
+        await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
+        let selectJson=JSON.parse(await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue())[0];
+        assert.deepEqual([selectJson.protocol,selectJson.listen,selectJson.streamSettings.network,
+          selectJson.streamSettings.security],['vmess','127.0.0.1','tcp','none'],
+          'selector edits round trip to candidate JSON without implicit server writes');
+        assert.equal(selectJson.settings.clients[0].id,'client-uuid-visible');
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1);
+        await viewToggle.getByRole('button',{name:'可视化'}).click();
         await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).fill('local-visual');
         await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).press('Tab');
         await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
@@ -1007,6 +1036,46 @@ try {
         await inboundVisual.getByText('旧版出站扩展（1）').waitFor();
         await inboundVisual.getByRole('button',{name:'移除旧版出站扩展1'}).click();
         await inboundVisual.getByText('旧版出站扩展（0）').waitFor();
+        // Force a tall editor in the disposable browser fixture to prove both controls
+        // are sticky during document scrolling, rather than merely styled as sticky.
+        await panel.locator('.v2ray-editor-content').evaluate(node=>{node.style.minHeight='2100px';});
+        await panel.evaluate(node=>{
+          const grid=node.querySelector('.v2ray-editor-layout');
+          const absolute=grid.getBoundingClientRect().top+scrollY;
+          scrollTo(0,absolute+260);
+        });
+        await page.waitForFunction(()=>{
+          const nav=document.querySelector('.v2ray-config-nav');
+          const head=document.querySelector('.v2ray-editor-header');
+          return nav&&head&&Math.abs(nav.getBoundingClientRect().top-parseFloat(getComputedStyle(nav).top))<3
+            && Math.abs(head.getBoundingClientRect().top-parseFloat(getComputedStyle(head).top))<3;
+        });
+        const fixedBefore=await panel.evaluate(node=>{
+          const nav=node.querySelector('.v2ray-config-nav'),head=node.querySelector('.v2ray-editor-header');
+          return {nav:nav.getBoundingClientRect().top,head:head.getBoundingClientRect().top,
+            navPosition:getComputedStyle(nav).position,headPosition:getComputedStyle(head).position,
+            scrollY};
+        });
+        await page.evaluate(()=>scrollBy(0,160));
+        const fixedAfter=await panel.evaluate(node=>({
+          nav:node.querySelector('.v2ray-config-nav').getBoundingClientRect().top,
+          head:node.querySelector('.v2ray-editor-header').getBoundingClientRect().top,
+          scrollY
+        }));
+        assert.equal(fixedBefore.navPosition,'sticky');
+        assert.equal(fixedBefore.headPosition,'sticky');
+        assert.ok(fixedAfter.scrollY>fixedBefore.scrollY+100,
+          'page content should actually scroll under sticky controls');
+        assert.ok(Math.abs(fixedAfter.nav-fixedBefore.nav)<3
+          && Math.abs(fixedAfter.head-fixedBefore.head)<3,
+          'both sidebar list and all five toolbar controls must remain visible while scrolling');
+        if(width===390){
+          const h=await page.locator('.module-sidebar').evaluate(node=>node.getBoundingClientRect().bottom);
+          assert.ok(fixedAfter.nav>=h+4&&fixedAfter.head>=h+4,
+            'sticky V2Ray controls must stay below the fixed mobile header');
+        }
+        await panel.locator('.v2ray-editor-content').evaluate(node=>{node.style.minHeight='';});
+        await page.evaluate(()=>scrollTo(0,0));
         await nav.getByRole('button',{name:'路由规则',exact:true}).click();
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         await inboundVisual.getByRole('button',{name:'新增规则'}).click();

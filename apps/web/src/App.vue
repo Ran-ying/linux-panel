@@ -162,7 +162,7 @@ onMounted(async () => {
   <LoginPanel v-if="!checking && !session" :initialized="initialized" @signed-in="signIn" />
   <main v-else class="layout" :aria-busy="checking">
     <p v-if="error" role="alert" class="error">{{ error }}</p>
-    <div class="columns">
+    <div class="columns" :style="{ '--mobile-header-height': mobileHeaderHeight + 'px' }">
       <div class="sidebar-slot" :style="{ '--mobile-header-height': mobileHeaderHeight + 'px' }">
       <aside class="module-sidebar" :class="{ 'is-expanded': mobileExpanded, 'is-panel-tab': mobileTab === 'panel' }"
         @keydown.esc="collapseNavigation">
