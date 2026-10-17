@@ -51,7 +51,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(registry.get('v2ray.read').exposure.mcp,false);
   assert.equal(registry.get('v2ray.install').exposure.mcp,false);
   const nginxActions=registry.list('web').filter(a=>a.moduleId==='nginx').map(a=>a.id);
-  assert.deepEqual(nginxActions.slice(1,4),['nginx.siteTls','nginx.siteTlsKey','nginx.status'],
+  assert.deepEqual(nginxActions.slice(1,4),['nginx.status','nginx.sites','nginx.certificates'],
     'Nginx visible Actions register in status → sites → SSL order after embedded repair');
   assert.deepEqual(presentations.filter(p=>p.actionId.startsWith('nginx.')&&!p.embedded)
     .map(p=>p.actionId),['nginx.status','nginx.sites'],
@@ -61,7 +61,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('nginx.status').operations.service,'nginx.service');
   assert.equal(configured.get('nginx.siteTls').renderer,'metrics');
   assert.equal(configured.get('nginx.certificates').embedded,true);
-  assert.equal(configured.get('nginx.sites').operations.certificates,'nginx.certificates');
+  assert.equal(configured.get('nginx.sites').operations.certificates,'nginx.siteTls');
   assert.equal(configured.get('nginx.sites').operations.renew,'nginx.siteTlsKey');
   assert.equal(configured.get('nginx.service').embedded,true);
   assert.equal(configured.get('nginx.renew').embedded,true);
