@@ -14,7 +14,7 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 29);
+  assert.equal(presentations.length, 33);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').renderer, 'metrics');
   assert.equal(configured.get('system.resources').layout,'grid');
@@ -39,7 +39,7 @@ test('each module owns its Web render configuration separately from Action metad
     assert.ok(action.outputSchema);
   }
   const mcpActions = registry.list('mcp');
-  assert.equal(mcpActions.length, actions.length-20);
+  assert.equal(mcpActions.length, actions.length-24);
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('v2ray.status').renderer,'v2ray-manager');
@@ -47,6 +47,18 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('v2ray.status').operations.install,'v2ray.install');
   assert.equal(registry.get('v2ray.read').exposure.mcp,false);
   assert.equal(registry.get('v2ray.install').exposure.mcp,false);
+  const nginxActions=registry.list('web').filter(a=>a.moduleId==='nginx').map(a=>a.id);
+  assert.deepEqual(nginxActions.slice(1,4),['nginx.status','nginx.sites','nginx.certificates'],
+    'Nginx visible Actions register in status → sites → SSL order after embedded repair');
+  assert.deepEqual(presentations.filter(p=>p.actionId.startsWith('nginx.')&&!p.embedded)
+    .map(p=>p.actionId),['nginx.status','nginx.sites','nginx.certificates']);
+  assert.equal(configured.get('nginx.status').renderer,'nginx-service');
+  assert.equal(configured.get('nginx.status').operations.service,'nginx.service');
+  assert.equal(configured.get('nginx.certificates').renderer,'nginx-certificates');
+  assert.equal(configured.get('nginx.certificates').operations.renew,'nginx.renew');
+  assert.equal(configured.get('nginx.service').embedded,true);
+  assert.equal(configured.get('nginx.renew').embedded,true);
+  assert.equal(registry.get('nginx.certificates').exposure.mcp,false);
   assert.equal(configured.get('nginx.sites').renderer,'managed-configs');
   assert.equal(configured.get('nginx.sites').operations.apply,'nginx.apply');
   assert.equal(registry.get('nginx.apply').exposure.mcp,false);
