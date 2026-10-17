@@ -639,8 +639,8 @@ try {
           'remove the redundant Collapse button from selected website details');
         assert.equal(await siteInfo.getByRole('button',{name:'编辑 fixture-site'}).count(),0);
         const detailHeader=siteInfo.locator('.config-detail-heading');
-        assert.equal(await detailHeader.getByRole('button',{name:'删除 fixture-site'}).count(),1,
-          'Delete Configuration must appear to the right of the website name');
+        assert.equal(await detailHeader.getByRole('button',{name:'删除 fixture-site'}).count(),0,
+          'website title must no longer contain a pill-style Delete control');
         const facts=siteInfo.locator('.config-site-facts');
         assert.deepEqual(await facts.locator(':scope > *').evaluateAll(elements=>
           elements.map(el=>el.textContent.trim().slice(0,4))),
@@ -658,6 +658,53 @@ try {
         assert.deepEqual(await facts.locator('.config-site-domain-row .config-domain').allTextContents(),
           ['fixture.test','www.fixture.test']);
         assert.ok((await siteInfo.innerText()).includes('已停用'));
+        const statusActions=siteInfo.locator('.config-site-state-actions');
+        assert.deepEqual(await statusActions.locator('button').allTextContents(),['启用','删除'],
+          'a stopped website must offer text links for Enable and Delete beside its status');
+        const siteTypography=await facts.evaluate(node=>{
+          const style=el=>getComputedStyle(el);
+          const label=node.querySelector('.config-site-label');
+          const value=node.querySelector('.config-site-domain-row .config-domain');
+          const actions=[...node.querySelectorAll('.config-site-text-action')];
+          const layout=node.querySelector('.config-site-domain-row');
+          const removal=layout.querySelector('button');
+          const status=node.querySelector('.config-site-state-row');
+          return {
+            labelWeight:style(label).fontWeight,valueWeight:style(value).fontWeight,
+            labelFont:style(label).fontSize,valueFont:style(value).fontSize,
+            actions:actions.map(el=>({
+              weight:style(el).fontWeight,size:style(el).fontSize,
+              color:style(el).color,border:style(el).borderTopWidth,
+              radius:style(el).borderTopLeftRadius,
+              background:style(el).backgroundColor,
+              decoration:style(el).textDecorationLine
+            })),
+            valueColor:style(value).color,
+            removalRight:removal.getBoundingClientRect().right,
+            statusRight:status.getBoundingClientRect().right
+          };
+        });
+        assert.equal(siteTypography.labelWeight,'600');
+        assert.equal(siteTypography.valueWeight,'400');
+        assert.equal(siteTypography.labelFont,siteTypography.valueFont);
+        assert.ok(siteTypography.actions.length>=4);
+        for(const action of siteTypography.actions){
+          assert.equal(action.weight,'400');
+          assert.equal(action.size,siteTypography.valueFont);
+          assert.equal(action.color,siteTypography.valueColor);
+          assert.equal(action.border,'0px');
+          assert.equal(action.radius,'0px');
+          assert.equal(action.background,'rgba(0, 0, 0, 0)');
+          assert.ok(action.decoration.includes('underline'));
+        }
+        assert.ok(Math.abs(siteTypography.removalRight-siteTypography.statusRight)<2,
+          'domain Remove must be flush right like website status actions');
+        await statusActions.getByRole('button',{name:'启用 fixture-site'}).click();
+        const inlineEnableConfirm=page.getByRole('dialog',{name:'启用网站'});
+        await inlineEnableConfirm.waitFor();
+        assert.deepEqual(nginxToggleActions,[],'status text action must not write before confirmation');
+        await inlineEnableConfirm.getByRole('button',{name:'取消'}).click();
+        await inlineEnableConfirm.waitFor({state:'hidden'});
         const nginxConfig=detailCards.nth(1);
         assert.equal(await nginxConfig.getByRole('button',{name:'编辑 fixture-site'}).count(),1,
           'Edit now belongs to the Nginx configuration card');
@@ -815,6 +862,15 @@ try {
         await enableConfirm.waitFor({state:'hidden'});
         assert.equal(await enabled.isChecked(),true,'confirmed enable checks the box');
         assert.deepEqual(nginxToggleActions,['enable']);
+        assert.deepEqual(await statusActions.locator('button').allTextContents(),['停用','删除'],
+          'status action must switch to Stop for an enabled website');
+        await statusActions.getByRole('button',{name:'停用 fixture-site'}).click();
+        const inlineDisableConfirm=page.getByRole('dialog',{name:'停用网站'});
+        await inlineDisableConfirm.waitFor();
+        assert.deepEqual(nginxToggleActions,['enable'],
+          'status Stop also requires confirmation, without an implicit write');
+        await inlineDisableConfirm.getByRole('button',{name:'取消'}).click();
+        await inlineDisableConfirm.waitFor({state:'hidden'});
         await enabled.click();
         const disableConfirm=page.getByRole('dialog',{name:'停用网站'});
         await disableConfirm.waitFor();
