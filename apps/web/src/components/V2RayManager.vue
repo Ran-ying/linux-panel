@@ -13,28 +13,29 @@ const section=ref('full'),sectionText=ref(''),sectionOriginal=ref(''),editorMode
 const confirm=ref(null),confirmDialog=ref(null);
 const renameDialog=ref(null),renameTarget=ref(null),renameTag=ref('');
 const addFieldDialog=ref(null),newField=ref('');
-function openRouteRename(source,index,entry){
-  if(busy.value||source!=='routing')return;
+const renameSubject=computed(()=>renameTarget.value?.source==='routing'?'路由规则':'连接');
+function openEntryRename(source,index,entry){
+  if(busy.value||!VISUAL_SECTIONS.has(source))return;
   renameTarget.value={source,index};
-  // The rule's tag is independent from its outboundTag, which is merely
-  // a heading fallback. Never prefill this editor with an outbound label.
+  // Use only the literal tag, never the heading's protocol/outboundTag fallback.
+  // Both current and legacy inbound/outbound entries use the same workflow.
   renameTag.value=typeof entry.tag==='string'?entry.tag:'';
   nextTick(()=>renameDialog.value?.showModal());
 }
-function closeRouteRename(){renameDialog.value?.close();}
-function submitRouteRename(){
+function closeEntryRename(){renameDialog.value?.close();}
+function submitEntryRename(){
   if(busy.value||!renameTarget.value)return;
   const {source,index}=renameTarget.value;
   try{
     const entry=visualEntries(parse(),source)[index];
-    if(!entry||typeof entry!=='object')throw Error('规则已不存在');
+    if(!entry||typeof entry!=='object')throw Error('条目已不存在');
     const value=renameTag.value;
     if((entry.tag??'')!==value){
-      // Empty names delete tag, but never touch outboundTag or the rule number.
+      // Clearing removes only tag, never protocol, route target or any other field.
       const changed=changeVisual(source,'set',[index,'tag'],value);
       if(!changed)return;
     }
-    closeRouteRename();
+    closeEntryRename();
   }catch(e){error.value=e.message;}
 }
 const routeExpanded=ref({}),routeConditionSelection=ref({});
@@ -370,8 +371,9 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                   <div class="v2ray-visual-entry-heading">
                     <strong>{{ section==='routing'?'规则': '连接' }} {{ i+1 }} · {{ entry.tag||entry.outboundTag||entry.protocol||'未命名' }}</strong>
                     <div class="v2ray-visual-entry-actions">
-                      <button v-if="section==='routing'" type="button" :disabled="busy"
-                        :aria-label="'重命名路由规则 '+(i+1)" @click="openRouteRename(group.key,i,entry)">重命名</button>
+                      <button type="button" :disabled="busy"
+                        :aria-label="group.key==='routing'?'重命名路由规则 '+(i+1):'重命名'+group.label+(i+1)"
+                        @click="openEntryRename(group.key,i,entry)">重命名</button>
                       <button type="button" :disabled="busy"
                         :aria-label="'移除'+group.label+(i+1)" @click="visualRemove(group.key,[i])">移除</button>
                     </div>
@@ -448,10 +450,6 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                   </div>
                   <template v-else>
                     <div class="v2ray-visual-fields">
-                      <label>标签（tag）
-                        <input :value="entry.tag??''" :disabled="busy"
-                          @change="visualSet(group.key,[i,'tag'],$event)" />
-                      </label>
                       <label>协议（protocol）
                         <select :value="entry.protocol??''" :disabled="busy"
                           @change="visualSet(group.key,[i,'protocol'],$event)">
@@ -597,16 +595,16 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
         </div>
       </form>
     </dialog>
-    <dialog ref="renameDialog" class="v2ray-dialog" aria-labelledby="v2ray-route-rename-title"
+    <dialog ref="renameDialog" class="v2ray-dialog" aria-labelledby="v2ray-entry-rename-title"
       @close="renameTarget=null">
-      <form class="v2ray-dialog-content" @submit.prevent="submitRouteRename">
-        <h3 id="v2ray-route-rename-title">重命名路由规则</h3>
-        <label class="v2ray-rename-label" for="v2ray-rule-tag-input">规则标签（tag）
-          <input id="v2ray-rule-tag-input" v-model="renameTag" type="text"
-            autocomplete="off" :disabled="busy" aria-label="规则标签（tag）" />
+      <form class="v2ray-dialog-content" @submit.prevent="submitEntryRename">
+        <h3 id="v2ray-entry-rename-title">重命名{{ renameSubject }}</h3>
+        <label class="v2ray-rename-label" for="v2ray-entry-tag-input">{{ renameSubject }}标签（tag）
+          <input id="v2ray-entry-tag-input" v-model="renameTag" type="text"
+            autocomplete="off" :disabled="busy" :aria-label="renameSubject+'标签（tag）'" />
         </label>
         <div class="v2ray-toolbar">
-          <button type="button" :disabled="busy" @click="closeRouteRename">取消</button>
+          <button type="button" :disabled="busy" @click="closeEntryRename">取消</button>
           <button type="submit" class="primary" :disabled="busy">确认</button>
         </div>
       </form>
