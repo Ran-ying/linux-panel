@@ -159,7 +159,7 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       }
       if(item.renderer==='managed-configs'){
         for(const [name,kind] of [['read','read'],['apply','write'],['check','read'],
-          ['certificates','read'],['renew','write'],['saveTls','write']]){
+          ['certificates','read'],['renew','write'],['saveTls','write'],['addresses','read']]){
           const id=item.operations?.[name],target=visible.get(id);
           if(typeof id!=='string'||!id.startsWith(module.id+'.')||!target||target.kind!==kind)
             throw new Error('Managed config operation must refer to exposed module Action');

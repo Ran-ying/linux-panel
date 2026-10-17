@@ -17,7 +17,7 @@ export async function setup({actions,moduleId}){
   });
   // Registration order is the visible Nginx Action order:
   // service status first, existing website editor second, certificates last.
-  const actionOrder=['status','sites','certificates','service','renew','read','apply','check'];
+  const actionOrder=['status','sites','certificates','service','renew','read','apply','check','listenAddresses'];
   for(const name of actionOrder){
     const contract=NGINX_CONTRACTS[name];
     const write=['apply','service','renew'].includes(name);

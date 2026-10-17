@@ -14,7 +14,7 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 39);
+  assert.equal(presentations.length, 40);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').renderer, 'metrics');
   assert.equal(configured.get('system.resources').layout,'grid');
@@ -42,7 +42,7 @@ test('each module owns its Web render configuration separately from Action metad
     assert.ok(action.outputSchema);
   }
   const mcpActions = registry.list('mcp');
-  assert.equal(mcpActions.length, actions.length-28);
+  assert.equal(mcpActions.length, actions.length-29);
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('v2ray.status').renderer,'v2ray-manager');
@@ -68,6 +68,9 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(registry.get('nginx.certificates').exposure.mcp,false);
   assert.equal(configured.get('nginx.sites').renderer,'managed-configs');
   assert.equal(configured.get('nginx.sites').operations.apply,'nginx.apply');
+  assert.equal(configured.get('nginx.sites').operations.addresses,'nginx.listenAddresses');
+  assert.equal(configured.get('nginx.listenAddresses').embedded,true);
+  assert.equal(registry.get('nginx.listenAddresses').exposure.mcp,false);
   assert.equal(registry.get('nginx.apply').exposure.mcp,false);
   assert.equal(configured.get('nginx.repairExecutor').embedded,true);
   assert.equal(registry.get('nginx.repairExecutor').exposure.mcp,false);

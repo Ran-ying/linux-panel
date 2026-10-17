@@ -24,6 +24,10 @@ export const NGINX_CONTRACTS={
   renew:{title:'续期 SSL 证书',description:'仅对已存在且符合安全名称的 Certbot 证书尝试到期续期；检验并重载 Nginx。',
     inputSchema:object({name}),
     outputSchema:object({ok:{type:'boolean'},status:text(240),output:text(4000),reloaded:{type:'boolean'}})},
+  listenAddresses:{title:'Nginx 本机监听 IP',description:'列出当前服务器上的 IPv4 网卡地址及通配/回环地址，供新建网站选择。',
+    inputSchema:object({}),
+    outputSchema:object({addresses:{type:'array',maxItems:64,items:object({
+      address:text(45),interface:text(100)})}})},
   sites:{title:'Nginx 网站管理',description:'查看 Nginx 站点配置、启用状态与指令摘要。',
     inputSchema:object({}),
     outputSchema:object({source:text(40),count:{type:'integer',minimum:0},enabledCount:{type:'integer',minimum:0},
