@@ -280,13 +280,13 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       <textarea rows="2" :value="listString(entry.domain)" :disabled="busy"
                         @change="visualSet(group.key,[i,'domain'],$event,'list')" />
                     </label>
-                    <label>IP 条件
-                      <textarea rows="2" :value="listString(entry.ip)" :disabled="busy"
-                        @change="visualSet(group.key,[i,'ip'],$event,'list')" />
-                    </label>
                     <label>协议条件
                       <textarea rows="2" :value="listString(entry.protocol)" :disabled="busy"
                         @change="visualSet(group.key,[i,'protocol'],$event,'list')" />
+                    </label>
+                    <label class="v2ray-routing-ip-field">IP 条件
+                      <textarea rows="2" :value="listString(entry.ip)" :disabled="busy"
+                        @change="visualSet(group.key,[i,'ip'],$event,'list')" />
                     </label>
                   </div>
                   <template v-else>
@@ -491,6 +491,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr));
   gap:10px;align-items:end;min-width:0}
 .v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem}
+.v2ray-visual-fields .v2ray-routing-ip-field{grid-column:1/-1}
 .v2ray-visual-fields input,.v2ray-visual-fields textarea,.v2ray-visual-fields select{
   box-sizing:border-box;width:100%;min-width:0;padding:8px;
   border-radius:8px;border:1px solid var(--input-border);
