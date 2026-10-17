@@ -77,6 +77,21 @@ test('V2Ray save preserves unknown fields and protects from concurrent editing',
   await assert.rejects(ops.save({revision:before.revision,content:initial}),{statusCode:409});
   assert.equal((await ops.service({operation:'stop'})).ok,true);
 });
+test('V2Ray may be saved repeatedly with each returned revision; stale revisions remain rejected',async t=>{
+  const {ops}=await fixture(t);
+  const before=await ops.read();
+  const first=before.content.replace('"warning"','"info"');
+  const afterFirst=await ops.save({content:first,revision:before.revision});
+  assert.equal(afterFirst.ok,true);
+  const second=first.replace('"info"','"debug"');
+  const afterSecond=await ops.save({content:second,revision:afterFirst.revision});
+  assert.equal(afterSecond.ok,true);
+  assert.equal((await ops.read()).content,second);
+  assert.notEqual(afterFirst.revision,afterSecond.revision);
+  await assert.rejects(
+    ops.save({content:before.content,revision:before.revision}),{statusCode:409});
+});
+
 test('Invalid candidate and failed restart restore original file and mode',async t=>{
   let badTest=true,failRestart=false;
   const {ops,root}=await fixture(t,(p,args)=>{
