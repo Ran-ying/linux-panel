@@ -10,7 +10,7 @@ export class PrivilegedActionClient {
     if(context?.authenticated!==true || !context.userId || !action.privileged?.channels?.includes(context.channel))
       throw failure('没有此 root Action 的通道授权',403);
     return new Promise((resolve,reject)=>{
-      const limit=action.id==='v2ray.install'?180000:this.timeoutMs;
+      const limit=['v2ray.install','nginx.renew'].includes(action.id)?180000:this.timeoutMs;
       const socket=createConnection(this.socketPath);let bytes=0,buffer='',finished=false;
       const done=(error,result)=>{if(finished)return;finished=true;socket.destroy();error?reject(error):resolve(result);};
       socket.setTimeout(limit,()=>done(failure('root 执行通道超时')));
