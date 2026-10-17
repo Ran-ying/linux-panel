@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'logs', 'gauge', 'files', 'scheduled-tasks', 'managed-configs', 'v2ray-manager', 'nginx-service']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'logs', 'gauge', 'files', 'scheduled-tasks', 'managed-configs', 'certbot-manager', 'v2ray-manager', 'nginx-service']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer', 'number']);
 
 function validateView(view,schema,actionId,depth=0) {
@@ -35,6 +35,10 @@ function validateView(view,schema,actionId,depth=0) {
         if(schema.count?.type!=='integer' || schema.enabledCount?.type!=='integer' ||
           !site || ['name','location','enabled','serverNames','listens','file','editable'].some(key=>!site[key]))
           throw new Error('Invalid managed-configs result schema');
+      } else if (view.renderer === 'certbot-manager') {
+        const cert=schema.certificates?.items?.properties;
+        if(schema.count?.type!=='integer'||!cert||!['name','authenticator','validTo'].every(k=>cert[k]))
+          throw new Error('Invalid Certbot manager schema');
       } else if (view.renderer === 'nginx-service') {
         if(schema.installed?.type!=='boolean'||schema.active?.type!=='boolean'||
           schema.enabled?.type!=='boolean'||schema.configOk?.type!=='boolean')
@@ -155,7 +159,7 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
       }
       if(item.renderer==='managed-configs'){
         for(const [name,kind] of [['read','read'],['apply','write'],['check','read'],
-          ['certificates','read'],['renew','write'],['certbotList','read'],['certbotRenew','write']]){
+          ['certificates','read'],['renew','write'],['saveTls','write']]){
           const id=item.operations?.[name],target=visible.get(id);
           if(typeof id!=='string'||!id.startsWith(module.id+'.')||!target||target.kind!==kind)
             throw new Error('Managed config operation must refer to exposed module Action');
@@ -163,6 +167,11 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
         if(item.labels!==undefined && (!item.labels || typeof item.labels!=='object' ||
           Object.values(item.labels).some(value=>typeof value!=='string'||value.length>80)))
           throw new Error('Invalid managed config labels');
+      }
+      if(item.renderer==='certbot-manager'){
+        const target=visible.get(item.operations?.renew);
+        if(item.actionId!=='nginx.certbotList'||target?.id!=='nginx.certbotRenew'||target.kind!=='write')
+          throw new Error('Invalid Nginx Certbot renewal Action reference');
       }
       if(item.renderer==='nginx-service'){
         const required=[['service','write'],['check','read']];
