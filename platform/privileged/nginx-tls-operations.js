@@ -87,35 +87,7 @@ export function createNginxTlsOperations({root='/etc/nginx',requireRoot=true,roo
     return {ref,certificatePem,privatePem,revision:revisionFor(ref,certificatePem,privatePem)};
   }
   async function safeTarget(path){
-    if(typeof path!=='string'||!path.startsWith('/')||path.includes('\0')||
-      path.includes('
-    const refs=await reference(name),pairs=[],warnings=[];
-    for(const ref of refs){
-      try{
-        const certificatePem=await fileRead(ref.certificatePath);
-        const publicPem=new X509Certificate(certificatePem).publicKey.export({format:'pem',type:'spki'});
-        const privatePem=await fileRead(ref.privateKeyPath,{privateKey:true});
-        pairs.push({certificatePath:ref.certificatePath,privateKeyPath:ref.privateKeyPath,
-          publicPem,certificatePem,revision:revisionFor(ref,certificatePem,privatePem),
-          privateKeyConfigured:!!ref.privateKeyPath,status:'已配置'});
-      }catch(e){
-        warnings.push('证书路径不能读取或解析：'+e.message.slice(0,150));
-        pairs.push({...ref,publicPem:'',certificatePem:'',revision:'',privateKeyConfigured:!!ref.privateKeyPath,status:'无法读取或解析公有证书'});
-      }
-    }
-    if(!refs.length)warnings.push('此 Nginx 站点文件没有直接声明 ssl_certificate；可能通过 include 或上层配置继承。');
-    return {name,pairs,warnings};
-  }
-  async function siteTlsKey({name,index}){
-    if(!Number.isInteger(index)||index<0||index>11)throw error('证书序号无效');
-    const refs=await reference(name),item=refs[index];
-    if(!item||!item.privateKeyPath)throw error('未找到已配置的私钥引用',404);
-    const privatePem=await fileRead(item.privateKeyPath,{privateKey:true});
-    return {name,index,privatePem};
-  }
-  return {siteTls,siteTlsKey,saveTls};
-}
-)||path.length>512)throw error('不支持的 TLS 文件路径',422);
+    if(typeof path!=='string'||!path.startsWith('/')||path.includes('$')||path.length>512)throw error('不支持的 TLS 文件路径',422);
     const target=await realpath(path);
     if(!roots.some(dir=>within(target,dir)))throw error('证书文件不在允许的目录',403);
     const state=await stat(target),parent=await lstat(dirname(target));
@@ -233,11 +205,13 @@ export function createNginxTlsOperations({root='/etc/nginx',requireRoot=true,roo
       try{
         const certificatePem=await fileRead(ref.certificatePath);
         const publicPem=new X509Certificate(certificatePem).publicKey.export({format:'pem',type:'spki'});
+        const privatePem=await fileRead(ref.privateKeyPath,{privateKey:true});
         pairs.push({certificatePath:ref.certificatePath,privateKeyPath:ref.privateKeyPath,
-          publicPem,certificatePem,privateKeyConfigured:!!ref.privateKeyPath,status:'已配置'});
+          publicPem,certificatePem,revision:revisionFor(ref,certificatePem,privatePem),
+          privateKeyConfigured:!!ref.privateKeyPath,status:'已配置'});
       }catch(e){
         warnings.push('证书路径不能读取或解析：'+e.message.slice(0,150));
-        pairs.push({...ref,publicPem:'',certificatePem:'',privateKeyConfigured:!!ref.privateKeyPath,status:'无法读取或解析公有证书'});
+        pairs.push({...ref,publicPem:'',certificatePem:'',revision:'',privateKeyConfigured:!!ref.privateKeyPath,status:'无法读取或解析公有证书'});
       }
     }
     if(!refs.length)warnings.push('此 Nginx 站点文件没有直接声明 ssl_certificate；可能通过 include 或上层配置继承。');
@@ -250,5 +224,5 @@ export function createNginxTlsOperations({root='/etc/nginx',requireRoot=true,roo
     const privatePem=await fileRead(item.privateKeyPath,{privateKey:true});
     return {name,index,privatePem};
   }
-  return {siteTls,siteTlsKey};
+  return {siteTls,siteTlsKey,saveTls};
 }
