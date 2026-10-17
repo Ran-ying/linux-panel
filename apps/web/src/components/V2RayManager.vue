@@ -243,7 +243,18 @@ function save(){return wrap(async()=>{
   }
   output.value=result.output;notice.value=result.message;
   if(!result.ok){error.value=result.message;return;}
-  await refreshStatus();await load();
+  // The backend has now committed this revision. Remember it immediately.
+  // A transient status refresh failure must not strand the next Save on the
+  // previous SHA (even though this save has succeeded).
+  revision.value=result.revision;
+  original.value=draft.value;
+  try{await load();}
+  catch{
+    notice.value=result.message+'；重新读取暂不可用，本页已保存新的版本标识';
+    return;
+  }
+  try{await refreshStatus();}
+  catch{notice.value=result.message+'；状态摘要刷新失败，可稍后手动刷新';}
 });}
 function ask(operation){
   if(busy.value)return;
