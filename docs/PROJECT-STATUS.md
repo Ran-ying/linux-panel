@@ -1,10 +1,10 @@
 # Linux Panel 当前状态
 
-## 当前部署与 UI 开发状态（2026-10-17）
+## 当前部署及下拉框布局修正（2026-10-17）
 
-- 最近独立实机验收：Linux Panel `0.5.0`，Git main `46f71713ee22e8562296ecd24b702c1bb73b75a9`（[PR #152](https://github.com/Ran-ying/linux-panel/pull/152) 合并并部署）；Web/root 执行器/V2Ray/更新 watcher active，API HTTP 200，Git commit/tree/blob 在 Web UID 可读取但不可写，Git 状态 clean，受控 root Broker 最新一次事务 success。Git 对象权限缺陷 [#150](https://github.com/Ran-ying/linux-panel/issues/150) 已解决并关闭。长期交接证据见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
-- 本 PR（未合并/未部署时）：统一所有原生单选框的右侧小三角留白（右边距 26px、文字右内边距 50px，明暗配色共用）；V2Ray 路由出站标签改为读取当前配置（包括旧版 outboundDetour）的下拉框；入站标签支持多个下拉框增删，保留未知/历史标签及未保存的本地配置。先完成单元/浏览器 CI，再判断是否合并及受控部署。不得把 PR 或测试通过当作已部署。
-- 此功能只涉及 Vue/CSS/测试/文档，不改变 V2Ray 服务、真实配置文件、证书、端口或 root Broker。iPhone/Android 真机视觉和最终上线健康检查仍需单独验收。
+- 现有测试 VPS 的最后独立确认：Panel v0.5.0，Git main `2085035080a5bb0a65caac85045b06d1f7862d53`（[PR #153](https://github.com/Ran-ying/linux-panel/pull/153)），Web/root 执行器/V2Ray/update.path 均 active，API HTTP 200，root Broker 最近一次更新成功、工作区 clean；Git 对象权限缺陷 [#150](https://github.com/Ran-ying/linux-panel/issues/150) 已修复。详见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 本 PR 待验收改动：将所有原生单选框的小三角从右侧 26px 移至 14px、文字预留从 50px 缩至 34px，使常用控件的右留白更接近上下留白；V2Ray 路由规则「IP 条件」移至最下面、跨越可视化网格全部列（100%），列表语义与 JSON 不变。CI/合并/生产部署分别验收，不将源码改动当作已上线。
+- 本次仅涉及 Web Vue/CSS、响应式浏览器测试与文档；不修改实际 V2Ray 内核配置、服务、证书、端口或 root Broker。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 
