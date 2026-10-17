@@ -1,5 +1,12 @@
 # Linux Panel 当前状态
 
+## Broker 激活检查 SIGPIPE 误判（2026-10-17）
+
+测试 VPS 已通过管理员现场操作升级不可变 root Broker worker；`upgrade-update-broker.sh --check/--apply/--verify` 均为 0 BLOCK，真实 Web UID `git cat-file -t HEAD` 返回 `commit` 且 `git status` 正常。**Issue #150 的现场 Git 对象读取权限已修复**。重新激活时，旧 `install-update-broker.sh` 将已经正确加载的 `ConditionPathExists` guard 偶发误判为 missing，因此自动更新入口目前保持关闭；Web、受控 root 执行器和 V2Ray 服务仍 active。现场只读循环确认旧 `systemctl cat | grep -Fq` 在 `pipefail` 下交替返回 0 / SIGPIPE 141。
+
+本 PR 将激活验证改为先完整捕获 `systemctl cat` 输出，再对其执行两项完整行匹配，同时保留缺失/失败即拒绝的安全行为。尚未部署此修复、恢复自动更新开关；合并状态、CI 及最终实机复测以 Issue #54 为准。
+
+
 ## Git 对象权限回归（2026-10-17，Issue #150）
 
 实时只读验收：部署于测试 VPS 的 `main` SHA `74e8b217`、Panel v0.5.0，Web/root/V2Ray 服务 active，本地认证 HTTP 200，最后一次更新结果 success；但普通 `linuxpanel` UID 无法读取若干 `0400` Git loose objects，`git cat-file -t HEAD` 和 `git status` 失败（单独读取 SHA 的 `rev-parse` 不足以判定 Git 可用）。

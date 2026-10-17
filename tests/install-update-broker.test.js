@@ -113,3 +113,52 @@ test('real Git cleanliness preflight survives bash nounset and fails closed',()=
   assert.doesNotMatch(failed.stdout,/PASS: Git checkout clean/);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+
+const helperStart=text.indexOf('web_guard_loaded(){');
+const helperEnd=text.indexOf('\ninstalled_checks(){',helperStart);
+assert.ok(helperStart>0 && helperEnd>helperStart,'Effective guard helper missing');
+const guardHelper=text.slice(helperStart,helperEnd);
+const guardConditions=[
+ 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction',
+ 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start'
+];
+
+function guardResult(mode){
+ const source=[
+  'set -Eeuo pipefail',
+  'MODE='+JSON.stringify(mode),
+  'systemctl(){',
+  '  [[ "$1" == cat && "$2" == linux-panel.service ]] || return 19',
+  '  case "$MODE" in',
+  '    both|error) printf "%s\\n" '+guardConditions.map(x=>JSON.stringify(x)).join(' ')+' ;;',
+  '    first) printf "%s\\n" '+JSON.stringify(guardConditions[0])+' ;;',
+  '    second) printf "%s\\n" '+JSON.stringify(guardConditions[1])+' ;;',
+  '    partial) printf "%s\\n" '+JSON.stringify(guardConditions[0]+'-incomplete')+' '+JSON.stringify(guardConditions[1])+' ;;',
+  '  esac',
+  '  if [[ "$MODE" == both ]];then',
+  '   for ((i=0;i<8000;i++));do printf "Later=service-%05d\\n" "$i";done',
+  '  fi',
+  '  [[ "$MODE" != error ]]',
+  '}',
+  guardHelper,
+  'if web_guard_loaded;then echo GUARD_PASS;else echo GUARD_BLOCK;fi'
+ ].join('\n');
+ return spawnSync('bash',['-c',source],{encoding:'utf8',timeout:10000});
+}
+
+test('activation guard accepts both directives despite large systemctl output and pipefail',()=>{
+ const r=guardResult('both');
+ assert.equal(r.status,0,r.stderr);
+ assert.match(r.stdout,/GUARD_PASS/);
+ assert.doesNotMatch(text,/systemctl cat linux-panel\.service\s*\|\s*grep -Fq/);
+ assert.match(text,/if web_guard_loaded;then/);
+});
+
+test('activation guard rejects missing, partial, and failed systemctl results',()=>{
+ for(const mode of ['first','second','partial','error']){
+  const r=guardResult(mode);
+  assert.equal(r.status,0,r.stderr);
+  assert.match(r.stdout,/GUARD_BLOCK/,mode);
+ }
+});

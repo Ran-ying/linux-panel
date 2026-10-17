@@ -131,6 +131,30 @@ byte identity and live Web health, then separately reactivate using the normal
 operator signoff. No ordinary MCP Action, `git pull` alone or root-owned
 worker self-update is a substitute for this migration.
 
+## Broker activation guard verification and SIGPIPE (2026-10-17)
+
+The installed `linux-panel.service` can correctly include both boot-recovery
+guard directives while `install-update-broker.sh --activate` incorrectly
+reports `Panel boot recovery guard missing`. The old installer streamed
+`systemctl cat linux-panel.service | grep -Fq ...` twice with `pipefail`.
+`grep -q` exits on the early match, killing the still-writing `systemctl`
+producer with SIGPIPE (`141`). This is nondeterministic and **not** evidence
+the guard is absent.
+
+The fixed installer captures the entire `systemctl cat` output once, checks
+each exact directive line with `grep -Fxq` on the captured string, and fails
+closed if the command fails, either line is absent, or content mismatches.
+A regression test emits long valid unit content and also covers missing,
+partial and failed unit output. The existing
+`upgrade-update-broker.sh --verify` already used this safe pattern.
+
+This source fix does not silently modify the installed root Broker, the
+environment file or systemd enablement. If an existing installation already
+disabled its updater to migrate the immutable worker, inspect the actual
+effective unit with `systemctl cat linux-panel.service` and re-activate only
+through the supported operator acceptance flow, then confirm the watcher,
+Web HTTP health, pinned main SHA and journal state.
+
 ## Git refs group access without breaking systemd sandbox (2026-10-15)
 
 The fixed Broker runs Git as `linuxpanel-updater` with `umask 077` under

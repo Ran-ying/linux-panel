@@ -190,6 +190,14 @@ fresh_checks(){
   block 'Web updater flag is already enabled: inspect existing state'
  fi
 }
+# Shared by --verify and --activate: inspect loaded service content,
+# never grep -q a live systemctl producer while pipefail is enabled.
+web_guard_loaded(){
+ local unit=''
+ unit="$(systemctl cat linux-panel.service)" || return 1
+ grep -Fxq -- 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' <<< "$unit" &&
+ grep -Fxq -- 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start' <<< "$unit"
+}
 installed_checks(){
  base_checks
  if file "$WORKER" && owner "$WORKER" root && [[ -x "$WORKER" ]];then
@@ -223,13 +231,14 @@ installed_checks(){
  else block 'Root backup directory missing/unsafe';fi
  if dir "$RESULT_DIR" && owner "$RESULT_DIR" root;then pass 'Status directory exists'
  else block 'Status directory missing/unsafe';fi
- if [[ "$(systemctl show linux-panel.service -p ConditionResult --value)" == yes ]] ||
-    systemctl cat linux-panel.service >/dev/null 2>&1;then
-  # Effective unit must actually load the fixed root-only boot guard.
-  if systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|!/var/lib/linux-panel-update-root/active-transaction' &&
-     systemctl cat linux-panel.service | grep -Fq 'ConditionPathExists=|/run/linux-panel-root-updater/allow-panel-start';then
-    pass 'Effective panel boot recovery guard loaded'
-  else block 'Panel boot recovery guard missing';fi
+ # Capture the complete effective unit before checking both exact directives.
+ # Piping systemctl cat to grep -q under pipefail can return SIGPIPE (141)
+ # when grep exits on an early match; a valid guard then falsely BLOCKs
+ # activation. Also fail closed if systemctl cat itself fails.
+ if web_guard_loaded;then
+  pass 'Effective panel boot recovery guard loaded'
+ else
+  block 'Panel boot recovery guard missing or effective unit unreadable'
  fi
  if systemctl cat linux-panel-update.service >/dev/null 2>&1;then
   local effective
