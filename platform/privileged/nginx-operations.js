@@ -3,6 +3,7 @@ import {createHash,randomUUID,X509Certificate} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {join,resolve,sep,dirname} from 'node:path';
+import {networkInterfaces} from 'node:os';
 import {createNginxCertbotCleanup} from './nginx-certbot-cleanup.js';
 
 const exec=promisify(execFile);
@@ -55,6 +56,21 @@ export function createNginxOperations({
   const guard=()=>{
     if(requireRoot&&process.getuid?.()!==0)throw fail('Nginx 操作需要独立 root 执行器',503);
   };
+  async function listenAddresses(){
+    const addresses=[{address:'0.0.0.0',interface:'所有 IPv4 接口'},
+      {address:'127.0.0.1',interface:'本机回环'}];
+    const seen=new Set(addresses.map(item=>item.address));
+    for(const [iface,items] of Object.entries(networkInterfaces())){
+      for(const item of items||[]){
+        if(item.family!=='IPv4'||!item.address||seen.has(item.address))continue;
+        // These are addresses currently assigned to this Nginx host, not
+        // arbitrary externally advertised DNS or public IPv4 candidates.
+        seen.add(item.address);
+        addresses.push({address:item.address,interface:iface.slice(0,100)});
+      }
+    }
+    return {addresses:addresses.slice(0,64)};
+  }
   async function checkDirectories(){
     guard();
     for(const dir of [base,available,enabled]){
@@ -372,5 +388,5 @@ export function createNginxOperations({
       'Certbot 已执行但 Nginx 重载失败',
       output:(outcome.output+'\n'+reload.output).trim().slice(0,4000),reloaded:reload.ok};
   }
-  return {status,service,certificates,renew,sites,read,check,apply};
+  return {status,service,certificates,renew,sites,read,check,apply,listenAddresses};
 }
