@@ -605,6 +605,47 @@ try {
         const details=manager.locator('.config-detail-panel');
         await details.waitFor();
         assert.equal(await website.getAttribute('aria-pressed'),'true');
+        const detailCards=details.locator(':scope > .config-detail-card');
+        assert.equal(await detailCards.count(),3,
+          'site detail should contain exactly three independent rounded rectangles');
+        assert.deepEqual(await detailCards.evaluateAll(cards=>cards.map(card=>card.getAttribute('aria-label'))),
+          ['网站基本信息','Nginx 配置','网站 SSL 证书管理'],
+          'site information first, read-only Nginx configuration second, SSL third');
+        const detailCardStyles=await detailCards.evaluateAll(cards=>cards.map(card=>{
+          const style=getComputedStyle(card);
+          const rect=card.getBoundingClientRect();
+          return {border:style.borderTopWidth,radius:parseFloat(style.borderTopLeftRadius),
+            background:style.backgroundColor,width:rect.width,top:rect.top,bottom:rect.bottom};
+        }));
+        for(const card of detailCardStyles){
+          assert.equal(card.border,'1px','every site detail card must have its own border');
+          assert.ok(card.radius>=12,'each card must be rounded');
+          assert.notEqual(card.background,'rgba(0, 0, 0, 0)','each card owns a background');
+          assert.ok(card.width>120&&card.width<=width,'each detail card must fit viewport');
+        }
+        assert.ok(detailCardStyles[0].bottom<detailCardStyles[1].top,
+          'site info and Nginx config rectangles must be visually separated');
+        assert.ok(detailCardStyles[1].bottom<detailCardStyles[2].top,
+          'Nginx config and SSL rectangles must be visually separated');
+        assert.equal(await details.evaluate(n=>getComputedStyle(n).borderLeftWidth),'0px',
+          'site detail parent should no longer use a shared left border');
+        const siteInfo=detailCards.nth(0);
+        assert.equal((await siteInfo.locator('h3').innerText()).trim(),'fixture-site');
+        assert.deepEqual(await siteInfo.locator('.config-detail-section .config-domain').allTextContents(),
+          ['fixture.test','www.fixture.test']);
+        assert.ok((await siteInfo.innerText()).includes('已停用'));
+        assert.equal(await siteInfo.getByRole('button',{name:'编辑 fixture-site'}).count(),1);
+        assert.equal(await siteInfo.getByRole('button',{name:'删除 fixture-site'}).count(),1);
+        const nginxConfig=detailCards.nth(1);
+        await nginxConfig.locator('pre.config-nginx-preview code')
+          .getByText('server { listen 80; server_name fixture.test www.fixture.test; }').waitFor();
+        const configPreviewStyle=await nginxConfig.locator('pre.config-nginx-preview').evaluate(el=>{
+          const cs=getComputedStyle(el);
+          return {overflowX:cs.overflowX,background:cs.backgroundColor};
+        });
+        assert.ok(['auto','scroll'].includes(configPreviewStyle.overflowX),
+          'long Nginx configs need horizontal scrolling rather than viewport overflow');
+        assert.notEqual(configPreviewStyle.background,'rgba(0, 0, 0, 0)');
         const certPanel=manager.getByRole('region',{name:'SSL 证书管理：fixture-site'});
         await certPanel.getByText('1 张域名匹配的证书').waitFor();
         assert.equal(nginxCertificateReads,1,'only selected website loads certificate inventory');
@@ -627,12 +668,20 @@ try {
         await updated.getByRole('textbox',{name:'Nginx 配置内容'})
           .fill('server { listen 8080; server_name fixture.test www.fixture.test; }');
         await updated.getByRole('button',{name:'保存配置'}).click();
+        await nginxConfig.locator('pre.config-nginx-preview code')
+          .getByText('server { listen 8080; server_name fixture.test www.fixture.test; }').waitFor();
+        assert.equal(await detailCards.count(),3,
+          'editing configuration must preserve all detail rectangles');
         await details.getByRole('button',{name:'收起'}).click();
         await details.waitFor({state:'detached'});
         assert.equal(await website.getAttribute('aria-pressed'),'false');
         assert.equal(await manager.getByRole('button',{name:'编辑 fixture-site'}).count(),0);
         await website.click();
         await details.waitFor();
+        assert.equal(await details.locator(':scope > .config-detail-card').count(),3,
+          'reopening site details restores all three rounded rectangles');
+        await nginxConfig.locator('pre.config-nginx-preview code')
+          .getByText('server { listen 8080; server_name fixture.test www.fixture.test; }').waitFor();
         const browserLayout=await manager.locator('.config-browser').evaluate(node=>{
           const list=node.querySelector('.config-list-panel').getBoundingClientRect();
           const detail=node.querySelector('.config-detail-panel').getBoundingClientRect();
@@ -692,6 +741,10 @@ try {
         const unmatched=manager.getByRole('region',{name:'SSL 证书管理：unrelated-site'});
         await unmatched.getByText('0 张域名匹配的证书').waitFor();
         assert.equal(await unmatched.getByRole('button',{name:/续期证书/}).count(),0);
+        assert.equal(await manager.locator('.config-detail-panel > .config-detail-card').count(),3,
+          'unmatched sites still show information, configuration and SSL panels');
+        await manager.getByRole('region',{name:'Nginx 配置'})
+          .getByText('server { listen 80; server_name no-match.example.test; }').waitFor();
         await page.screenshot({path:join(output,'nginx-manager-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='系统概览'){
