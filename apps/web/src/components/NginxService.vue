@@ -54,7 +54,10 @@ function check(){return work(async()=>{
 
 <template>
   <section class="nginx-service" aria-label="Nginx 状态管理面板">
-    <h3 class="nginx-service-title">Nginx 状态管理</h3>
+    <div class="nginx-service-heading">
+      <h3 class="nginx-service-title">Nginx 状态管理</h3>
+      <button type="button" class="nginx-service-refresh" :disabled="busy" @click="work(refresh)">刷新状态</button>
+    </div>
     <div class="nginx-service-cards">
       <div class="nginx-service-card">
         <span class="muted small">Nginx 内核</span>
@@ -89,9 +92,6 @@ function check(){return work(async()=>{
         </div>
       </div>
     </div>
-    <div class="nginx-service-toolbar">
-      <button type="button" :disabled="busy" @click="work(refresh)">刷新状态</button>
-    </div>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
@@ -117,15 +117,14 @@ function check(){return work(async()=>{
 
 <style scoped>
 .nginx-service{display:grid;gap:12px;min-width:0}
+.nginx-service-heading{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;min-width:0}
 .nginx-service-title{margin:0;font-size:1.15rem;font-weight:600}
 .nginx-service-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .nginx-service-card{border:1px solid var(--border-panel);border-radius:12px;
   padding:14px;background:var(--panel-bg);display:flex;flex-direction:column;gap:6px;min-width:0}
 .nginx-service-card strong{overflow-wrap:anywhere}
 .nginx-service-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:10px}
-.nginx-service-buttons button,.nginx-service-toolbar button,.nginx-control-actions button{
-  font:inherit;min-height:2.35rem;padding:.35rem .8rem}
-.nginx-service-toolbar{display:flex;justify-content:flex-end}
 .nginx-service pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:16rem;overflow-y:auto}
 .nginx-control-dialog{background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border-panel);
   border-radius:12px;padding:18px;width:min(94vw,36rem)}

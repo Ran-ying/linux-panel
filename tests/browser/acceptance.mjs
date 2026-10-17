@@ -442,11 +442,42 @@ try {
         const serviceButtons=statusPanel.locator('.nginx-service-buttons button');
         assert.deepEqual((await serviceButtons.allTextContents()).map(x=>x.trim()),
           ['停止','重启','重载','关闭开机自启','检查配置']);
-        const serviceStyle=await serviceButtons.first().evaluate(node=>{
-          const css=getComputedStyle(node);return {height:node.getBoundingClientRect().height,
-            fontSize:css.fontSize,padding:css.padding};
+        const headingRow=statusPanel.locator('.nginx-service-heading');
+        const refreshStatus=headingRow.getByRole('button',{name:'刷新状态'});
+        assert.equal(await refreshStatus.count(),1,
+          'Refresh Status belongs to the Nginx status header');
+        assert.equal(await statusPanel.getByRole('button',{name:'刷新状态'}).count(),1);
+        assert.equal(await statusPanel.locator('.nginx-service-toolbar').count(),0,
+          'old bottom toolbar must be removed');
+        const titlePositions=await headingRow.evaluate(node=>{
+          const title=node.querySelector('h3').getBoundingClientRect();
+          const refresh=node.querySelector('button').getBoundingClientRect();
+          const header=node.getBoundingClientRect();
+          return {titleRight:title.right,titleTop:title.top,
+            refreshLeft:refresh.left,refreshRight:refresh.right,
+            refreshTop:refresh.top,headerRight:header.right};
         });
-        assert.ok(serviceStyle.height>=36,'service control sizes match site controls');
+        assert.ok(titlePositions.refreshLeft>=titlePositions.titleRight-2,
+          'Refresh Status is to the right of the heading');
+        assert.ok(titlePositions.headerRight-titlePositions.refreshRight<=2,
+          'Refresh Status is right-aligned within its header');
+        assert.ok(Math.abs(titlePositions.titleTop-titlePositions.refreshTop)<=16,
+          'status heading and refresh button should share one row at this width');
+        const buttonAppearance=async locator=>locator.evaluate(node=>{
+          const css=getComputedStyle(node);
+          return {height:node.getBoundingClientRect().height,fontSize:css.fontSize,
+            fontWeight:css.fontWeight,lineHeight:css.lineHeight,padding:css.padding,
+            radius:css.borderTopLeftRadius,border:css.borderTopWidth,
+            borderColor:css.borderTopColor,background:css.backgroundColor,color:css.color};
+        });
+        const serviceStyle=await buttonAppearance(serviceButtons.first());
+        const refreshStyle=await buttonAppearance(refreshStatus);
+        assert.deepEqual(refreshStyle,serviceStyle,
+          'Refresh Status and the service operation buttons must share one design');
+        assert.equal(serviceStyle.height,32,'use the website button 32px height');
+        assert.equal(serviceStyle.radius,'999px','use website pill-shaped buttons');
+        await refreshStatus.click();
+        await statusPanel.getByText('nginx/1.24.0').waitFor();
         await statusPanel.getByRole('button',{name:'重载',exact:true}).click();
         const serviceModal=page.getByRole('dialog',{name:'确认 Nginx 服务操作'});
         await serviceModal.waitFor();
@@ -488,6 +519,10 @@ try {
         assert.ok(title.includes('Nginx'),'actions must share the website manager heading row');
         assert.deepEqual(await headerButtons.getByRole('button').allTextContents(),
           ['新建网站','刷新数据','检查 Nginx 配置']);
+        const websiteButtonStyle=await buttonAppearance(
+          headerButtons.getByRole('button',{name:'刷新数据'}));
+        assert.deepEqual(serviceStyle,websiteButtonStyle,
+          'Nginx status controls must match the website manager button appearance exactly');
         const headerPositions=await header.evaluate(node=>{
           const heading=node.querySelector('h3').getBoundingClientRect();
           const actions=node.querySelector('.module-header-actions').getBoundingClientRect();

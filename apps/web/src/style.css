@@ -673,7 +673,7 @@ table{min-width:500px}
 
 /* Shared compact controls: same 32px high / .85rem / 999px pills as the
    system overview refresh button and its adjacent segmented view capsule. */
-:is(.file-browser,.scheduled-tasks,.managed-configs)
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
   button:not(.file-entry):not(.config-site-selector){
   box-sizing:border-box;flex:none;width:auto;height:32px;min-height:32px;
   padding:4px 8px;border:1px solid var(--button-border);border-radius:999px;
@@ -681,11 +681,11 @@ table{min-width:500px}
   font-family:inherit;font-size:.85rem;font-weight:500;line-height:1.25;
   white-space:nowrap;cursor:pointer;
 }
-:is(.file-browser,.scheduled-tasks,.managed-configs)
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
   button:not(.file-entry):not(.config-site-selector):disabled{
   cursor:not-allowed;opacity:.5;
 }
-:is(.file-browser,.scheduled-tasks,.managed-configs)
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
   button:is(.panel-control-primary,.file-primary):not(.file-entry):not(.config-site-selector){
   background:var(--accent-bg);border-color:var(--accent-bg);
   color:var(--button-primary-text);
@@ -698,19 +698,19 @@ table{min-width:500px}
   width:max-content;max-width:100%;box-sizing:border-box;
   padding:2px;border:1px solid var(--border-panel);border-radius:999px;background:var(--nav-bg);
 }
-:is(.file-browser,.scheduled-tasks,.managed-configs)
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
   .panel-control-capsule button:not(.panel-control-primary){
   border-color:transparent;background:transparent;
 }
-:is(.file-browser,.scheduled-tasks,.managed-configs)
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
   .panel-control-capsule button:hover:not(:disabled){
   background:var(--hover-bg);
 }
-:is(.file-browser,.scheduled-tasks,.managed-configs)
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
   .panel-control-capsule button.panel-control-primary{
   border-color:var(--accent-bg);background:var(--accent-bg);
 }
-:is(.file-browser,.scheduled-tasks,.managed-configs)
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
   .file-permissions-button{height:auto;min-height:32px;white-space:normal}
 .file-path-bar>input{
   box-sizing:border-box;height:32px;min-height:32px;padding:4px 8px;
@@ -745,7 +745,7 @@ table{min-width:500px}
 }
 .module-header-actions button:disabled{opacity:.5;cursor:not-allowed}
 /* Metadata remains a two-line text control, like date/time—not a pill. */
-:is(.file-browser,.scheduled-tasks,.managed-configs) button.file-permissions-button:not(.file-entry):not(.config-site-selector){
+:is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service) button.file-permissions-button:not(.file-entry):not(.config-site-selector){
   height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;
   color:inherit;text-align:left;font:inherit;font-size:inherit;font-weight:inherit;
   line-height:inherit;white-space:normal;cursor:pointer
