@@ -14,7 +14,7 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 38);
+  assert.equal(presentations.length, 39);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').renderer, 'metrics');
   assert.equal(configured.get('system.resources').layout,'grid');
@@ -42,7 +42,7 @@ test('each module owns its Web render configuration separately from Action metad
     assert.ok(action.outputSchema);
   }
   const mcpActions = registry.list('mcp');
-  assert.equal(mcpActions.length, actions.length-27);
+  assert.equal(mcpActions.length, actions.length-28);
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('v2ray.status').renderer,'v2ray-manager');
@@ -54,7 +54,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.deepEqual(nginxActions.slice(1,4),['nginx.status','nginx.sites','nginx.certificates'],
     'Nginx visible Actions register in status → sites → SSL order after embedded repair');
   assert.deepEqual(presentations.filter(p=>p.actionId.startsWith('nginx.')&&!p.embedded)
-    .map(p=>p.actionId),['nginx.status','nginx.sites'],
+    .map(p=>p.actionId),['nginx.status','nginx.sites','nginx.certbotList'],
     'SSL helper must only appear inside the selected website, not as another Action card');
   assert.equal(configured.get('nginx.status').renderer,'nginx-service');
   assert.equal(configured.get('nginx.status').chrome,'flat');
@@ -80,9 +80,11 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('files.list').operations.accounts,'files.accounts');
   assert.equal(configured.get('files.accounts').embedded,true);
   assert.equal(registry.get('files.accounts').exposure.mcp,false);
-  assert.equal(configured.get('nginx.sites').operations.certbotList,'nginx.certbotList');
-  assert.equal(configured.get('nginx.sites').operations.certbotRenew,'nginx.certbotRenew');
-  assert.equal(configured.get('nginx.certbotList').embedded,true);
+  assert.equal(configured.get('nginx.sites').operations.saveTls,'nginx.saveTls');
+  assert.equal(configured.get('nginx.certbotList').renderer,'certbot-manager');
+  assert.equal(configured.get('nginx.certbotList').operations.renew,'nginx.certbotRenew');
+  assert.equal(configured.get('nginx.saveTls').embedded,true);
+  assert.equal(registry.get('nginx.saveTls').exposure.mcp,false);
   assert.equal(configured.get('nginx.certbotRenew').embedded,true);
   assert.equal(registry.get('nginx.certbotRenew').exposure.mcp,false);
   assert.equal(registry.get('nginx.siteTlsKey').exposure.mcp,false);
