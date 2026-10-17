@@ -982,7 +982,7 @@ try {
         assert.ok(headerPosition.actionsBottom<=headerPosition.editorTop,
           'validate, save and discard buttons must appear above the editor');
         await nav.getByRole('button',{name:'入站连接',exact:true}).click();
-        await panel.getByRole('region',{name:'V2Ray 可视化配置'}).waitFor();
+        await panel.locator('.v2ray-visual-editor').waitFor();
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         const inboundVisual=panel.locator('.v2ray-visual-editor');
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),1);
