@@ -216,11 +216,11 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   color:var(--button-text);font:inherit;font-size:.85rem;cursor:pointer}
 .v2ray-manager button.primary{background:var(--accent-bg);color:var(--button-primary-text);border-color:var(--accent-bg)}
 .v2ray-manager button:disabled{opacity:.5;cursor:not-allowed}
-/* The parent ActionCard is the only surrounding rounded panel.
-   Summary fields and capability groups are content, not nested cards. */
+/* Use four standalone framed status cards and a frameless ActionCard shell.
+   Keep all subsequent controls and editor outside those card borders. */
 .v2ray-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 18px}
-.v2ray-summary>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:0;
-  border:0;border-radius:0;box-shadow:none;background:transparent}
+.v2ray-summary>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:14px;
+  border:1px solid var(--border-panel);border-radius:14px;box-shadow:none;background:var(--panel-bg)}
 .v2ray-service-toolbar{margin:0 0 12px}
 .v2ray-config-line{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;
   flex-wrap:wrap;margin:0 0 14px}
