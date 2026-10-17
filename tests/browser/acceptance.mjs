@@ -958,19 +958,61 @@ try {
           'full configuration is the first entry in the left vertical list');
         assert.equal(await first.getAttribute('aria-pressed'),'true');
         const navLabels=(await nav.getByRole('button').allTextContents()).map(v=>v.trim());
-        const expectedSectionKeys=['inbounds','outbounds','routing','dns','transport','log','policy',
-          'api','stats','reverse','observatory','burstObservatory','metrics','inboundDetour','outboundDetour'];
+        const expectedSectionKeys=['inbounds','outbounds','routing','dns','inboundDetour','outboundDetour'];
         assert.equal(navLabels.length,expectedSectionKeys.length+1);
         for(let k=0;k<expectedSectionKeys.length;k++){
           assert.ok(navLabels[k+1].endsWith('（'+expectedSectionKeys[k]+'）'),
-            'sidebar entry must annotate actual config section key: '+expectedSectionKeys[k]);
+            'sidebar entry must annotate a present root config key: '+expectedSectionKeys[k]);
         }
+        const addFieldButton=nav.getByRole('button',{name:'添加字段',exact:true});
+        assert.equal(await addFieldButton.count(),1);
+        const sidebarGeometry=await nav.evaluate(root=>{
+          const add=root.querySelector('.v2ray-field-add-button').getBoundingClientRect();
+          const full=root.querySelector('.v2ray-config-full').getBoundingClientRect();
+          const firstConfig=root.querySelector('.v2ray-config-full + .v2ray-config-item').getBoundingClientRect();
+          return {addBelow:add.bottom,fullAbove:full.top,fullBelow:full.bottom,
+            configAbove:firstConfig.top,fullMargin:getComputedStyle(root.querySelector('.v2ray-config-full')).marginBottom};
+        });
+        assert.ok(sidebarGeometry.addBelow<=sidebarGeometry.fullAbove,
+          'standalone Add field button must be above the Full config entry');
+        assert.ok(sidebarGeometry.configAbove-sidebarGeometry.fullBelow>=10,
+          'Full config needs a visual gap before field entries');
         assert.equal(await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).count(),0,
           'installation stays hidden when V2Ray is present');
         const editor=panel.getByRole('textbox',{name:'完整 V2Ray JSON 配置'});
         await editor.waitFor();
         assert.ok((await editor.inputValue()).includes('customUnknown'),
           'the full JSON must preserve unknown fields');
+        // A missing section only appears after explicit confirmation and is
+        // initialized in the correct type; cancel or draft-only edits never save.
+        await addFieldButton.click();
+        const addDialog=panel.getByRole('dialog',{name:'添加配置字段'});
+        await addDialog.waitFor();
+        const fieldSelect=addDialog.getByRole('combobox',{name:'选择尚未配置的字段'});
+        const availableKeys=await fieldSelect.locator('option').evaluateAll(nodes=>nodes.map(n=>n.value));
+        assert.ok(availableKeys.includes('policy')&&availableKeys.includes('transport'));
+        assert.ok(!availableKeys.includes('inbounds')&&!availableKeys.includes('outbounds'));
+        await fieldSelect.selectOption('policy');
+        await addDialog.getByRole('button',{name:'取消'}).click();
+        await addDialog.waitFor({state:'hidden'});
+        assert.equal(await nav.getByRole('button',{name:'策略（policy）'}).count(),0,
+          'cancel must not add the selected section');
+        await addFieldButton.click();
+        await fieldSelect.selectOption('policy');
+        await addDialog.getByRole('button',{name:'添加',exact:true}).click();
+        await addDialog.waitFor({state:'hidden'});
+        assert.equal(await nav.getByRole('button',{name:'策略（policy）'}).count(),1);
+        assert.equal(await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue(),'{}',
+          'new general config section defaults to an object');
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        const addedDraft=JSON.parse(await editor.inputValue());
+        assert.deepEqual(addedDraft.policy,{});
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,0);
+        delete addedDraft.policy;
+        await editor.fill(JSON.stringify(addedDraft,null,2));
+        assert.equal(await nav.getByRole('button',{name:'策略（policy）'}).count(),0,
+          'removed raw JSON key must disappear from the left navigation');
+        assert.equal(await addFieldButton.isDisabled(),false);
         const newConfig=JSON.parse(await editor.inputValue());
         newConfig.log={loglevel:'info'};
         await editor.fill(JSON.stringify(newConfig,null,2));
@@ -1410,8 +1452,39 @@ try {
         assert.equal(await nav.getByRole('button',{name:'出站连接（outbounds）'}).count(),1);
         assert.ok(!Object.hasOwn(JSON.parse(await editor.inputValue()),'inboundDetour'));
         assert.ok(!Object.hasOwn(JSON.parse(await editor.inputValue()),'outboundDetour'));
+        await addFieldButton.click();
+        await fieldSelect.selectOption('inboundDetour');
+        await addDialog.getByRole('button',{name:'添加',exact:true}).click();
+        await addDialog.waitFor({state:'hidden'});
+        assert.equal(await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）'}).count(),1,
+          'explicit adding of a missing legacy field restores its isolated navigation entry');
+        await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
+        assert.equal((await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue()).trim(),'[]',
+          'added legacy section must initialize as JSON array');
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        const afterAdd=JSON.parse(await editor.inputValue());
+        assert.deepEqual(afterAdd.inboundDetour,[]);
+        delete afterAdd.inboundDetour;
+        await editor.fill(JSON.stringify(afterAdd,null,2));
+        assert.equal(await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）'}).count(),0);
         assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1,
           'visual edits must remain local unless the operator clicks Save');
+        // Simulate a second actor changing the revision while the user is
+        // editing. Conflict handling must never silently overwrite or discard.
+        const userDraft=await editor.inputValue();
+        const externalConfig=JSON.parse(v2rayConfig);
+        externalConfig.log.externalUpdate=true;
+        v2rayConfig=JSON.stringify(externalConfig,null,2);
+        v2rayRevision++;
+        const latestConfig=v2rayConfig;
+        await panel.getByRole('button',{name:'保存并应用'}).click();
+        await panel.getByRole('alert').filter({hasText:'本地修改仍保留'}).waitFor();
+        assert.equal(await editor.inputValue(),userDraft,
+          'a 409 must retain the entire pending local draft');
+        assert.equal(v2rayConfig,latestConfig,
+          'the backend must not overwrite externally changed configuration');
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,2,
+          'one explicit save attempt must be refused on stale revision');
         await serviceCard.getByRole('button',{name:'停止',exact:true}).click();
         const confirm=panel.getByRole('dialog',{name:'确认 V2Ray 服务操作'});
         await confirm.waitFor();
