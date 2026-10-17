@@ -1,6 +1,7 @@
 # Linux Panel 当前状态
 
 ## 当前项目状态（2026-10-17）
+- SSL 单边框修复：发现 .nginx-certificates 根层原为 section，受全局 aside,section 默认圆角边框影响，与 .config-ssl-section 形成双框。将内层替换为 role=region 的 div，并显式清零内层边框、圆角、背景、阴影、padding；测试验证唯一外框及内层计算样式（手机/桌面）。最终 CI、PR、部署及线上状态以 Issue #54 当次记录为准。
 - 待 CI/部署：新增 Nginx 续期方式修复 `nginx.reconfigureRenewal`，仅对存量 standalone Certbot 证书调用受控 root `certbot reconfigure --nginx`，包含 staging 验证、备份、保存结果校验；仅暴露给认证 MCP，既有 root Actions 不放宽。见 [CERTBOT-RECONFIGURE.md](CERTBOT-RECONFIGURE.md)。
 - 新开发（CI/部署待验收）：`services.logs` 使用固定 root-owned journalctl Handler，为已认证 Web / 受信任 MCP 提供 1–200 行只读 systemd 服务日志；原有 root 写入 handler 仍 Web-only。日志可能含敏感内容，不应进入仓库或审计。参见 [SYSTEMD-LOGS.md](SYSTEMD-LOGS.md)。
 - 本轮待验收 UI 变更：网站 SSL 证书区域只有一个外层圆角带边框卡片，内部每张证书和每个 SAN 域名都去掉独立边框、背景及圆角；多个证书仅保留细分隔线。保留 Certbot 手动检查并续期逻辑；系统自动续期不由面板调度。本条属待合并源码说明，最终部署状态见 Issue #54。
