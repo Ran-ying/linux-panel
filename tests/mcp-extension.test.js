@@ -27,8 +27,9 @@ test('MCP settings are session and CSRF protected; /mcp remains fail-closed', as
   const loaded=await app.inject({url:target,headers:{cookie}});
   assert.equal(loaded.statusCode,200);
   assert.equal(loaded.json().policy.enabled,false);
-  assert.equal(loaded.json().tools.length,17);
+  assert.equal(loaded.json().tools.length,18);
   assert.ok(loaded.json().tools.some(tool=>tool.id==='services.logs'));
+  assert.ok(loaded.json().tools.some(tool=>tool.id==='nginx.reconfigureRenewal'));
   assert.ok(loaded.json().tools.some(tool=>tool.id==='telegram.send'));
   assert.ok(loaded.json().tools.some(tool=>tool.id==='telegram.press'));
   assert.ok(loaded.json().tools.some(tool=>tool.id==='panel.update.status'));

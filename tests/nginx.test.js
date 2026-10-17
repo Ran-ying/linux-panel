@@ -178,10 +178,10 @@ test('SSL inventory never includes private keys and renewal uses only selected m
   assert.equal((await ops.certificates()).count,1);
 });
 
-test('Nginx Web routes follow shared write policy; MCP only gets selected ordinary reads',async()=>{
+test('Nginx Web routes preserve write policy; MCP has only fixed Certbot write and selected reads',async()=>{
   const registry=new ActionRegistry();await setup({actions:registry,moduleId:'nginx'});
   const list=registry.list('mcp').map(x=>x.id);
-  assert.deepEqual(list,['nginx.sites','nginx.check']);
+  assert.deepEqual(list,['nginx.reconfigureRenewal','nginx.sites','nginx.check']);
   const fake={enabled:true,execute:async(action,input)=>action.id==='nginx.apply'
     ?{ok:true,status:'saved',revision:'',validated:false,reloaded:false,output:''}
     :action.id==='nginx.sites'?{source:'fixture',count:0,enabledCount:0,sites:[],warnings:[]}

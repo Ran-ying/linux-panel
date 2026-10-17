@@ -1,4 +1,4 @@
-import {isUserShellAction,isTelegramInteractionAction} from '../core/action-policy.js';
+import {isUserShellAction,isTelegramInteractionAction,isCertbotReconfigureAction} from '../core/action-policy.js';
 import { addAudit } from './state-store.js';
 
 // A missing v0.4 policy always fails closed. v0.3 state files need no migration.
@@ -14,7 +14,7 @@ export function exposedReadActions(registry) {
 export function exposedMcpActions(registry) {
   return registry.list('mcp').filter(action=>
     action.kind==='read' && typeof action.permission==='string' && action.permission.length>0 ||
-    isUserShellAction(registry.get(action.id)) || isTelegramInteractionAction(registry.get(action.id)));
+    isUserShellAction(registry.get(action.id)) || isTelegramInteractionAction(registry.get(action.id)) || isCertbotReconfigureAction(registry.get(action.id)));
 }
 export function mcpPolicy(state) {
   return state.mcp?.policy ?? defaultMcpPolicy();
@@ -24,7 +24,7 @@ export function mcpPolicy(state) {
 // Legacy per-Action checkboxes in saved state are intentionally ignored.
 export function actionAllowed(state, action) {
   return mcpPolicy(state).enabled === true &&
-    (action?.kind === 'read' || isUserShellAction(action) || isTelegramInteractionAction(action)) &&
+    (action?.kind === 'read' || isUserShellAction(action) || isTelegramInteractionAction(action) || isCertbotReconfigureAction(action)) &&
     action?.exposure?.mcp === true &&
     typeof action.permission === 'string' &&
     action.permission.length > 0;

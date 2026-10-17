@@ -17,3 +17,10 @@ export function isTelegramInteractionAction(action) {
     action.kind==='write' && action.permission==='telegram:write' &&
     action.executionPolicy==='telegram-interaction' && action.exposure?.mcp===true;
 }
+
+/** One fixed, reviewed Certbot migration; no general root shell or Nginx writes. */
+export function isCertbotReconfigureAction(action){
+  return action?.id==='nginx.reconfigureRenewal' && action.kind==='write' &&
+    action.permission==='nginx:write' && action.executionPolicy==='privileged' &&
+    action.privileged?.channels?.includes('mcp')===true && action.exposure?.mcp===true;
+}

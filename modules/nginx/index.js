@@ -1,9 +1,11 @@
 import {NGINX_CONTRACTS} from '../../platform/privileged/nginx-contracts.js';
 import {createNginxOperations} from '../../platform/privileged/nginx-operations.js';
 import {NGINX_UNIT_CONTRACT} from '../../platform/privileged/nginx-unit-contracts.js';
+import renewalReconfigure from './actions/reconfigure-renewal.js';
 
 export async function setup({actions,moduleId}){
   const operations=createNginxOperations({requireRoot:false});
+  actions.register(moduleId,renewalReconfigure);
   actions.register(moduleId,{
     ...NGINX_UNIT_CONTRACT,id:'nginx.repairExecutor',kind:'write',
     permission:'nginx:write',executionPolicy:'privileged',
