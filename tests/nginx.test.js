@@ -106,18 +106,76 @@ test('Nginx safety: no arbitrary links, files, arguments, overlarge configs or e
   await assert.rejects(f.ops.apply({name:'alpha',operation:'remove',revision:''}),{statusCode:409});
   await assert.rejects(f.ops.apply({name:'../../outside',operation:'create',revision:'',content:'x'}),{statusCode:400});
   const handlers=createPrivilegedHandlers({privileged:false});
-  for(const name of ['sites','read','check','apply']){
+  for(const name of ['status','service','certificates','renew','sites','read','check','apply']){
     assert.equal(handlers.has('nginx.'+name),true);
     await assert.rejects(dispatchPrivileged({version:1,channel:'web',action:'nginx.'+name,input:{shell:'id'}},handlers),{statusCode:400});
     await assert.rejects(dispatchPrivileged({version:1,channel:'mcp',action:'nginx.'+name,input:{}},handlers),{statusCode:403});
   }
-  assert.deepEqual(Object.keys(NGINX_CONTRACTS),['sites','read','check','apply']);
+  assert.deepEqual(Object.keys(NGINX_CONTRACTS),
+    ['status','service','certificates','renew','sites','read','check','apply']);
   assert.equal(handlers.has('nginx.repairExecutor'),true);
   for(const input of [{mode:'restart'}, {mode:'bad',confirmation:'APPLY_REVIEWED_NGINX_UNIT'},
     {mode:'stage',confirmation:'APPLY_REVIEWED_NGINX_UNIT',path:'/etc/systemd/system/ssh.service'}]){
     await assert.rejects(dispatchPrivileged({version:1,channel:'web',action:'nginx.repairExecutor',input},handlers),{statusCode:400});
   }
   assert.deepEqual(NGINX_UNIT_CONTRACT.inputSchema.required,['mode','confirmation']);
+});
+
+test('Nginx status and service controls use fixed systemctl commands, test syntax before reload',async t=>{
+  const f=await fixture(t);
+  const snapshot=await f.ops.status();
+  assert.equal(snapshot.installed,true);
+  assert.equal(snapshot.configOk,true);
+  assert.ok(f.events.some(entry=>entry[0]==='/bin/systemctl'&&entry.includes('show')));
+  const checked=await f.ops.service({operation:'reload'});
+  assert.equal(checked.ok,true);
+  const reloadAt=f.events.findIndex(entry=>entry[1]==='reload');
+  assert.ok(reloadAt>=1);
+  assert.ok(f.events.slice(0,reloadAt).some(entry=>entry[1]==='-t'),
+    'syntax check precedes root systemctl reload');
+  f.syntax(false);
+  const before=f.events.length;
+  const denied=await f.ops.service({operation:'restart'});
+  assert.equal(denied.ok,false);
+  assert.ok(!f.events.slice(before).some(entry=>entry[1]==='restart'));
+  await assert.rejects(f.ops.service({operation:'enable;rm -rf /'}),{statusCode:400});
+});
+
+test('SSL inventory never includes private keys and renewal uses only selected managed cert',async t=>{
+  const f=await fixture(t);
+  const certBase=join(f.root,'letsencrypt');
+  const live=join(certBase,'live'),archive=join(certBase,'archive'),name='sample.test';
+  const certStore=join(archive,name),liveStore=join(live,name);
+  await mkdir(live,{recursive:true});await mkdir(certStore,{recursive:true});
+  await mkdir(liveStore,{recursive:true});
+  const pem=join(certStore,'cert1.pem');
+  // Public PEM copied only into this disposable fixture; never persist or log private keys.
+  const {execFileSync}=await import('node:child_process');
+  const key=join(f.root,'ephemeral.key');
+  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,
+    '-out',pem,'-days','45','-subj','/CN=sample.test','-addext','subjectAltName=DNS:sample.test']);
+  await symlink('../../archive/'+name+'/cert1.pem',join(liveStore,'cert.pem'));
+  const bin=join(f.root,'certbot');
+  await writeFile(bin,'fixture binary');
+  const ops=createNginxOperations({root:f.root,requireRoot:false,runner:async(command,args)=>{
+    f.events.push([command,...args]);return {stdout:'ok',stderr:''};
+  },certificateRoot:live,certbot:bin});
+  const certs=await ops.certificates();
+  assert.equal(certs.installed,true);
+  assert.equal(certs.count,1);
+  assert.equal(certs.certificates[0].name,name);
+  assert.deepEqual(certs.certificates[0].domains,['sample.test']);
+  assert.ok(certs.certificates[0].daysRemaining>0);
+  assert.ok(!JSON.stringify(certs).includes('PRIVATE KEY'));
+  await assert.rejects(ops.renew({name:'../etc/shadow'}),{statusCode:400});
+  await assert.rejects(ops.renew({name:'missing.test'}),{statusCode:404});
+  const result=await ops.renew({name});
+  assert.equal(result.ok,true);
+  assert.equal(result.reloaded,true);
+  assert.ok(f.events.some(e=>e[0]===bin&&e.join(' ').includes('renew --non-interactive --cert-name sample.test')));
+  assert.ok(f.events.some(e=>e[0]==='/bin/systemctl'&&e[1]==='reload'));
+  await symlink('/etc/passwd',join(liveStore,'unrelated.pem'));
+  assert.equal((await ops.certificates()).count,1);
 });
 
 test('Nginx Web routes follow shared write policy; MCP only gets selected ordinary reads',async()=>{
