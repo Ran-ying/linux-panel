@@ -1,8 +1,8 @@
 import * as fs from 'node:fs/promises';
-import {createHash,randomUUID} from 'node:crypto';
+import {createHash,randomUUID,X509Certificate} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {join,resolve,sep} from 'node:path';
+import {join,resolve,sep,dirname} from 'node:path';
 
 const exec=promisify(execFile);
 const MAX_FILES=200, MAX_BYTES=65536;
@@ -40,9 +40,12 @@ export function parseNginxDirectives(content){
 
 export function createNginxOperations({
   root='/etc/nginx',requireRoot=true,
-  nginx='/usr/sbin/nginx',systemctl='/bin/systemctl',runner=exec
+  nginx='/usr/sbin/nginx',systemctl='/bin/systemctl',runner=exec,
+  certificateRoot='/etc/letsencrypt/live',certbot='/usr/bin/certbot'
 }={}){
-  if(requireRoot && root!=='/etc/nginx')throw Error('Cannot redirect root Nginx operations');
+  if(requireRoot && (root!=='/etc/nginx'||nginx!=='/usr/sbin/nginx'||
+    systemctl!=='/bin/systemctl'||certificateRoot!=='/etc/letsencrypt/live'||
+    certbot!=='/usr/bin/certbot'))throw Error('Cannot redirect privileged Nginx paths');
   const base=resolve(root),available=join(base,'sites-available'),enabled=join(base,'sites-enabled');
   const guard=()=>{
     if(requireRoot&&process.getuid?.()!==0)throw fail('Nginx 操作需要独立 root 执行器',503);
@@ -100,9 +103,9 @@ export function createNginxOperations({
       await fs.unlink(tmp).catch(error=>{if(error.code!=='ENOENT')throw error;});
     }
   }
-  async function runBinary(command,args){
+  async function runBinary(command,args,timeout=10000){
     try{
-      const {stdout='',stderr=''}=await runner(command,args,{timeout:10000,maxBuffer:64*1024,
+      const {stdout='',stderr=''}=await runner(command,args,{timeout,maxBuffer:64*1024,
         env:{PATH:'/usr/sbin:/usr/bin:/sbin:/bin',LANG:'C'}});
       return {ok:true,exitCode:0,output:(stderr+'\n'+stdout).trim().slice(0,4000)};
     }catch(error){
@@ -269,5 +272,85 @@ export function createNginxOperations({
       }
     });
   }
-  return {sites,read,check,apply};
+  async function status(){
+    const version=await runBinary(nginx,['-v']);
+    const system=await runBinary(systemctl,['show','nginx.service',
+      '--property=ActiveState','--property=SubState','--property=UnitFileState','--no-pager']);
+    const state=Object.fromEntries([...system.output.matchAll(/^(ActiveState|SubState|UnitFileState)=(.*)$/gm)]
+      .map(([,key,value])=>[key,value]));
+    const tested=await check();
+    return {installed:version.ok,version:(version.output.match(/nginx\/[0-9.]+/)??[''])[0],
+      active:state.ActiveState==='active',enabled:state.UnitFileState==='enabled',
+      state:state.ActiveState||'unknown',subState:state.SubState||'unknown',configOk:tested.ok};
+  }
+  async function service({operation}){
+    guard();
+    const allowed=['start','stop','restart','reload','enable','disable'];
+    if(!allowed.includes(operation))throw fail('不支持的 Nginx 服务操作');
+    if(['start','restart','reload'].includes(operation)){
+      const tested=await check();
+      if(!tested.ok)return {ok:false,status:'配置检查失败，未执行服务操作',output:tested.output};
+    }
+    const done=await runBinary(systemctl,[operation,'nginx.service']);
+    return {ok:done.ok,status:done.ok?'Nginx 服务操作成功':'Nginx 服务操作失败',output:done.output};
+  }
+  const certName=name=>safeName(name);
+  async function certificates(){
+    guard();
+    const warnings=[],certificates=[];
+    let installed=true;
+    try{const st=await fs.stat(certbot);installed=st.isFile();}
+    catch(e){if(e.code==='ENOENT')installed=false;else throw e;}
+    let entries=[];
+    try{entries=await fs.readdir(certificateRoot,{withFileTypes:true});}
+    catch(e){if(e.code!=='ENOENT')warnings.push('无法读取 Certbot 证书目录：'+e.code);}
+    if(entries.length>100)warnings.push('证书超过 100 项，仅展示前 100 项');
+    const today=Date.now(),archiveRoot=resolve(dirname(certificateRoot),'archive');
+    for(const entry of entries.sort((a,b)=>a.name.localeCompare(b.name)).slice(0,100)){
+      const name=entry.name;
+      if(!entry.isDirectory()||!NAME.test(name)||name==='.'||name==='..')continue;
+      const file=join(certificateRoot,name,'cert.pem');
+      try{
+        const actual=await fs.realpath(file);
+        // Follow Certbot's standard live -> archive certificate symlink only.
+        if(!within(actual,archiveRoot))throw Error('证书不在受管 archive 目录');
+        const stat=await fs.stat(actual);
+        if(!stat.isFile()||stat.size>1024*1024)throw Error('证书文件类型或大小异常');
+        const certificate=new X509Certificate(await fs.readFile(actual));
+        const end=Date.parse(certificate.validTo),start=Date.parse(certificate.validFrom);
+        if(!Number.isFinite(end)||!Number.isFinite(start))throw Error('证书日期不可解析');
+        const daysRemaining=Math.ceil((end-today)/86400000);
+        const domains=[...new Set([...certificate.subjectAltName.matchAll(/DNS:([^,]+)/g)]
+          .map(m=>m[1].trim()).filter(Boolean))].slice(0,32);
+        certificates.push({name,domains,issuer:certificate.issuer.slice(0,500),
+          validFrom:new Date(start).toISOString(),validTo:new Date(end).toISOString(),
+          daysRemaining,status:daysRemaining<=0?'expired':daysRemaining<=30?'expiring':'valid',
+          certificatePath:file});
+      }catch(e){warnings.push('证书 '+name+' 读取失败：'+String(e.message).slice(0,160));}
+    }
+    return {provider:'Certbot / Let’s Encrypt',installed,count:certificates.length,
+      certificates,warnings:warnings.slice(0,32)};
+  }
+  async function renew({name}){
+    guard();certName(name);
+    const current=await certificates();
+    if(!current.installed)throw fail('尚未安装 Certbot',404);
+    if(!current.certificates.some(cert=>cert.name===name))
+      throw fail('未找到可安全管理的 Certbot 证书',404);
+    // No force-renewal and no arbitrary domains, paths, plugins or hooks from Web.
+    // Certbot only renews due certificates under its existing renewal profile.
+    const outcome=await runBinary(certbot,['renew','--non-interactive','--cert-name',name],150000);
+    if(!outcome.ok)return {ok:false,status:'证书续期失败，Nginx 未重载',output:outcome.output,reloaded:false};
+    const running=await runBinary(systemctl,['is-active','--quiet','nginx.service']);
+    if(!running.ok)return {ok:true,status:'Certbot 续期检查成功；Nginx 未运行，未自动启动',
+      output:outcome.output,reloaded:false};
+    const validated=await check();
+    if(!validated.ok)return {ok:false,status:'Certbot 已执行但 Nginx 配置检查失败，未重载',
+      output:validated.output,reloaded:false};
+    const reload=await runBinary(systemctl,['reload','nginx.service']);
+    return {ok:reload.ok,status:reload.ok?'Certbot 续期检查完成，Nginx 已重载':
+      'Certbot 已执行但 Nginx 重载失败',
+      output:(outcome.output+'\n'+reload.output).trim().slice(0,4000),reloaded:reload.ok};
+  }
+  return {status,service,certificates,renew,sites,read,check,apply};
 }
