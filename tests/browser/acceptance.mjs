@@ -643,7 +643,9 @@ try {
           'website title must no longer contain a pill-style Delete control');
         const facts=siteInfo.locator('.config-site-facts');
         assert.deepEqual(await facts.locator(':scope > *').evaluateAll(elements=>
-          elements.map(el=>el.textContent.trim().slice(0,4))),
+          elements.map(el=>el.classList.contains('config-site-state-row')
+            ? el.querySelector('.config-site-state').textContent.trim()
+            : el.textContent.trim().slice(0,4))),
           ['域名','fixt','状态','已停用'],
           'domain and status must occupy two label/value rows in the same grid');
         const factLayout=await facts.evaluate(el=>{
