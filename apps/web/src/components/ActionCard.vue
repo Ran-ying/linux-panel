@@ -243,6 +243,9 @@ onUnmounted(()=>{
         <NginxService v-else-if="view==='visual' && presentation?.renderer==='nginx-service'"
           :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
           :csrf="csrf" @listing-change="response.content.result=$event" @unauthorized="emit('unauthorized')" />
+        <CertbotManager v-else-if="view==='visual' && presentation?.renderer==='certbot-manager'"
+          :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
+          :csrf="csrf" @unauthorized="emit('unauthorized')" />
         <V2RayManager v-else-if="view==='visual' && presentation?.renderer==='v2ray-manager'"
           :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
           :csrf="csrf" @listing-change="response.content.result=$event"
