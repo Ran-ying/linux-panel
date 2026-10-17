@@ -304,7 +304,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                     </div>
                   </div>
                   <div v-if="section==='routing'" class="v2ray-visual-fields v2ray-routing-fields">
-                    <label>类型（type）
+                    <label class="v2ray-route-base-field"><span>类型（type）</span>
                       <input :value="entry.type??''" :disabled="busy" @change="visualSet(group.key,[i,'type'],$event)" />
                     </label>
                     <div class="v2ray-routing-tags">
@@ -325,7 +325,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       </template>
                       <span v-else class="muted small">此字段不是标签数组，请在 JSON 模式修改。</span>
                     </div>
-                    <label>目标出站标签（outboundTag）
+                    <label class="v2ray-route-base-field"><span>目标出站标签（outboundTag）</span>
                       <select :value="entry.outboundTag??''" :disabled="busy" aria-label="目标出站标签"
                         @change="visualSet(group.key,[i,'outboundTag'],$event)">
                         <option v-for="choice in routingTagChoices('outbound',entry.outboundTag)"
@@ -610,6 +610,10 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   border-radius:8px;border:1px solid var(--input-border);
   color:var(--text-primary);background:var(--input-bg);font:inherit}
 .v2ray-routing-tags{display:grid;gap:5px;min-width:0;font-size:.85rem}
+/* The JSON-key captions can wrap on narrow screens. Reserve the same two-line
+   caption slot so base inputs start at an equal top offset on any viewport. */
+.v2ray-routing-fields>.v2ray-route-base-field>span,
+.v2ray-routing-tags>span:first-child{display:block;min-height:42px;line-height:20px}
 .v2ray-routing-tag-row{display:flex;align-items:center;gap:6px;min-width:0}
 .v2ray-routing-tag-row select{flex:1 1 0;width:0}
 .v2ray-routing-tags>button{justify-self:start;border-radius:8px}
