@@ -1,5 +1,10 @@
 # Linux Panel 当前状态
 
+## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
+
+新增独立 `telegrammcp` 服务安装器、固定上游 Telethon MCP SHA、localhost Streamable HTTP 桥接、六个可见 Actions、`telegram.send`/`telegram.press` 的显式执行策略以及面板侧机器人白名单。模拟连接与权限测试通过；代码审查、CI 和合并状态以 [PR #143](https://github.com/Ran-ying/linux-panel/pull/143) 为准；**VPS root 安装、个人 Telegram 登录和真实机器人交互尚未完成**。具体配置与验收见 [TELEGRAM.md](TELEGRAM.md)，不能把代码与实机验收混为一谈。
+
+
 更新：2026-10-16。v0.5.0 已发布，main 持续迭代。root 执行层已由 PR #112 合并进 main 697ff4698607008aa672c7db1164a39b9c4242b5，本轮补齐首次安装可选启用入口，关联 [Issue #111](https://github.com/Ran-ying/linux-panel/issues/111)。准确 CI、合并、普通 Web 部署与 root 激活证据统一见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
 ## V2Ray 本机管理模块（2026-10-17，已部署）

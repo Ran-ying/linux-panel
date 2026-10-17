@@ -173,3 +173,7 @@ renderer:'terminal' 复用面板黑色 stdout/stderr 结果视图；console:'ter
 启用后同 UID 的终端/PTY/自定义 collectors 也能调用受控 root socket，不能宣称 Web-only 是 OS 隔离。参见 [权限执行层及扩展示例](PRIVILEGED.md)。
 
 展示类 Action 可以设置通用 `chrome:'flat'`，由面板去掉 ActionCard 的外层边框、背景、圆角、内边距和重复标题；保留普通 Action 授权/加载/错误机制。`scheduled-tasks` 用此模式让两个常显区块分别作为单层圆角卡片呈现标题、工具栏和内容，不再添加共同外框、tab 或内层卡片。
+
+## Telegram 外部服务的显式写入
+
+`telegram.send`、`telegram.press` 是固定、经 `core/action-policy.js` 白名单批准的 `telegram-interaction` 写 Action。ActionEngine 和 MCP policy 双重确认，未授权写入仍拒绝。独立服务以专属 UID 运行；受限访问 localhost `/mcp`，并必须同时配置面板侧机器人白名单。参见 [TELEGRAM.md](TELEGRAM.md)。不可把该模式推广成任意 URL/任意第三方 MCP 写入能力。
