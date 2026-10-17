@@ -733,6 +733,28 @@ try {
         assert.equal(nestedCertAppearance.radius,'0px');
         assert.equal(nestedCertAppearance.background,'rgba(0, 0, 0, 0)');
         const sslOuterCard=detailCards.nth(2);
+        const actualOuterFrame=await sslOuterCard.evaluate(node=>{
+          const css=getComputedStyle(node);
+          return {border:css.borderTopWidth,radius:parseFloat(css.borderTopLeftRadius)};
+        });
+        assert.equal(actualOuterFrame.border,'1px','only the outer SSL detail card has a border');
+        assert.ok(actualOuterFrame.radius>=12,'the outer SSL detail retains rounded corners');
+        const certRoot=sslOuterCard.locator('.nginx-certificates');
+        assert.equal(await certRoot.count(),1,'SSL content must have one inner layout wrapper');
+        const innerFrame=await certRoot.evaluate(node=>{
+          const css=getComputedStyle(node);
+          return {tag:node.tagName,role:node.getAttribute('role'),
+            border:css.borderTopWidth,radius:css.borderTopLeftRadius,
+            padding:css.paddingTop,background:css.backgroundColor,
+            shadow:css.boxShadow};
+        });
+        assert.equal(innerFrame.tag,'DIV','certificate layout must not inherit global section shell');
+        assert.equal(innerFrame.role,'region','keep accessible named certificate region');
+        assert.equal(innerFrame.border,'0px','certificate layout must not add a second border');
+        assert.equal(innerFrame.radius,'0px','certificate layout must not add nested rounding');
+        assert.equal(innerFrame.padding,'0px','certificate layout must not add nested padding');
+        assert.equal(innerFrame.background,'rgba(0, 0, 0, 0)','certificate layout must not add a second background');
+        assert.equal(innerFrame.shadow,'none','certificate layout must not add a nested shadow');
         const domainChips=sslOuterCard.locator('.nginx-cert-domains span');
         assert.ok(await domainChips.count()>0,'fixture has matching certificate domains');
         const certDomainStyles=await domainChips.evaluateAll(nodes=>nodes.map(node=>{
