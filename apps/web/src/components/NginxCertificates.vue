@@ -52,7 +52,7 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
 </script>
 
 <template>
-  <section class="nginx-certificates" :aria-label="'SSL 证书管理：'+siteName">
+  <div class="nginx-certificates" role="region" :aria-label="'SSL 证书管理：'+siteName">
     <h4 class="nginx-cert-section-title">SSL 证书管理</h4>
     <div class="nginx-certs-toolbar">
       <p class="muted small">{{ data.provider }} · {{ loading?'正在读取证书…':countText }}</p>
@@ -106,11 +106,15 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
         </div>
       </div>
     </dialog>
-  </section>
+  </div>
 </template>
 
 <style scoped>
-.nginx-certificates{display:grid;gap:12px;min-width:0}
+.nginx-certificates{display:grid;gap:12px;min-width:0;
+  /* No second shell inside the single bordered .config-ssl-section. The shared
+     section rule otherwise adds a second rounded frame automatically. */
+  border:0;border-radius:0;background:transparent;box-shadow:none;
+  padding:0;margin:0}
 .nginx-cert-section-title{margin:0;font-size:1rem;font-weight:var(--ui-label-font-weight)}
 .nginx-certs-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .nginx-certs-toolbar p{margin:0}
