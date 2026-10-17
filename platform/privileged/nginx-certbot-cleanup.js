@@ -43,7 +43,7 @@ export function createNginxCertbotCleanup({
     renewalRoot!=='/etc/letsencrypt/renewal'||certbot!=='/usr/bin/certbot'||nginx!=='/usr/sbin/nginx'))
     throw Error('Cannot redirect privileged Certbot deletion paths');
   if(typeof runner!=='function')throw Error('A fixed execFile runner is required');
-  const live=normalize(certificateRoot),archive=resolve(live,'../../archive');
+  const live=normalize(certificateRoot),archive=resolve(live,'../archive');
   const renew=normalize(renewalRoot),nginxBase=normalize(nginxRoot);
   const inspect=async(src)=>{
     const parsed=sslReferences(src);
