@@ -133,7 +133,7 @@ async function archiveFixture(t){
   const ops=createV2RayOperations({requireRoot:false,root:destination,unitPath,
     assetUrl:'https://fixture.invalid/archive.zip',assetSha:digest,runner,
     download:async(_url,path)=>{await import('node:fs/promises').then(fs=>fs.copyFile(zip,path));}});
-  return {root,destination,unitPath,ops,commands,failStart:()=>{rejectStart=true;},archive:zip};
+  return {root,destination,unitPath,ops,commands,runner,failStart:()=>{rejectStart=true;},archive:zip};
 }
 test('Uninstalled V2Ray requires explicit confirmation, verified release digest and loopback bootstrap',async t=>{
   const {destination,unitPath,ops,commands}=await archiveFixture(t);
@@ -162,9 +162,16 @@ test('Failed V2Ray bootstrap rolls back installed files and fails closed on hash
   await assert.rejects(stat(one.unitPath),{code:'ENOENT'});
   assert.ok(one.commands.some(parts=>parts[1]==='daemon-reload'));
   const another=await archiveFixture(t);
+  // Reuse the fixture's fake systemd runner. Without it this path reads the
+  // HOST's real v2ray.service, so installed V2Ray blocks a checksum test with
+  // 409 before the expected 503 SHA-256 rejection can ever be reached.
   const bad=createV2RayOperations({requireRoot:false,root:another.destination,unitPath:another.unitPath,
-    assetSha:'0'.repeat(64),assetUrl:'https://fixture.invalid/archive.zip',
+    assetSha:'0'.repeat(64),assetUrl:'https://fixture.invalid/archive.zip',runner:another.runner,
     download:async(_url,path)=>{await import('node:fs/promises').then(fs=>fs.copyFile(another.archive,path));}});
   await assert.rejects(bad.install({confirm:true}),{statusCode:503});
+  assert.ok(another.commands.some(parts=>parts[1]==='show'&&parts.includes('v2ray.service')),
+    'the installer probes the mocked systemd state rather than the host');
+  assert.ok(!another.commands.some(parts=>parts[1]==='enable'),
+    'a failed release digest must never enable the service');
   await assert.rejects(stat(join(another.destination,'bin/v2ray')),{code:'ENOENT'});
 });
