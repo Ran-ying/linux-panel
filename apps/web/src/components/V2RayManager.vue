@@ -69,9 +69,16 @@ const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规
 const parse=()=>{const obj=JSON.parse(draft.value);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw Error('配置必须是 JSON 对象');return obj;};
 const dirty=computed(()=>draft.value!==original.value||
   (section.value!=='full'&&sectionText.value!==sectionOriginal.value));
-// The full document is a JSON root, not a literal config property named "root".
-const editorEntries=[{key:'full',label:'完整内容（JSON 根对象）'},
-  ...sections.map(key=>({key,label:names[key]+'（'+key+'）'}))];
+// A legacy outbound section is an independent editor category only when the
+// incoming/draft config actually carries that property. Missing is not empty.
+const editorEntries=computed(()=>{
+  let hasLegacyOutbound=true;
+  try{hasLegacyOutbound=Object.hasOwn(parse(),'outboundDetour');}
+  catch{} // While JSON is invalid, keep navigation stable until it is corrected.
+  return [{key:'full',label:'完整内容（JSON 根对象）'},
+    ...sections.filter(key=>key!=='outboundDetour'||hasLegacyOutbound)
+      .map(key=>({key,label:names[key]+'（'+key+'）'}))];
+});
 const editorLabel=computed(()=>section.value==='full'?'完整 V2Ray JSON 配置（根对象）':names[section.value]+'（'+section.value+'） · JSON');
 const visualAvailable=computed(()=>{
   try{return supportsVisual(parse(),section.value);}catch{return false;}
@@ -79,8 +86,8 @@ const visualAvailable=computed(()=>{
 const visualGroups=computed(()=>{
   if(!visualAvailable.value)return [];
   const cfg=parse(),key=section.value;
-  const keys=key==='inbounds'?['inbounds','inboundDetour']
-    :key==='outbounds'?['outbounds','outboundDetour']:[key];
+  const keys=key==='inbounds'?['inbounds','inboundDetour']:[key];
+  // outbounds and outboundDetour intentionally never share one visual page.
   return keys.filter(source=>supportsVisual(cfg,source))
     .map(source=>({key:source,label:names[source],items:visualEntries(cfg,source)}));
 });
