@@ -2,9 +2,9 @@
 
 更新：2026-10-16。v0.5.0 已发布，main 持续迭代。root 执行层已由 PR #112 合并进 main 697ff4698607008aa672c7db1164a39b9c4242b5，本轮补齐首次安装可选启用入口，关联 [Issue #111](https://github.com/Ran-ying/linux-panel/issues/111)。准确 CI、合并、普通 Web 部署与 root 激活证据统一见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
 
-## V2Ray 本机管理模块（2026-10-17，开发中）
+## V2Ray 本机管理模块（2026-10-17，已部署）
 
-新增基于服务器现有 V2Fly 5.47.0 的 V2Ray 6-Action 原生模块（状态、读取、校验、保存、服务、未安装时安装）。源码与部署、CI 进度以 GitHub PR 和 Issue #54 为准；**不意味着已经修改或安装真实 V2Ray**。更多限制和核验见 [V2Ray 模块](V2RAY.md)。
+新增基于服务器现有 V2Fly 5.47.0 的 V2Ray 6-Action 原生模块（状态、读取、校验、保存、服务、未安装时安装）。生产环境已部署并只读验证 `v2ray.status/read/test`，当前运行服务与配置未被更改；实际修改、重启等操作未用于生产冒烟测试。当前 Web UI 采用无共同外层圆角框、四张独立状态圆角卡片，依次下接服务操作按钮和配置文件路径。准确 Git/CI、更新事务、只读验收见 Issue #54。更多限制和核验见 [V2Ray 模块](V2RAY.md)。
 
 ## 定时任务模块布局（2026-10-16）
 
