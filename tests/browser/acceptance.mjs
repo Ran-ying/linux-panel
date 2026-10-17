@@ -74,14 +74,38 @@ try {
     });
     // Disposable Nginx fixture: browser exercises real controls without root writes.
     let nginxSites=[],nginxVersions=0,nginxSyntaxGood=true;
-    const nginxToggleActions=[];
+    let nginxRunning=true,nginxAutostart=true;
+    const nginxToggleActions=[],nginxServiceActions=[],nginxRenewActions=[];
+    const certFixture={name:'fixture.test',domains:['fixture.test','www.fixture.test'],
+      issuer:'CN=Fixture CA',validFrom:'2026-09-01T00:00:00.000Z',
+      validTo:'2026-12-01T00:00:00.000Z',daysRemaining:45,status:'valid',
+      certificatePath:'/etc/letsencrypt/live/fixture.test/cert.pem'};
     const revision=()=>String(++nginxVersions).padStart(64,'0');
     await page.route('**/api/actions/nginx.*/execute',async route=>{
       const id=new URL(route.request().url()).pathname.split('/')[3];
       const input=route.request().postDataJSON()?.input??{};
       let data,status=200;
       const target=nginxSites.find(site=>site.name===input.name);
-      if(id==='nginx.sites')data={source:'fixture',count:nginxSites.length,
+      if(id==='nginx.status')data={installed:true,version:'nginx/1.24.0',
+        active:nginxRunning,enabled:nginxAutostart,state:nginxRunning?'active':'inactive',
+        subState:nginxRunning?'running':'dead',configOk:nginxSyntaxGood};
+      else if(id==='nginx.service'){
+        nginxServiceActions.push(input.operation);
+        if(['start','restart','reload'].includes(input.operation) && !nginxSyntaxGood)
+          data={ok:false,status:'配置检查失败，未执行服务操作',output:'fixture bad'};
+        else{
+          if(input.operation==='start'||input.operation==='restart')nginxRunning=true;
+          if(input.operation==='stop')nginxRunning=false;
+          if(input.operation==='enable')nginxAutostart=true;
+          if(input.operation==='disable')nginxAutostart=false;
+          data={ok:true,status:'Nginx 服务操作成功',output:'fixture service'};
+        }
+      }else if(id==='nginx.certificates')data={provider:'Certbot / Let’s Encrypt',installed:true,
+        count:1,certificates:[certFixture],warnings:[]};
+      else if(id==='nginx.renew'){
+        nginxRenewActions.push(input.name);
+        data={ok:true,status:'Certbot 续期检查完成，Nginx 已重载',output:'fixture renewal',reloaded:true};
+      }else if(id==='nginx.sites')data={source:'fixture',count:nginxSites.length,
         enabledCount:nginxSites.filter(site=>site.enabled==='启用链接').length,
         sites:nginxSites.map(({content,...site})=>site),warnings:[]};
       else if(id==='nginx.check')data={ok:nginxSyntaxGood,status:nginxSyntaxGood?'配置检查通过':'配置检查失败',
@@ -390,6 +414,45 @@ try {
         await page.screenshot({path:join(output,'cron-stacked-flat-'+width+'.png'),fullPage:true});
       }
       if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
+        const cards=page.locator('.module-content .action-flow > .action-card');
+        assert.equal(await cards.count(),3,
+          'Nginx module must expose exactly three visible Actions');
+        assert.deepEqual((await cards.locator(':scope > .card-heading h3').allTextContents())
+          .map(s=>s.trim()),['Nginx 状态管理','Nginx 网站管理','SSL 证书管理'],
+          'Nginx service status is above website management and SSL below');
+        const statusPanel=page.getByRole('region',{name:'Nginx 状态管理面板'});
+        const certPanel=page.getByRole('region',{name:'SSL 证书管理面板'});
+        await statusPanel.waitFor();
+        await certPanel.waitFor();
+        assert.ok((await statusPanel.innerText()).includes('nginx/1.24.0'));
+        assert.ok((await certPanel.innerText()).includes('fixture.test'));
+        const serviceButtons=statusPanel.locator('.nginx-service-buttons button');
+        assert.deepEqual((await serviceButtons.allTextContents()).map(s=>s.trim()),
+          ['启动','停止','重启','重载','关闭开机自启','检查配置']);
+        await statusPanel.getByRole('button',{name:'重载',exact:true}).click();
+        const serviceModal=page.getByRole('dialog',{name:'确认 Nginx 服务操作'});
+        await serviceModal.waitFor();
+        assert.deepEqual(nginxServiceActions,[],'service operations must require confirmation');
+        await serviceModal.getByRole('button',{name:'取消'}).click();
+        await serviceModal.waitFor({state:'hidden'});
+        assert.deepEqual(nginxServiceActions,[]);
+        await statusPanel.getByRole('button',{name:'重载',exact:true}).click();
+        await serviceModal.getByRole('button',{name:'确认操作'}).click();
+        await serviceModal.waitFor({state:'hidden'});
+        assert.deepEqual(nginxServiceActions,['reload']);
+        const renewButton=certPanel.getByRole('button',{name:'续期证书 fixture.test'});
+        await renewButton.click();
+        const renewalModal=page.getByRole('dialog',{name:'确认 SSL 证书续期'});
+        await renewalModal.waitFor();
+        assert.deepEqual(nginxRenewActions,[],'renew requires a separate explicit confirmation');
+        await renewalModal.getByRole('button',{name:'取消'}).click();
+        await renewalModal.waitFor({state:'hidden'});
+        assert.deepEqual(nginxRenewActions,[]);
+        await renewButton.click();
+        await renewalModal.getByRole('button',{name:'确认续期'}).click();
+        await renewalModal.waitFor({state:'hidden'});
+        assert.deepEqual(nginxRenewActions,['fixture.test']);
+        assert.equal(await certPanel.getByText('fixture.test').count()>=1,true);
         const manager=page.locator('.managed-configs');
         assert.equal(await manager.locator('.config-detail-panel').count(),0,
           'the website details pane must be absent before selecting a website');

@@ -1,4 +1,4 @@
-# Nginx 网站管理
+# Nginx 服务、网站与 SSL 证书管理
 
 Nginx 模块提供受控配置管理，而不是直接开放 root shell。模块依赖现有 ActionEngine、可选独立 root executor 和面板管理的 \`managed-configs\` 展示组件。
 
@@ -6,16 +6,29 @@ Nginx 模块提供受控配置管理，而不是直接开放 root shell。模块
 
 | Action | Web | MCP | 说明 |
 | --- | --- | --- | --- |
+| nginx.status | 是 | 不暴露 | Nginx 版本、运行状态、开机自启、语法检查 |
+| nginx.service | 仅认证 Web root | 不暴露 | 固定 nginx.service 的启停、重启、重载、开机自启控制；先检查配置 |
 | nginx.sites | 是（可选 root） | 普通账户 | 列出 sites-available、sites-enabled、conf.d/*.conf |
 | nginx.read | 是（可选 root） | 不暴露 | 按安全文件名读取站点内容和 SHA-256 revision |
 | nginx.check | 是（可选 root） | 普通账户 | 固定 /usr/sbin/nginx -t，不修改状态 |
 | nginx.apply | 仅认证 Web root | 不暴露 | 创建、编辑、启用、停用、删除 |
+| nginx.certificates | 仅认证 Web root | 不暴露 | 只读 Certbot 公有证书、域名、颁发者、有效期 |
+| nginx.renew | 仅认证 Web root | 不暴露 | 明确确认后，针对已有 Certbot 证书进行到期续期及 Nginx 配置检查/重载 |
 
 写操作要求管理员在新版本部署后**另外显式安装** root handler：
 \`\`\`sh
 sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
 \`\`\`
 会重启 root executor 和 Linux Panel Web，不会更改 Nginx 配置本身。普通 Git/MCP 更新**不会**自动替换 root-owned 处理器。没有安装 handler 时，Web 写入会返回 503 或不支持的 Action 错误，不会降级至普通 Shell。
+
+## 三个独立可见 Action
+
+Nginx 网站模块按固定顺序显示 **Nginx 状态管理 → Nginx 网站管理 → SSL 证书管理**。辅助 Action（`nginx.service`、`nginx.renew`、`nginx.check`、`nginx.read`、`nginx.apply`）在主区块内调用，不额外生成重复的可见卡片。
+
+- **状态管理**展示内核版本、systemd 服务状态/子状态、开机自启及配置语法结果。提供刷新、检查配置和启动、停止、重启、重载、启停自启（变更均先二次确认）；启动、重启、重载前先运行固定 `nginx -t`，不允许自定义 systemd unit 或 Shell 参数。
+- **SSL 证书管理**只扫描 Certbot/Let's Encrypt 约定的 `/etc/letsencrypt/live/<cert-name>/cert.pem`，要求真实证书链的目标在 `/etc/letsencrypt/archive/` 内；以 Node.js X509Certificate 解码公有证书，显示名称、SAN 域名、颁发者、签发/过期时间、距离到期天数及公有证书路径。**不会读取、返回或记录 privkey.pem。** 本模块不会声称包含所有系统自定义证书。
+- 每条受管证书有「检查并续期」，二次确认后使用固定 `/usr/bin/certbot renew --non-interactive --cert-name <已列出的安全名称>`，不强制提前续期、不接收任意域名/目录/脚本；成功后若 Nginx 运行，则先检查 Nginx 语法，成功再重载；若 Nginx 停止，不自动启动。既有 Certbot renewal 配置自身的验证方式、hooks 和域名解析必须事先正确。本阶段**不支持创建/撤销证书**，因为签发需要单独选择 HTTP-01/DNS-01 与对应服务商凭据；不会替用户猜测。
+- 生产部署验收只读取状态，不执行停止、重启、申请或续期，也不更改已部署的 Nginx 配置。
 
 ## 功能
 
@@ -53,6 +66,6 @@ systemd 单元名或内容，只有固定确认短语与 `status`/`stage`/`resta
 
 目录清单是有限的文件扫描：每目录上限 200 项、每配置文件 64 KiB。解析出 \`server_name\`、\`listen\` 的字符串**仅为摘要**，并非完整 Nginx parser 或 \`nginx -T\` 生效配置。尤其 conf.d 仅是配置候选，需看 nginx.conf include。启用的站点还可能因 include 或其它复杂条件实际不生效。
 
-停用站点会删除已认可的同名启用软链接，并在 nginx -t 通过后重载；已有连接一般不会立即断开。有效 Nginx 语法不保证上游后端、HTTPS、域名、面板管理入口能够工作。当前不提供 HTTP 健康检查、TLS 证书管理、自动签发、access/error log 浏览、备份版本历史、reload 后端服务恢复，也不承诺对并行外部写入绝对事务隔离。
+停用站点会删除已认可的同名启用软链接，并在 nginx -t 通过后重载；已有连接一般不会立即断开。有效 Nginx 语法不保证上游后端、HTTPS、域名、面板管理入口能够工作。当前不提供 HTTP 健康检查、自定义路径证书自动发现、初次签发或撤销、access/error log 浏览、备份版本历史、reload 后端服务恢复，也不承诺对并行外部写入绝对事务隔离。
 
 测试必须在临时 Nginx 目录和命令替身完成，不能修改生产站点、重载生产 Nginx 或使用任意 root Shell。项目的 Nginx 配置可与面板共存，但不能由面板安装器接管。

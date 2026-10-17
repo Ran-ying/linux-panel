@@ -11,15 +11,19 @@ export async function setup({actions,moduleId}){
     explain:'仅以固定 Action 修复已审核 linux-panel-privileged.service 的 Nginx socket 权限，不接受 unit/path/command 输入。status、stage 和 restart 分阶段执行。',
     execute:async()=>{throw Object.assign(new Error('缺少最新版 root Handler'),{statusCode:503});}
   });
-  for(const [name,contract] of Object.entries(NGINX_CONTRACTS)){
-    const write=name==='apply';
+  // Registration order is the visible Nginx Action order:
+  // service status first, existing website editor second, certificates last.
+  const actionOrder=['status','sites','certificates','service','renew','read','apply','check'];
+  for(const name of actionOrder){
+    const contract=NGINX_CONTRACTS[name];
+    const write=['apply','service','renew'].includes(name);
     actions.register(moduleId,{
       ...contract,id:'nginx.'+name,kind:write?'write':'read',
       permission:write?'nginx:write':'nginx:read',
       executionPolicy:write?'privileged':undefined,
-      exposure:{web:true,mcp:name==='sites'||name==='check'},
+      exposure:{web:true,mcp:['sites','check'].includes(name)},
       privileged:{channels:['web']},
-      explain:'Web 使用显式安装的 root Action 执行器；普通 MCP 只能查看站点摘要、运行普通身份的配置检查。网站写入必须通过 Web root 执行器，且不会自动对外修改 Nginx。',
+      explain:'网站、服务和 SSL 证书操作使用受控 Action；启停、重载、证书续期必须在 Web 明确确认并通过 root 执行器。证书读取只返回公有证书元数据，不读取或输出私钥。',
       execute:write?async()=>{throw Object.assign(new Error('需要启用并安装 Nginx root 执行器'),{statusCode:503});}
         :operations[name]
     });
