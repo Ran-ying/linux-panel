@@ -221,6 +221,83 @@ start_panel(){
   fi
   systemctl start linux-panel.service
 }
+# Git stores fetched loose objects under the updater's restrictive umask.
+# Directory default ACLs alone are insufficient: Git can publish object files
+# with effective mode 0400, leaving the Web UID unable to read even HEAD.
+# Repair only the fixed Git object store as the unprivileged Git OWNER, not root;
+# never follow symlinks or expose object contents outside the Web read group.
+ensure_git_objects_web_readable(){
+  as_updater /usr/bin/python3 -I - "$ROOT" "$USER" linuxpanel <<'PY_GIT_OBJECT_ACL'
+import grp
+import os
+import pwd
+import stat
+import struct
+import sys
+
+root, updater, web_group = sys.argv[1:]
+uid = pwd.getpwnam(updater).pw_uid
+gid = grp.getgrnam(web_group).gr_gid
+if os.geteuid() != uid:
+    raise SystemExit('Git ACL repair must run as updater UID')
+
+USER_OBJ, GROUP_OBJ, GROUP, MASK, OTHER = 1, 4, 8, 16, 32
+UNDEFINED = 0xffffffff
+
+def acl(owner_bits, group_bits):
+    values = ((USER_OBJ, owner_bits, UNDEFINED),
+              (GROUP_OBJ, 0, UNDEFINED),
+              (GROUP, group_bits, gid),
+              (MASK, group_bits, UNDEFINED),
+              (OTHER, 0, UNDEFINED))
+    return struct.pack('<I', 2) + b''.join(
+        struct.pack('<HHI', *value) for value in values)
+
+def grant(fd, directory):
+    st = os.fstat(fd)
+    correct_type = stat.S_ISDIR(st.st_mode) if directory else stat.S_ISREG(st.st_mode)
+    owner_bits = (st.st_mode >> 6) & 7
+    if st.st_uid != uid or not correct_type or not owner_bits & 4 or (
+            directory and not owner_bits & 1):
+        raise RuntimeError('Unexpected Git object owner, type or permissions')
+    os.setxattr(fd, 'system.posix_acl_access',
+                acl(owner_bits, 5 if directory else 4))
+    if directory:
+        os.setxattr(fd, 'system.posix_acl_default', acl(7, 5))
+
+flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+git_fd = os.open(os.path.join(root, '.git'), flags | os.O_DIRECTORY)
+try:
+    if os.fstat(git_fd).st_uid != uid:
+        raise RuntimeError('Unexpected Git metadata owner')
+    objects_fd = os.open('objects', flags | os.O_DIRECTORY, dir_fd=git_fd)
+    try:
+        grant(objects_fd, True)
+        # dir_fd anchors every descendant; O_NOFOLLOW also rejects file
+        # symlinks. No root chmod/chown of updater-controlled Git paths.
+        for _, directories, files, parent_fd in os.fwalk(
+                '.', dir_fd=objects_fd, follow_symlinks=False):
+            grant(parent_fd, True)
+            for name, directory in (
+                    [(name, True) for name in directories] +
+                    [(name, False) for name in files]):
+                fd = os.open(name, flags | (os.O_DIRECTORY if directory else 0),
+                             dir_fd=parent_fd)
+                try:
+                    grant(fd, directory)
+                finally:
+                    os.close(fd)
+    finally:
+        os.close(objects_fd)
+finally:
+    os.close(git_fd)
+PY_GIT_OBJECT_ACL
+  # Confirm access under the real Web identity, not updater/root.
+  /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups \
+    --inh-caps=-all --no-new-privs -- \
+    /usr/bin/git -c "safe.directory=$ROOT" -C "$ROOT" cat-file -t HEAD >/dev/null
+}
+
 web_can_read(){
   /usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/test -r "$1"
 }
@@ -310,7 +387,7 @@ ensure_web_read_access(){
     log 'Required Fastify runtime manifest not found after build'
     return 1
   fi
-  ensure_tracked_web_read_access
+  ensure_tracked_web_read_access && ensure_git_objects_web_readable
 }
 # Reusable health gate for normal deployments AND interrupted-boot recovery.
 # A systemctl start or active PID alone never proves Fastify is serving.
@@ -518,6 +595,8 @@ if ! priv_preflight;then
 fi
 log "Fetch pinned origin/main commit $TARGET"
 as_updater /usr/bin/git -C "$ROOT" fetch --no-tags origin main || { record failed;exit 2; }
+# The Web remains live during fetch: restore new object read ACLs immediately.
+ensure_git_objects_web_readable || { record failed;exit 2; }
 REMOTE="$(as_updater /usr/bin/git -C "$ROOT" rev-parse refs/remotes/origin/main)"
 [[ "$REMOTE" == "$TARGET" ]] || { record failed; exit 2; }
 if [[ "$OLD" == "$TARGET" ]];then
