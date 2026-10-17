@@ -634,9 +634,12 @@ try {
         assert.deepEqual(await siteInfo.locator('.config-detail-section .config-domain').allTextContents(),
           ['fixture.test','www.fixture.test']);
         assert.ok((await siteInfo.innerText()).includes('已停用'));
-        assert.equal(await siteInfo.getByRole('button',{name:'编辑 fixture-site'}).count(),1);
+        assert.equal(await siteInfo.getByRole('button',{name:'编辑 fixture-site'}).count(),0,
+          'website identity card must no longer contain the Edit button');
         assert.equal(await siteInfo.getByRole('button',{name:'删除 fixture-site'}).count(),1);
         const nginxConfig=detailCards.nth(1);
+        assert.equal(await nginxConfig.getByRole('button',{name:'编辑 fixture-site'}).count(),1,
+          'Edit now belongs to the Nginx configuration card');
         await nginxConfig.locator('pre.config-nginx-preview code')
           .getByText('server { listen 80; server_name fixture.test www.fixture.test; }').waitFor();
         const configPreviewStyle=await nginxConfig.locator('pre.config-nginx-preview').evaluate(el=>{
@@ -648,6 +651,17 @@ try {
         assert.notEqual(configPreviewStyle.background,'rgba(0, 0, 0, 0)');
         const certPanel=manager.getByRole('region',{name:'SSL 证书管理：fixture-site'});
         await certPanel.getByText('1 张域名匹配的证书').waitFor();
+        const certShell=detailCards.nth(2);
+        assert.equal(await certShell.locator('.nginx-cert-card').count(),1);
+        const nestedCertAppearance=await certShell.locator('.nginx-cert-card').evaluate(node=>{
+          const css=getComputedStyle(node);
+          return {border:css.borderTopWidth,radius:css.borderTopLeftRadius,
+            background:css.backgroundColor};
+        });
+        assert.equal(nestedCertAppearance.border,'0px',
+          'cert information must not have another rounded frame inside the SSL card');
+        assert.equal(nestedCertAppearance.radius,'0px');
+        assert.equal(nestedCertAppearance.background,'rgba(0, 0, 0, 0)');
         assert.equal(nginxCertificateReads,1,'only selected website loads certificate inventory');
         assert.equal(await certPanel.getByRole('button',{name:'续期证书 unrelated.test'}).count(),0,
           'certificates for other domains must not be offered to this site');
@@ -663,15 +677,52 @@ try {
         await renewalModal.getByRole('button',{name:'确认续期'}).click();
         await renewalModal.waitFor({state:'hidden'});
         assert.deepEqual(nginxRenewActions,['fixture.test']);
-        await details.getByRole('button',{name:'编辑 fixture-site'}).click();
-        const updated=page.getByRole('dialog',{name:'编辑网站配置'});
-        await updated.getByRole('textbox',{name:'Nginx 配置内容'})
-          .fill('server { listen 8080; server_name fixture.test www.fixture.test; }');
-        await updated.getByRole('button',{name:'保存配置'}).click();
+        const inlineEditButton=nginxConfig.getByRole('button',{name:'编辑 fixture-site'});
+        await inlineEditButton.click();
+        assert.equal(await page.getByRole('dialog',{name:'编辑网站配置'}).count(),0,
+          'website editing should no longer open a standalone modal');
+        const inlineEditor=nginxConfig.getByRole('textbox',{name:'Nginx 配置内容'});
+        await inlineEditor.waitFor();
+        assert.equal(await inlineEditor.inputValue(),
+          'server { listen 80; server_name fixture.test www.fixture.test; }');
+        assert.equal(await nginxConfig.locator('pre.config-nginx-preview').count(),0,
+          'edit mode replaces the preview with a textarea in the same card');
+        const originalConfig=nginxSites.find(site=>site.name==='fixture-site').content;
+        await inlineEditor.fill('server { listen 7000; server_name fixture.test www.fixture.test; }');
+        assert.equal(nginxSites.find(site=>site.name==='fixture-site').content,originalConfig,
+          'typing in the inline editor must not write to server');
+        await nginxConfig.getByRole('button',{name:'取消',exact:true}).click();
+        assert.equal(await inlineEditor.count(),0,'Cancel leaves inline edit mode');
+        assert.equal(nginxSites.find(site=>site.name==='fixture-site').content,originalConfig);
+        await nginxConfig.locator('pre.config-nginx-preview code')
+          .getByText(originalConfig).waitFor();
+        await inlineEditButton.click();
+        await inlineEditor.fill('server { listen 8080; server_name fixture.test www.fixture.test; }');
+        assert.equal(await siteInfo.getByRole('button',{name:'编辑 fixture-site'}).count(),0);
+        await nginxConfig.getByRole('button',{name:'保存配置'}).click();
         await nginxConfig.locator('pre.config-nginx-preview code')
           .getByText('server { listen 8080; server_name fixture.test www.fixture.test; }').waitFor();
+        assert.equal(nginxSites.find(site=>site.name==='fixture-site').content,
+          'server { listen 8080; server_name fixture.test www.fixture.test; }');
         assert.equal(await detailCards.count(),3,
-          'editing configuration must preserve all detail rectangles');
+          'inline editing must preserve all three detail rectangles');
+        // Simulated concurrent edit: a stale revision must be refused while
+        // keeping the user's pending textarea content intact for recovery.
+        await inlineEditButton.click();
+        await inlineEditor.fill('server { listen 9000; server_name fixture.test www.fixture.test; }');
+        nginxSites.find(site=>site.name==='fixture-site').revision=revision();
+        await nginxConfig.getByRole('button',{name:'保存配置'}).click();
+        await nginxConfig.getByRole('alert').getByText('版本冲突').waitFor();
+        assert.equal(await inlineEditor.inputValue(),
+          'server { listen 9000; server_name fixture.test www.fixture.test; }',
+          'failed Save must retain the unsaved inline draft');
+        assert.equal(nginxSites.find(site=>site.name==='fixture-site').content,
+          'server { listen 8080; server_name fixture.test www.fixture.test; }',
+          'stale save must not change actual config');
+        await nginxConfig.getByRole('button',{name:'取消'}).click();
+        await headerButtons.getByRole('button',{name:'刷新数据'}).click();
+        await nginxConfig.locator('pre.config-nginx-preview code')
+          .getByText('server { listen 8080; server_name fixture.test www.fixture.test; }').waitFor();
         await details.getByRole('button',{name:'收起'}).click();
         await details.waitFor({state:'detached'});
         assert.equal(await website.getAttribute('aria-pressed'),'false');
