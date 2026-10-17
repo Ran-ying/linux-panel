@@ -117,8 +117,11 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
 .nginx-certs-toolbar button,.nginx-cert-actions button,.nginx-renew-actions button{
   font:inherit;min-height:2.35rem;padding:.35rem .8rem}
 .nginx-cert-list{display:grid;gap:12px}
-.nginx-cert-card{border:1px solid var(--border-panel);border-radius:12px;
-  background:var(--panel-bg);padding:14px;display:grid;gap:10px;min-width:0}
+/* The selected site's SSL detail is already inside one rounded outer card.
+   Certificates are plain sections, not additional nested background cards. */
+.nginx-cert-card{border:0;border-radius:0;background:transparent;
+  padding:0;display:grid;gap:10px;min-width:0}
+.nginx-cert-card+.nginx-cert-card{border-top:1px solid var(--border-rule);padding-top:12px}
 .nginx-cert-heading{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
 .nginx-cert-domains{display:flex;flex-wrap:wrap;gap:6px}
 .nginx-cert-domains span{padding:3px 8px;border-radius:8px;border:1px solid var(--border-rule);

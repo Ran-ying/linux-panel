@@ -14,13 +14,26 @@ const selectedSite=computed(()=>(listing.value.sites??[]).find(site=>site.file==
 // This is a read-only preview of the selected site's real Nginx file. It does
 // not enter the edit draft or mutate the on-disk configuration.
 const configPreview=ref(null),configPreviewLoading=ref(false),configPreviewError=ref('');
+const inlineDraft=ref(null),inlineError=ref('');
 let configPreviewGeneration=0;
 const domains=site=>site.serverNames?.trim()
   ?site.serverNames.split(',').map(domain=>domain.trim()).filter(Boolean)
   :['—'];
 function selectSite(site){
   if(busy.value)return;
+  if(inlineDraft.value){
+    inlineError.value='请先保存或取消当前 Nginx 配置编辑，再切换网站';
+    return;
+  }
   selectedFile.value=selectedFile.value===site.file?null:site.file;
+}
+function closeSite(){
+  if(busy.value)return;
+  if(inlineDraft.value){
+    inlineError.value='请先保存或取消当前 Nginx 配置编辑，再收起网站';
+    return;
+  }
+  selectedFile.value=null;
 }
 let noticeTimer;
 watch(()=>props.initialData,v=>{listing.value=v;});
@@ -71,11 +84,45 @@ function openNew(){
   draft.value={name:'',content:'server {\n    listen 80;\n    server_name example.com;\n    root /var/www/html;\n}\n',revision:'',operation:'create'};
   modal.value?.showModal();
 }
-function openEdit(site){
+function openInlineEdit(site){
+  if(inlineDraft.value||busy.value)return;
   return work(async()=>{
+    inlineError.value='';
     const data=await request(props.operations.read,{name:site.name});
-    draft.value={name:data.name,content:data.content,revision:data.revision,operation:'edit'};
-    modal.value?.showModal();
+    if(selectedSite.value?.file!==site.file)return;
+    inlineDraft.value={name:data.name,content:data.content,revision:data.revision};
+  });
+}
+function cancelInlineEdit(){
+  if(busy.value)return;
+  inlineDraft.value=null;
+  inlineError.value='';
+}
+function saveInlineEdit(){
+  return work(async()=>{
+    const editing=inlineDraft.value;
+    if(!editing||selectedSite.value?.name!==editing.name)return;
+    inlineError.value='';
+    let outcome;
+    try{
+      outcome=await request(props.operations.apply,{
+        name:editing.name,content:editing.content,revision:editing.revision,operation:'edit'
+      });
+    }catch(cause){
+      inlineError.value=cause.message||'保存配置失败，请核对后重试';
+      return;
+    }
+    if(!outcome.ok){
+      inlineError.value=outcome.status+(outcome.output?': '+outcome.output:'');
+      return;
+    }
+    // Only the server's successful validated apply commits this local draft.
+    // Keep the exact content visible while the refreshed listing triggers a read.
+    configPreview.value=editing.content;
+    inlineDraft.value=null;
+    notify(outcome.status);
+    try{await refresh();}
+    catch(cause){error.value='配置已保存，但刷新网站列表失败：'+cause.message;}
   });
 }
 function closeEditor(){if(busy.value)return;modal.value?.close();draft.value=null;error.value='';}
@@ -172,7 +219,7 @@ function check(){
         <section class="config-detail-card config-site-info-card" aria-label="网站基本信息">
           <div class="config-detail-heading">
             <h3>{{ selectedSite.name }}</h3>
-            <button type="button" :disabled="busy" @click="selectedFile=null">收起</button>
+            <button type="button" :disabled="busy" @click="closeSite">收起</button>
           </div>
           <div class="config-detail-section">
             <span class="muted small">域名</span>
@@ -186,19 +233,35 @@ function check(){
               :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
           </div>
           <div v-if="selectedSite.editable" class="config-actions">
-            <button type="button" :disabled="busy" :aria-label="'编辑 '+selectedSite.name"
-              @click="openEdit(selectedSite)">编辑</button>
-            <button type="button" :disabled="busy" :aria-label="'删除 '+selectedSite.name"
+            <button type="button" :disabled="busy||!!inlineDraft"
+              :aria-label="'删除 '+selectedSite.name"
               @click="ask(selectedSite,'remove')">删除</button>
           </div>
-          <p v-else class="muted small">此配置仅支持查看，不能直接编辑或删除。</p>
+          <p v-else class="muted small">此配置仅支持查看，不能编辑或删除。</p>
         </section>
         <section class="config-detail-card config-nginx-card" aria-label="Nginx 配置">
-          <h4>Nginx 配置</h4>
-          <p v-if="configPreviewLoading" class="muted small" role="status">正在读取配置…</p>
-          <p v-else-if="configPreviewError" class="error" role="alert">{{ configPreviewError }}</p>
-          <pre v-else-if="configPreview!==null" class="config-nginx-preview"><code>{{ configPreview }}</code></pre>
-          <p v-else class="muted small">尚未读取到配置内容</p>
+          <div class="config-nginx-heading">
+            <h4>Nginx 配置</h4>
+            <button v-if="selectedSite.editable && !inlineDraft" type="button"
+              :disabled="busy" :aria-label="'编辑 '+selectedSite.name"
+              @click="openInlineEdit(selectedSite)">编辑</button>
+          </div>
+          <form v-if="inlineDraft" class="config-inline-form" @submit.prevent="saveInlineEdit">
+            <textarea v-model="inlineDraft.content" aria-label="Nginx 配置内容"
+              required maxlength="65536" spellcheck="false" :disabled="busy" rows="16" />
+            <p class="muted small">保存时会验证 Nginx 配置，版本冲突或校验失败不会覆盖现有配置。</p>
+            <p v-if="inlineError" class="error" role="alert">{{ inlineError }}</p>
+            <div class="config-inline-actions">
+              <button type="button" :disabled="busy" @click="cancelInlineEdit">取消</button>
+              <button type="submit" :disabled="busy">保存配置</button>
+            </div>
+          </form>
+          <template v-else>
+            <p v-if="configPreviewLoading" class="muted small" role="status">正在读取配置…</p>
+            <p v-else-if="configPreviewError" class="error" role="alert">{{ configPreviewError }}</p>
+            <pre v-else-if="configPreview!==null" class="config-nginx-preview"><code>{{ configPreview }}</code></pre>
+            <p v-else class="muted small">尚未读取到配置内容</p>
+          </template>
         </section>
         <section v-if="operations.certificates && operations.renew"
           class="config-detail-card config-ssl-section" aria-label="网站 SSL 证书管理">
@@ -280,7 +343,17 @@ function check(){
 .config-detail-panel{display:grid;gap:12px;align-content:start}
 .config-detail-card{display:grid;gap:12px;min-width:0;padding:14px;
   border:1px solid var(--border-panel);border-radius:12px;background:var(--panel-bg)}
+.config-nginx-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .config-nginx-card h4{margin:0;font-size:1rem;font-weight:600}
+.config-inline-form{display:grid;gap:10px;min-width:0}
+.config-inline-form textarea{box-sizing:border-box;width:100%;min-width:0;min-height:18rem;
+  max-height:70vh;resize:vertical;overflow:auto;padding:12px;
+  background:var(--input-bg);color:var(--text-primary);
+  border:1px solid var(--input-border);border-radius:8px;
+  font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:.82rem;line-height:1.55;tab-size:2}
+.config-inline-form p{margin:0}
+.config-inline-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .config-nginx-preview{margin:0;min-width:0;max-height:22rem;overflow:auto;
   padding:12px;border:1px solid var(--border-rule);border-radius:8px;
   background:var(--input-bg);color:var(--text-primary);font:inherit;
