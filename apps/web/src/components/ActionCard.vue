@@ -7,6 +7,7 @@ const ScheduledTasks=defineAsyncComponent(()=>import('./ScheduledTasks.vue'));
 const ManagedConfigs=defineAsyncComponent(()=>import('./ManagedConfigs.vue'));
 const NginxService=defineAsyncComponent(()=>import('./NginxService.vue'));
 const V2RayManager=defineAsyncComponent(()=>import('./V2RayManager.vue'));
+const CertbotManager=defineAsyncComponent(()=>import('./CertbotManager.vue'));
 const props=defineProps({
   action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
 });
