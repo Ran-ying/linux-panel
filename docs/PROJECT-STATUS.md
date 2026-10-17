@@ -1,5 +1,12 @@
 # Linux Panel 当前状态
 
+## Git 对象权限回归（2026-10-17，Issue #150）
+
+实时只读验收：部署于测试 VPS 的 `main` SHA `74e8b217`、Panel v0.5.0，Web/root/V2Ray 服务 active，本地认证 HTTP 200，最后一次更新结果 success；但普通 `linuxpanel` UID 无法读取若干 `0400` Git loose objects，`git cat-file -t HEAD` 和 `git status` 失败（单独读取 SHA 的 `rev-parse` 不足以判定 Git 可用）。
+
+[PR #151](https://github.com/Ran-ying/linux-panel/pull/151) 在不可变 Broker worker 中新增以 updater UID 执行的对象 ACL 补全逻辑，并补充真实跨账户系统集成验收。**当前只代表开发分支修复，尚未合并、更新现场固定 root worker 或验证实机权限恢复**；来源/CI/部署请以 Issue #150 与 #54 为准。不可把 PR 合并等同于修复已上线。
+
+
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 
 新增独立 `telegrammcp` 服务安装器、固定上游 Telethon MCP SHA、localhost Streamable HTTP 桥接、六个可见 Actions、`telegram.send`/`telegram.press` 的显式执行策略以及面板侧机器人白名单。模拟连接与权限测试通过；代码审查、CI 和合并状态以 [PR #143](https://github.com/Ran-ying/linux-panel/pull/143) 为准；**VPS root 安装、个人 Telegram 登录和真实机器人交互尚未完成**。具体配置与验收见 [TELEGRAM.md](TELEGRAM.md)，不能把代码与实机验收混为一谈。
