@@ -197,6 +197,21 @@ try {
     for(const name of [...names,'面板设置']){
       await navigate(name.trim());
       await page.locator('.module-content').waitFor();
+      // Audit shared chevron geometry for all selects mounted by every module.
+      if([390,1280].includes(width)){
+        const selects=await page.locator('select:not([multiple]):not([size])').evaluateAll(nodes=>
+          nodes.map(node=>{
+            const css=getComputedStyle(node);
+            return {appearance:css.appearance,right:css.backgroundPosition,
+              image:css.backgroundImage,padding:css.paddingRight};
+          }));
+        for(const select of selects){
+          assert.equal(select.appearance,'none',name+': native select appearance');
+          assert.match(select.right,/26px/,name+': chevron right inset');
+          assert.match(select.image,/data:image\/svg\+xml/,name+': chevron icon');
+          assert.equal(select.padding,'50px',name+': text clearing');
+        }
+      }
       if(name.trim()==='系统概览'){
         const refresh=page.locator('.action-card .result-controls button.action-refresh').first();
         const switchButton=page.locator('.action-card .view-switch button').first();
@@ -797,12 +812,16 @@ try {
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户',exact:true}).locator('option').count()>1);
         assert.ok(await permissions.getByRole('combobox',{name:'文件用户组',exact:true}).locator('option').count()>1);
         const selectArrow=await permissions.getByRole('combobox',{name:'文件用户',exact:true}).evaluate(select=>{
-          const pseudo=getComputedStyle(select.closest('label'),'::after');
-          return {appearance:getComputedStyle(select).appearance,right:pseudo.right,bottom:pseudo.bottom};
+          const css=getComputedStyle(select),pseudo=getComputedStyle(select.closest('label'),'::after');
+          return {appearance:css.appearance,position:css.backgroundPosition,
+            image:css.backgroundImage,padding:css.paddingRight,pseudoContent:pseudo.content};
         });
         assert.equal(selectArrow.appearance,'none');
-        assert.equal(selectArrow.right,'20px','select chevron should be inset from the edge');
-        assert.equal(selectArrow.bottom,'17px');
+        assert.match(selectArrow.position,/26px/,'chevron must sit 26px from the right edge');
+        assert.match(selectArrow.image,/data:image\/svg\+xml/);
+        assert.equal(selectArrow.padding,'50px','select text needs room before the arrow');
+        assert.ok(!selectArrow.pseudoContent||selectArrow.pseudoContent==='none',
+          'file dialogs should not draw a duplicate select chevron');
         await permissions.getByRole('button',{name:'保存',exact:true}).click();
         await browser.getByText('权限与属主已保存',{exact:true}).waitFor();
         assert.equal((await (await import('node:fs/promises')).stat(join(fileFixture,'note.txt'))).mode & 0o777,0o600);
@@ -1079,8 +1098,23 @@ try {
         await nav.getByRole('button',{name:'路由规则',exact:true}).click();
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         await inboundVisual.getByRole('button',{name:'新增规则'}).click();
-        await inboundVisual.getByRole('textbox',{name:'目标出站标签'}).fill('direct');
-        await inboundVisual.getByRole('textbox',{name:'目标出站标签'}).press('Tab');
+        const outboundSelect=inboundVisual.getByRole('combobox',{name:'目标出站标签'});
+        await outboundSelect.selectOption('direct');
+        assert.deepEqual(await outboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value)),
+          ['','direct'],'route destinations must come from the current outbounds');
+        await inboundVisual.getByRole('button',{name:'添加入站标签'}).click();
+        const inboundSelect=inboundVisual.getByRole('combobox',{name:'入站标签 1'});
+        await inboundSelect.selectOption('socks');
+        assert.ok((await inboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value))).includes('socks'));
+        const routeChevron=await outboundSelect.evaluate(select=>{
+          const css=getComputedStyle(select);
+          return {appearance:css.appearance,position:css.backgroundPosition,
+            image:css.backgroundImage,padding:css.paddingRight};
+        });
+        assert.equal(routeChevron.appearance,'none');
+        assert.match(routeChevron.position,/26px/);
+        assert.match(routeChevron.image,/data:image\/svg\+xml/);
+        assert.equal(routeChevron.padding,'50px');
         await inboundVisual.getByRole('textbox',{name:'域名条件'}).fill('domain:one.test\ndomain:two.test');
         await inboundVisual.getByRole('textbox',{name:'域名条件'}).press('Tab');
         await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
@@ -1088,6 +1122,21 @@ try {
         const routingCandidate=JSON.parse(await visualJson.inputValue());
         assert.deepEqual(routingCandidate.rules[0].domain,['domain:one.test','domain:two.test'],
           'visual routing must produce a real JSON rules array');
+        assert.deepEqual(routingCandidate.rules[0].inboundTag,['socks']);
+        assert.equal(routingCandidate.rules[0].outboundTag,'direct');
+        // Preserve existing multi-tag conditions and orphaned/custom tag names.
+        routingCandidate.rules[0].inboundTag.push('legacy-custom');
+        routingCandidate.rules[0].outboundTag='deleted-custom';
+        await visualJson.fill(JSON.stringify(routingCandidate,null,2));
+        await viewToggle.getByRole('button',{name:'可视化'}).click();
+        assert.equal(await inboundVisual.getByRole('combobox',{name:'入站标签 2'}).inputValue(),'legacy-custom');
+        assert.equal(await inboundVisual.getByRole('combobox',{name:'目标出站标签'}).inputValue(),'deleted-custom');
+        await inboundVisual.getByRole('button',{name:'移除入站标签 1'}).click();
+        await viewToggle.getByRole('button',{name:'JSON'}).click();
+        visualJson=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
+        const retainedRoute=JSON.parse(await visualJson.inputValue());
+        assert.deepEqual(retainedRoute.rules[0].inboundTag,['legacy-custom']);
+        assert.equal(retainedRoute.rules[0].outboundTag,'deleted-custom');
         await nav.getByRole('button',{name:'完整内容'}).click();
         assert.equal(JSON.parse(await editor.inputValue()).customUnknown.value,true,
           'visual editor updates must not discard unrelated full-config settings');
