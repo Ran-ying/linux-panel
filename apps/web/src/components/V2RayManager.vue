@@ -27,7 +27,8 @@ const visualGroups=computed(()=>{
   const cfg=parse(),key=section.value;
   const keys=key==='inbounds'?['inbounds','inboundDetour']
     :key==='outbounds'?['outbounds','outboundDetour']:[key];
-  return keys.map(source=>({key:source,label:names[source],items:visualEntries(cfg,source)}));
+  return keys.filter(source=>supportsVisual(cfg,source))
+    .map(source=>({key:source,label:names[source],items:visualEntries(cfg,source)}));
 });
 const listString=value=>formatList(value);
 function changeVisual(source,action,path=[],value,kind='text',item){
