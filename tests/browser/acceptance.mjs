@@ -1104,8 +1104,8 @@ try {
           ['','direct'],'route destinations must come from the current outbounds');
         await inboundVisual.getByRole('button',{name:'添加入站标签'}).click();
         const inboundSelect=inboundVisual.getByRole('combobox',{name:'入站标签 1'});
-        await inboundSelect.selectOption('socks');
-        assert.ok((await inboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value))).includes('socks'));
+        await inboundSelect.selectOption('json-changed');
+        assert.ok((await inboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value))).includes('json-changed'));
         const routeChevron=await outboundSelect.evaluate(select=>{
           const css=getComputedStyle(select);
           return {appearance:css.appearance,position:css.backgroundPosition,
@@ -1122,7 +1122,7 @@ try {
         const routingCandidate=JSON.parse(await visualJson.inputValue());
         assert.deepEqual(routingCandidate.rules[0].domain,['domain:one.test','domain:two.test'],
           'visual routing must produce a real JSON rules array');
-        assert.deepEqual(routingCandidate.rules[0].inboundTag,['socks']);
+        assert.deepEqual(routingCandidate.rules[0].inboundTag,['json-changed']);
         assert.equal(routingCandidate.rules[0].outboundTag,'direct');
         // Preserve existing multi-tag conditions and orphaned/custom tag names.
         routingCandidate.rules[0].inboundTag.push('legacy-custom');
