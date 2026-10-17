@@ -11,6 +11,31 @@ const data=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref(''),o
 const draft=ref(''),revision=ref(''),original=ref(''),loaded=ref(false);
 const section=ref('full'),sectionText=ref(''),sectionOriginal=ref(''),editorMode=ref('json');
 const confirm=ref(null),confirmDialog=ref(null);
+const renameDialog=ref(null),renameTarget=ref(null),renameTag=ref('');
+function openRouteRename(source,index,entry){
+  if(busy.value||source!=='routing')return;
+  renameTarget.value={source,index};
+  // The rule's tag is independent from its outboundTag, which is merely
+  // a heading fallback. Never prefill this editor with an outbound label.
+  renameTag.value=typeof entry.tag==='string'?entry.tag:'';
+  nextTick(()=>renameDialog.value?.showModal());
+}
+function closeRouteRename(){renameDialog.value?.close();}
+function submitRouteRename(){
+  if(busy.value||!renameTarget.value)return;
+  const {source,index}=renameTarget.value;
+  try{
+    const entry=visualEntries(parse(),source)[index];
+    if(!entry||typeof entry!=='object')throw Error('规则已不存在');
+    const value=renameTag.value;
+    if((entry.tag??'')!==value){
+      // Empty names delete tag, but never touch outboundTag or the rule number.
+      const changed=changeVisual(source,'set',[index,'tag'],value);
+      if(!changed)return;
+    }
+    closeRouteRename();
+  }catch(e){error.value=e.message;}
+}
 const routeExpanded=ref({}),routeConditionSelection=ref({});
 const routeKey=(source,index)=>source+':'+index;
 const routeVisible=(entry,condition,source,index)=>
@@ -76,8 +101,8 @@ function changeVisual(source,action,path=[],value,kind='text',item){
       }
     }
     draft.value=JSON.stringify(cfg,null,2)+'\n';
-    showSection(section.value);error.value='';
-  }catch(e){error.value=e.message;}
+    showSection(section.value);error.value='';return true;
+  }catch(e){error.value=e.message;return false;}
 }
 function visualSet(source,path,event,kind='text'){
   changeVisual(source,'set',path,event.target.value,kind);
@@ -271,15 +296,19 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                 <div v-for="(entry,i) in group.items" :key="group.key+'-'+i" class="v2ray-visual-entry">
                   <div class="v2ray-visual-entry-heading">
                     <strong>{{ section==='routing'?'规则': '连接' }} {{ i+1 }} · {{ entry.tag||entry.outboundTag||entry.protocol||'未命名' }}</strong>
-                    <button type="button" :disabled="busy"
-                      :aria-label="'移除'+group.label+(i+1)" @click="visualRemove(group.key,[i])">移除</button>
+                    <div class="v2ray-visual-entry-actions">
+                      <button v-if="section==='routing'" type="button" :disabled="busy"
+                        :aria-label="'重命名路由规则 '+(i+1)" @click="openRouteRename(group.key,i,entry)">重命名</button>
+                      <button type="button" :disabled="busy"
+                        :aria-label="'移除'+group.label+(i+1)" @click="visualRemove(group.key,[i])">移除</button>
+                    </div>
                   </div>
                   <div v-if="section==='routing'" class="v2ray-visual-fields v2ray-routing-fields">
-                    <label>类型
+                    <label>类型（type）
                       <input :value="entry.type??''" :disabled="busy" @change="visualSet(group.key,[i,'type'],$event)" />
                     </label>
                     <div class="v2ray-routing-tags">
-                      <span>入站标签</span>
+                      <span>入站标签（inboundTag）</span>
                       <template v-if="entry.inboundTag===undefined||Array.isArray(entry.inboundTag)">
                         <div v-for="(tag,j) in (entry.inboundTag??[])" :key="j" class="v2ray-routing-tag-row">
                           <select :value="tag" :disabled="busy" :aria-label="'入站标签 '+(j+1)"
@@ -296,38 +325,38 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       </template>
                       <span v-else class="muted small">此字段不是标签数组，请在 JSON 模式修改。</span>
                     </div>
-                    <label>目标出站标签
+                    <label>目标出站标签（outboundTag）
                       <select :value="entry.outboundTag??''" :disabled="busy" aria-label="目标出站标签"
                         @change="visualSet(group.key,[i,'outboundTag'],$event)">
                         <option v-for="choice in routingTagChoices('outbound',entry.outboundTag)"
                           :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                       </select>
                     </label>
-                    <label v-if="routeVisible(entry,'balancerTag',group.key,i)">平衡器标签
+                    <label v-if="routeVisible(entry,'balancerTag',group.key,i)">平衡器标签（balancerTag）
                       <input :value="entry.balancerTag??''" :disabled="busy"
                         @change="visualSet(group.key,[i,'balancerTag'],$event)" />
                     </label>
-                    <label v-if="routeVisible(entry,'port',group.key,i)">端口条件
+                    <label v-if="routeVisible(entry,'port',group.key,i)">端口条件（port）
                       <input :value="entry.port??''" :disabled="busy"
                         @change="visualSet(group.key,[i,'port'],$event)" />
                     </label>
-                    <label v-if="routeVisible(entry,'network',group.key,i)">网络条件
+                    <label v-if="routeVisible(entry,'network',group.key,i)">网络条件（network）
                       <input :value="entry.network??''" :disabled="busy"
                         @change="visualSet(group.key,[i,'network'],$event)" />
                     </label>
-                    <label v-if="routeVisible(entry,'source',group.key,i)">来源 IP
+                    <label v-if="routeVisible(entry,'source',group.key,i)">来源 IP（source）
                       <textarea rows="2" :value="listString(entry.source)" :disabled="busy"
                         @change="visualSet(group.key,[i,'source'],$event,'list')" />
                     </label>
-                    <label v-if="routeVisible(entry,'domain',group.key,i)">域名条件
+                    <label v-if="routeVisible(entry,'domain',group.key,i)">域名条件（domain）
                       <textarea rows="2" :value="listString(entry.domain)" :disabled="busy"
                         @change="visualSet(group.key,[i,'domain'],$event,'list')" />
                     </label>
-                    <label v-if="routeVisible(entry,'protocol',group.key,i)">协议条件
+                    <label v-if="routeVisible(entry,'protocol',group.key,i)">协议条件（protocol）
                       <textarea rows="2" :value="listString(entry.protocol)" :disabled="busy"
                         @change="visualSet(group.key,[i,'protocol'],$event,'list')" />
                     </label>
-                    <label v-if="routeVisible(entry,'ip',group.key,i)" class="v2ray-routing-ip-field">IP 条件
+                    <label v-if="routeVisible(entry,'ip',group.key,i)" class="v2ray-routing-ip-field">IP 条件（ip）
                       <textarea v-auto-grow rows="1" :value="listString(entry.ip)" :disabled="busy"
                         @input="resizeRouteIpTextarea($event.target)"
                         @change="visualSet(group.key,[i,'ip'],$event,'list')" />
@@ -478,6 +507,20 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
       <p v-else-if="data.configExists" class="muted small">配置尚未读取；可点击“刷新状态与配置”。</p>
     </template>
     <pre v-if="output" class="v2ray-output" aria-label="V2Ray 命令输出">{{ output }}</pre>
+    <dialog ref="renameDialog" class="v2ray-dialog" aria-labelledby="v2ray-route-rename-title"
+      @close="renameTarget=null">
+      <form class="v2ray-dialog-content" @submit.prevent="submitRouteRename">
+        <h3 id="v2ray-route-rename-title">重命名路由规则</h3>
+        <label class="v2ray-rename-label" for="v2ray-rule-tag-input">规则标签（tag）
+          <input id="v2ray-rule-tag-input" v-model="renameTag" type="text"
+            autocomplete="off" :disabled="busy" aria-label="规则标签（tag）" />
+        </label>
+        <div class="v2ray-toolbar">
+          <button type="button" :disabled="busy" @click="closeRouteRename">取消</button>
+          <button type="submit" class="primary" :disabled="busy">确认</button>
+        </div>
+      </form>
+    </dialog>
     <dialog ref="confirmDialog" class="v2ray-dialog" aria-labelledby="v2ray-confirm-title" @close="confirm=null">
       <div class="v2ray-dialog-content">
         <h3 id="v2ray-confirm-title">{{ confirm==='install'?'安装 V2Ray':'确认 V2Ray 服务操作' }}</h3>
@@ -542,6 +585,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-group-heading,.v2ray-visual-entry-heading{display:flex;gap:10px;
   justify-content:space-between;align-items:center;flex-wrap:wrap}
 .v2ray-visual-group-heading{margin-top:5px}
+.v2ray-visual-entry-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
 .v2ray-visual-entry{border-top:1px solid var(--border-rule);padding-top:14px;display:grid;gap:12px;min-width:0}
 .v2ray-visual-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr));
   gap:10px;align-items:end;min-width:0}
@@ -584,6 +628,10 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-dialog::backdrop{background:#0008}
 .v2ray-dialog-content{display:grid;gap:12px}
 .v2ray-dialog-content h3{margin:0}
+.v2ray-rename-label{display:grid;gap:6px;min-width:0;font-size:.9rem}
+.v2ray-rename-label input{box-sizing:border-box;width:100%;min-height:38px;padding:8px 10px;
+  border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);
+  color:var(--text-primary);font:inherit}
 @media(max-width:730px){
   .v2ray-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
   .v2ray-editor-layout{--v2ray-sticky-top:calc(var(--mobile-top,16px) + var(--mobile-header-height,110px) + 10px);
