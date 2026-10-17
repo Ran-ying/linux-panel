@@ -1136,7 +1136,7 @@ try {
           'IP criteria must fill the available routing editor width');
         assert.ok(Math.abs(ipGeometry.textareaWidth-ipGeometry.fieldWidth)<2,
           'IP condition textarea must occupy 100% of its field');
-        await ipField.locator('textarea').fill('geoip:private\\n10.0.0.0/8');
+        await ipField.locator('textarea').fill('geoip:private\n10.0.0.0/8');
         await ipField.locator('textarea').press('Tab');
         await inboundVisual.getByRole('textbox',{name:'域名条件'}).fill('domain:one.test\ndomain:two.test');
         await inboundVisual.getByRole('textbox',{name:'域名条件'}).press('Tab');
