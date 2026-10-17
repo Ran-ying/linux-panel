@@ -5,6 +5,8 @@ import ResultRenderer from './ResultRenderer.vue';
 const FileBrowser=defineAsyncComponent(()=>import('./FileBrowser.vue'));
 const ScheduledTasks=defineAsyncComponent(()=>import('./ScheduledTasks.vue'));
 const ManagedConfigs=defineAsyncComponent(()=>import('./ManagedConfigs.vue'));
+const NginxService=defineAsyncComponent(()=>import('./NginxService.vue'));
+const NginxCertificates=defineAsyncComponent(()=>import('./NginxCertificates.vue'));
 const V2RayManager=defineAsyncComponent(()=>import('./V2RayManager.vue'));
 const props=defineProps({
   action:{type:Object,required:true},presentation:{type:Object,default:null},csrf:{type:String,required:true}
@@ -234,6 +236,12 @@ onUnmounted(()=>{
           :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
           :labels="presentation.labels" :csrf="csrf" @listing-change="response.content.result=$event"
           @unauthorized="emit('unauthorized')" />
+        <NginxService v-else-if="view==='visual' && presentation?.renderer==='nginx-service'"
+          :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
+          :csrf="csrf" @listing-change="response.content.result=$event" @unauthorized="emit('unauthorized')" />
+        <NginxCertificates v-else-if="view==='visual' && presentation?.renderer==='nginx-certificates'"
+          :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
+          :csrf="csrf" @listing-change="response.content.result=$event" @unauthorized="emit('unauthorized')" />
         <V2RayManager v-else-if="view==='visual' && presentation?.renderer==='v2ray-manager'"
           :initial-data="response.content.result" :list-action="action.id" :operations="presentation.operations"
           :csrf="csrf" @listing-change="response.content.result=$event"
