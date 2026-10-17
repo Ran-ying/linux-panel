@@ -123,9 +123,9 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
   padding:0;display:grid;gap:10px;min-width:0}
 .nginx-cert-card+.nginx-cert-card{border-top:1px solid var(--border-rule);padding-top:12px}
 .nginx-cert-heading{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
-.nginx-cert-domains{display:flex;flex-wrap:wrap;gap:6px}
-.nginx-cert-domains span{padding:3px 8px;border-radius:8px;border:1px solid var(--border-rule);
-  font-size:.85rem;overflow-wrap:anywhere}
+.nginx-cert-domains{display:flex;flex-wrap:wrap;gap:4px 12px}
+.nginx-cert-domains span{padding:0;border:0;border-radius:0;background:transparent;
+  box-shadow:none;font-size:.85rem;overflow-wrap:anywhere}
 .nginx-cert-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 12px;
   color:var(--text-muted);font-size:.85rem;min-width:0}
 .nginx-cert-metadata span{min-width:0;overflow-wrap:anywhere}
