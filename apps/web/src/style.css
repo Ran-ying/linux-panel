@@ -674,7 +674,7 @@ table{min-width:500px}
 /* Shared compact controls: same 32px high / .85rem / 999px pills as the
    system overview refresh button and its adjacent segmented view capsule. */
 :is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
-  button:not(.file-entry):not(.config-site-selector){
+  button:not(.file-entry):not(.config-site-selector):not(.config-site-text-action){
   box-sizing:border-box;flex:none;width:auto;height:32px;min-height:32px;
   padding:4px 8px;border:1px solid var(--button-border);border-radius:999px;
   background:var(--button-bg);color:var(--button-text);
@@ -682,7 +682,7 @@ table{min-width:500px}
   white-space:nowrap;cursor:pointer;
 }
 :is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)
-  button:not(.file-entry):not(.config-site-selector):disabled{
+  button:not(.file-entry):not(.config-site-selector):not(.config-site-text-action):disabled{
   cursor:not-allowed;opacity:.5;
 }
 :is(.file-browser,.scheduled-tasks,.managed-configs,.nginx-service)

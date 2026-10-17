@@ -262,23 +262,20 @@ function check(){
         <section class="config-detail-card config-site-info-card" aria-label="网站基本信息">
           <div class="config-detail-heading">
             <h3>{{ selectedSite.name }}</h3>
-            <button v-if="selectedSite.editable" type="button"
-              :disabled="busy||!!inlineDraft||addingDomain||!!pendingDomain"
-              :aria-label="'删除 '+selectedSite.name"
-              @click="ask(selectedSite,'remove')">删除</button>
           </div>
           <div class="config-site-facts">
-            <span class="muted small">域名</span>
+            <span class="config-site-label">域名</span>
             <div class="config-site-domains">
               <div v-for="(domain,index) in domains(selectedSite)" :key="index"
                 class="config-site-domain-row">
                 <span class="config-domain">{{ domain }}</span>
                 <button v-if="selectedSite.editable && domain!=='—'" type="button"
+                  class="config-site-text-action"
                   :disabled="busy||!!inlineDraft||addingDomain||!!pendingDomain"
                   :aria-label="'删除域名 '+domain" @click="requestRemoveDomain(domain)">移除</button>
               </div>
               <button v-if="selectedSite.editable && !addingDomain" type="button"
-                class="config-domain-add" :disabled="busy||!!inlineDraft||!!pendingDomain"
+                class="config-domain-add config-site-text-action" :disabled="busy||!!inlineDraft||!!pendingDomain"
                 @click="startAddingDomain">添加域名</button>
               <form v-if="addingDomain" class="config-domain-add-form"
                 @submit.prevent="applyDomainChange('add',domainInput,selectedSite)">
@@ -291,10 +288,28 @@ function check(){
                 </div>
               </form>
             </div>
-            <span class="muted small">状态</span>
-            <span class="config-site-state">{{ selectedSite.enabled==='启用链接'?'已启用'
-              :selectedSite.enabled==='启用目录'?'已启用'
-              :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
+            <span class="config-site-label">状态</span>
+            <div class="config-site-state-row">
+              <span class="config-site-state">{{ selectedSite.enabled==='启用链接'?'已启用'
+                :selectedSite.enabled==='启用目录'?'已启用'
+                :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
+              <div v-if="selectedSite.editable" class="config-site-state-actions">
+                <button v-if="selectedSite.enabled==='启用链接'||selectedSite.enabled==='启用目录'"
+                  type="button" class="config-site-text-action"
+                  :disabled="busy||!!inlineDraft||addingDomain||!!pendingDomain"
+                  :aria-label="'停用 '+selectedSite.name"
+                  @click="ask(selectedSite,'disable')">停用</button>
+                <button v-else-if="selectedSite.enabled==='未启用'"
+                  type="button" class="config-site-text-action"
+                  :disabled="busy||!!inlineDraft||addingDomain||!!pendingDomain"
+                  :aria-label="'启用 '+selectedSite.name"
+                  @click="ask(selectedSite,'enable')">启用</button>
+                <button type="button" class="config-site-text-action"
+                  :disabled="busy||!!inlineDraft||addingDomain||!!pendingDomain"
+                  :aria-label="'删除 '+selectedSite.name"
+                  @click="ask(selectedSite,'remove')">删除</button>
+              </div>
+            </div>
           </div>
           <p v-if="domainError" class="error" role="alert">{{ domainError }}</p>
           <p v-if="!selectedSite.editable" class="muted small">此配置仅支持查看，不能编辑或删除。</p>
@@ -437,14 +452,24 @@ function check(){
   font-size:.82rem;line-height:1.55;white-space:pre;tab-size:2}
 .config-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:.7rem}
 .config-detail-heading h3{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
-.config-detail-heading button{font:inherit;min-height:2.2rem;padding:.25rem .7rem}
 .config-site-facts{display:grid;grid-template-columns:minmax(4rem,auto) minmax(0,1fr);
   gap:12px 16px;align-items:start;min-width:0}
-.config-site-domains{display:grid;justify-items:start;gap:8px;min-width:0}
-.config-site-domain-row{display:flex;align-items:center;gap:8px;min-width:0;
-  flex-wrap:wrap}
-.config-site-domain-row .config-domain{font-size:1rem}
-.config-site-state{overflow-wrap:anywhere}
+.config-site-label{color:var(--text-primary);font-size:1rem;font-weight:600;line-height:1.5}
+.config-site-domains{display:grid;gap:8px;min-width:0}
+.config-site-domain-row,.config-site-state-row{display:grid;
+  grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px;min-width:0}
+.config-site-domain-row .config-domain,.config-site-state{font-size:1rem;font-weight:400;
+  color:var(--text-primary);line-height:1.5;overflow-wrap:anywhere}
+.config-site-state-actions{display:flex;align-items:center;justify-content:flex-end;
+  gap:12px;flex-wrap:wrap}
+.config-site-text-action{appearance:none;display:inline-block;box-sizing:border-box;
+  border:0;border-radius:0;background:transparent;box-shadow:none;
+  padding:0;margin:0;min-height:0;line-height:1.5;font-family:inherit;
+  font-size:1rem;font-weight:400;color:var(--text-primary);
+  text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.config-site-text-action:hover{text-decoration-thickness:2px}
+.config-site-text-action:focus-visible{outline:2px solid var(--accent,#538ad7);outline-offset:3px}
+.config-site-text-action:disabled{opacity:.5;cursor:not-allowed}
 .config-domain-add{justify-self:start}
 .config-domain-add-form{display:grid;gap:8px;min-width:0;max-width:100%}
 .config-domain-add-form input{box-sizing:border-box;min-width:0;width:min(100%,22rem);
