@@ -12,6 +12,7 @@ const draft=ref(''),revision=ref(''),original=ref(''),loaded=ref(false);
 const section=ref('full'),sectionText=ref(''),sectionOriginal=ref(''),editorMode=ref('json');
 const confirm=ref(null),confirmDialog=ref(null);
 const renameDialog=ref(null),renameTarget=ref(null),renameTag=ref('');
+const addFieldDialog=ref(null),newField=ref('');
 function openRouteRename(source,index,entry){
   if(busy.value||source!=='routing')return;
   renameTarget.value={source,index};
@@ -69,17 +70,49 @@ const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规
 const parse=()=>{const obj=JSON.parse(draft.value);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw Error('配置必须是 JSON 对象');return obj;};
 const dirty=computed(()=>draft.value!==original.value||
   (section.value!=='full'&&sectionText.value!==sectionOriginal.value));
-// Legacy inbound/outbound detours are independent editor categories; do not
-// generate an absent legacy key just by visiting its navigation entry.
+// Show only configured keys. Missing known keys can be created explicitly by
+// the Add field dialog; never synthesize them merely by visiting a section.
 const editorEntries=computed(()=>{
   let cfg;
-  try{cfg=parse();}
-  catch{return [{key:'full',label:'完整内容（JSON 根对象）'},
-    ...sections.map(key=>({key,label:names[key]+'（'+key+'）'}))];}
+  try{cfg=parse();}catch{return [{key:'full',label:'完整内容（JSON 根对象）'}];}
   return [{key:'full',label:'完整内容（JSON 根对象）'},
-    ...sections.filter(key=>!['inboundDetour','outboundDetour'].includes(key)||
-      Object.hasOwn(cfg,key)).map(key=>({key,label:names[key]+'（'+key+'）'}))];
+    ...sections.filter(key=>Object.hasOwn(cfg,key))
+      .map(key=>({key,label:names[key]+'（'+key+'）'}))];
 });
+const missingFields=computed(()=>{
+  try{const cfg=parse();return sections.filter(key=>!Object.hasOwn(cfg,key));}
+  catch{return [];}
+});
+const fieldOptions=computed(()=>missingFields.value.map(key=>({key,label:names[key]+'（'+key+'）'})));
+function openAddField(){
+  if(busy.value)return;
+  try{
+    commitSection();
+    const list=missingFields.value;
+    if(!list.length)return;
+    newField.value='';
+    error.value='';
+    nextTick(()=>addFieldDialog.value?.showModal());
+  }catch(e){error.value=e.message;}
+}
+function closeAddField(){addFieldDialog.value?.close();}
+function confirmAddField(){
+  if(busy.value||!missingFields.value.includes(newField.value))return;
+  try{
+    commitSection();
+    const cfg=parse(),key=newField.value;
+    if(Object.hasOwn(cfg,key))throw Error('该字段已经存在');
+    // Preserve each section's JSON type; initialize only after confirmation.
+    cfg[key]=['inbounds','outbounds','inboundDetour','outboundDetour'].includes(key)?[]
+      :key==='routing'?{rules:[]}:{};
+    draft.value=JSON.stringify(cfg,null,2)+'\n';
+    showSection(key);
+    editorMode.value=visualAvailable.value?'visual':'json';
+    routeExpanded.value={};routeConditionSelection.value={};
+    closeAddField();
+    error.value='';
+  }catch(e){error.value=e.message;}
+}
 const editorLabel=computed(()=>section.value==='full'?'完整 V2Ray JSON 配置（根对象）':names[section.value]+'（'+section.value+'） · JSON');
 const visualAvailable=computed(()=>{
   try{return supportsVisual(parse(),section.value);}catch{return false;}
@@ -136,7 +169,7 @@ async function call(action,input={}){
   });
   const json=await reply.json();
   if(reply.status===401)emit('unauthorized');
-  if(!reply.ok)throw Error(json.error||'HTTP '+reply.status);
+  if(!reply.ok){const failure=Error(json.error||'HTTP '+reply.status);failure.status=reply.status;throw failure;}
   return json.result;
 }
 async function wrap(action){
@@ -199,7 +232,15 @@ function validate(){return wrap(async()=>{
 function save(){return wrap(async()=>{
   commitSection();
   parse();
-  const result=await call(props.operations.save,{content:draft.value,revision:revision.value});
+  let result;
+  try{result=await call(props.operations.save,{content:draft.value,revision:revision.value});}
+  catch(e){
+    if(e.status===409){
+      error.value='配置文件自本页读取后已变化。你的本地修改仍保留，未覆盖服务器配置；请先备份当前草稿，再重新读取最新版本并合并修改。';
+      return;
+    }
+    throw e;
+  }
   output.value=result.output;notice.value=result.message;
   if(!result.ok){error.value=result.message;return;}
   await refreshStatus();await load();
@@ -273,8 +314,11 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
       <div v-if="loaded" class="v2ray-editor">
         <div class="v2ray-editor-layout">
           <nav class="v2ray-config-nav" aria-label="V2Ray 配置目录">
+            <button type="button" class="v2ray-field-add-button"
+              :disabled="busy||!missingFields.length" @click="openAddField">添加字段</button>
             <button v-for="entry in editorEntries" :key="entry.key" type="button"
-              class="v2ray-config-item" :class="{selected:section===entry.key}"
+              class="v2ray-config-item"
+              :class="{selected:section===entry.key,'v2ray-config-full':entry.key==='full'}"
               :aria-pressed="section===entry.key" :disabled="busy"
               @click="selectSection(entry.key)">{{ entry.label }}</button>
           </nav>
@@ -518,6 +562,23 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
       <p v-else-if="data.configExists" class="muted small">配置尚未读取；可点击“刷新状态与配置”。</p>
     </template>
     <pre v-if="output" class="v2ray-output" aria-label="V2Ray 命令输出">{{ output }}</pre>
+    <dialog ref="addFieldDialog" class="v2ray-dialog" aria-labelledby="v2ray-add-field-title"
+      @close="newField=''">
+      <form class="v2ray-dialog-content" @submit.prevent="confirmAddField">
+        <h3 id="v2ray-add-field-title">添加配置字段</h3>
+        <label class="v2ray-rename-label" for="v2ray-new-field">选择尚未配置的字段
+          <select id="v2ray-new-field" v-model="newField" :disabled="busy"
+            aria-label="选择尚未配置的字段">
+            <option value="">请选择字段</option>
+            <option v-for="entry in fieldOptions" :key="entry.key" :value="entry.key">{{ entry.label }}</option>
+          </select>
+        </label>
+        <div class="v2ray-toolbar">
+          <button type="button" :disabled="busy" @click="closeAddField">取消</button>
+          <button type="submit" class="primary" :disabled="busy||!missingFields.includes(newField)">添加</button>
+        </div>
+      </form>
+    </dialog>
     <dialog ref="renameDialog" class="v2ray-dialog" aria-labelledby="v2ray-route-rename-title"
       @close="renameTarget=null">
       <form class="v2ray-dialog-content" @submit.prevent="submitRouteRename">
@@ -578,6 +639,9 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-config-nav .v2ray-config-item{box-sizing:border-box;display:block;width:100%;flex:none;
   padding:9px 11px;border:0;border-radius:8px;text-align:left;white-space:normal;
   background:transparent;color:var(--text-primary);font:inherit;font-size:.86rem}
+.v2ray-config-nav .v2ray-config-full{margin-bottom:12px}
+.v2ray-config-nav .v2ray-field-add-button{display:block;width:100%;flex:none;
+  margin:0 0 10px;border-radius:8px;padding:8px 11px;min-height:38px;text-align:center}
 .v2ray-config-nav .v2ray-config-item.selected{background:var(--accent-bg);color:var(--button-primary-text)}
 .v2ray-config-nav .v2ray-config-item:hover:not(:disabled):not(.selected){background:var(--button-bg)}
 .v2ray-editor-content{min-width:0}
@@ -648,7 +712,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-dialog-content{display:grid;gap:12px}
 .v2ray-dialog-content h3{margin:0}
 .v2ray-rename-label{display:grid;gap:6px;min-width:0;font-size:.9rem;font-weight:600}
-.v2ray-rename-label input{box-sizing:border-box;width:100%;min-height:38px;padding:8px 10px;
+.v2ray-rename-label input,.v2ray-rename-label select{box-sizing:border-box;width:100%;min-height:38px;padding:8px 10px;
   border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);
   color:var(--text-primary);font:inherit;font-weight:400}
 @media(max-width:730px){
