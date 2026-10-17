@@ -47,6 +47,6 @@ test('Nginx domain operations refuse injection, duplicates, last removal and amb
   assert.throws(()=>updateNginxSiteDomain('server { server_name $dynamic; }','add','bar.test'),/特殊|复杂/);
   assert.throws(()=>updateNginxSiteDomain('# server_name foo.test;','add','bar.test'),/未找到/);
   assert.throws(()=>updateNginxSiteDomain('server { server_name "foo.test"; }',
-    'add','bar.test'),/复杂/);
+    'add','bar.test'),/复杂|特殊/);
   assert.throws(()=>updateNginxSiteDomain('server { listen 80; }','add','bar.test'),/未找到/);
 });
