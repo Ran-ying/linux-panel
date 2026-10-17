@@ -1,5 +1,6 @@
 <script setup>
 import {computed,nextTick,onMounted,ref,watch} from 'vue';
+import {VISUAL_SECTIONS,visualEntries,supportsVisual,formatList,patchVisual} from './v2ray-visual.js';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true}
@@ -7,7 +8,7 @@ const props=defineProps({
 const emit=defineEmits(['unauthorized','listing-change']);
 const data=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref(''),output=ref('');
 const draft=ref(''),revision=ref(''),original=ref(''),loaded=ref(false);
-const section=ref('full'),sectionText=ref(''),sectionOriginal=ref('');
+const section=ref('full'),sectionText=ref(''),sectionOriginal=ref(''),editorMode=ref('json');
 const confirm=ref(null),confirmDialog=ref(null);
 const sections=['inbounds','outbounds','routing','dns','transport','log','policy','api','stats','reverse','observatory','burstObservatory','metrics','inboundDetour','outboundDetour'];
 const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规则',dns:'DNS',transport:'传输设置',
@@ -18,6 +19,38 @@ const dirty=computed(()=>draft.value!==original.value||
   (section.value!=='full'&&sectionText.value!==sectionOriginal.value));
 const editorEntries=[{key:'full',label:'完整内容'},...sections.map(key=>({key,label:names[key]}))];
 const editorLabel=computed(()=>section.value==='full'?'完整 V2Ray JSON 配置':names[section.value]+' · JSON');
+const visualAvailable=computed(()=>{
+  try{return supportsVisual(parse(),section.value);}catch{return false;}
+});
+const visualGroups=computed(()=>{
+  if(!visualAvailable.value)return [];
+  const cfg=parse(),key=section.value;
+  const keys=key==='inbounds'?['inbounds','inboundDetour']
+    :key==='outbounds'?['outbounds','outboundDetour']:[key];
+  return keys.map(source=>({key:source,label:names[source],items:visualEntries(cfg,source)}));
+});
+const listString=value=>formatList(value);
+function changeVisual(source,action,path=[],value,kind='text',item){
+  try{
+    const cfg=patchVisual(parse(),source,{action,path,value,kind,item});
+    draft.value=JSON.stringify(cfg,null,2)+'\n';
+    showSection(section.value);error.value='';
+  }catch(e){error.value=e.message;}
+}
+function visualSet(source,path,event,kind='text'){
+  changeVisual(source,'set',path,event.target.value,kind);
+}
+function visualAdd(source,path,item){changeVisual(source,'add',path,undefined,'text',item);}
+function visualRemove(source,path){changeVisual(source,'remove',path);}
+function addConnection(source){
+  visualAdd(source,[],source==='routing'?{type:'field',outboundTag:''}:{tag:'',protocol:'',settings:{}});
+}
+function setEditorMode(next){
+  if(next===editorMode.value||busy.value)return;
+  if(next==='visual'&&!visualAvailable.value)return;
+  try{commitSection();showSection(section.value);editorMode.value=next;error.value='';}
+  catch(e){error.value=e.message;}
+}
 watch(()=>props.initialData,v=>{data.value=v;});
 async function call(action,input={}){
   const reply=await fetch('/api/actions/'+encodeURIComponent(action)+'/execute',{
@@ -58,12 +91,13 @@ function commitSection(){
 }
 function selectSection(key){
   if(key===section.value)return;
-  try{commitSection();showSection(key);error.value='';}catch(e){error.value=e.message;}
+  try{commitSection();showSection(key);editorMode.value=visualAvailable.value?'visual':'json';error.value='';}
+  catch(e){error.value=e.message;}
 }
 async function load(){
   const result=await call(props.operations.read);
   draft.value=result.content;original.value=result.content;revision.value=result.revision;
-  loaded.value=true;showSection('full');
+  loaded.value=true;showSection('full');editorMode.value='json';
 }
 function refreshAll(){return wrap(async()=>{
   await refreshStatus();
@@ -162,19 +196,190 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
               @click="selectSection(entry.key)">{{ entry.label }}</button>
           </nav>
           <div class="v2ray-editor-content">
-            <label class="v2ray-editor-label">
+            <div class="v2ray-editor-header">
+              <div class="v2ray-toolbar v2ray-editor-actions">
+                <button type="button" :disabled="busy||!loaded" @click="validate">校验配置</button>
+                <button type="button" class="primary" :disabled="busy||!loaded||!dirty" @click="save">保存并应用</button>
+                <button type="button" :disabled="busy" @click="refreshAll">放弃修改并重新读取</button>
+                <span v-if="dirty" class="muted small">存在尚未保存的更改</span>
+              </div>
+              <div class="v2ray-view-toggle" aria-label="配置编辑方式">
+                <button type="button" :aria-pressed="editorMode==='visual'"
+                  :disabled="busy||!visualAvailable" @click="setEditorMode('visual')">可视化</button>
+                <button type="button" :aria-pressed="editorMode==='json'"
+                  :disabled="busy" @click="setEditorMode('json')">JSON</button>
+              </div>
+            </div>
+            <p v-if="section==='full'" class="muted small">完整配置使用 JSON 编辑；入站、出站和路由可在左侧选择后切换可视化。</p>
+            <p v-else-if="!visualAvailable" class="muted small">当前分类使用 JSON 编辑，或其结构不适合可视化。</p>
+            <div v-if="editorMode==='visual'&&visualAvailable" class="v2ray-visual-editor" aria-label="V2Ray 可视化配置">
+              <p class="muted small">此处修改的是本地候选配置，只有点击「保存并应用」才会更改服务。复杂参数和未显示的字段可通过 JSON 编辑，切换视图不会删除它们。</p>
+              <template v-for="group in visualGroups" :key="group.key">
+                <div class="v2ray-visual-group-heading">
+                  <strong>{{ group.label }}（{{ group.items.length }}）</strong>
+                  <button type="button" :disabled="busy" @click="addConnection(group.key)">
+                    {{ section==='routing'?'新增规则':'新增连接' }}
+                  </button>
+                </div>
+                <p v-if="!group.items.length" class="muted small">暂无条目，可点击新增。</p>
+                <div v-for="(entry,i) in group.items" :key="group.key+'-'+i" class="v2ray-visual-entry">
+                  <div class="v2ray-visual-entry-heading">
+                    <strong>{{ section==='routing'?'规则': '连接' }} {{ i+1 }} · {{ entry.tag||entry.outboundTag||entry.protocol||'未命名' }}</strong>
+                    <button type="button" :disabled="busy"
+                      :aria-label="'移除'+group.label+(i+1)" @click="visualRemove(group.key,[i])">移除</button>
+                  </div>
+                  <div v-if="section==='routing'" class="v2ray-visual-fields">
+                    <label>类型
+                      <input :value="entry.type??''" :disabled="busy" @change="visualSet(group.key,[i,'type'],$event)" />
+                    </label>
+                    <label>目标出站标签
+                      <input :value="entry.outboundTag??''" :disabled="busy" @change="visualSet(group.key,[i,'outboundTag'],$event)" />
+                    </label>
+                    <label>平衡器标签
+                      <input :value="entry.balancerTag??''" :disabled="busy" @change="visualSet(group.key,[i,'balancerTag'],$event)" />
+                    </label>
+                    <label>端口条件
+                      <input :value="entry.port??''" :disabled="busy" @change="visualSet(group.key,[i,'port'],$event)" />
+                    </label>
+                    <label>网络条件
+                      <input :value="entry.network??''" :disabled="busy" @change="visualSet(group.key,[i,'network'],$event)" />
+                    </label>
+                    <label>来源 IP
+                      <textarea rows="2" :value="listString(entry.source)" :disabled="busy"
+                        @change="visualSet(group.key,[i,'source'],$event,'list')" />
+                    </label>
+                    <label>入站标签
+                      <textarea rows="2" :value="listString(entry.inboundTag)" :disabled="busy"
+                        @change="visualSet(group.key,[i,'inboundTag'],$event,'list')" />
+                    </label>
+                    <label>域名条件
+                      <textarea rows="2" :value="listString(entry.domain)" :disabled="busy"
+                        @change="visualSet(group.key,[i,'domain'],$event,'list')" />
+                    </label>
+                    <label>IP 条件
+                      <textarea rows="2" :value="listString(entry.ip)" :disabled="busy"
+                        @change="visualSet(group.key,[i,'ip'],$event,'list')" />
+                    </label>
+                    <label>协议条件
+                      <textarea rows="2" :value="listString(entry.protocol)" :disabled="busy"
+                        @change="visualSet(group.key,[i,'protocol'],$event,'list')" />
+                    </label>
+                  </div>
+                  <template v-else>
+                    <div class="v2ray-visual-fields">
+                      <label>标签（tag）
+                        <input :value="entry.tag??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'tag'],$event)" />
+                      </label>
+                      <label>协议
+                        <input :value="entry.protocol??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'protocol'],$event)" />
+                      </label>
+                      <template v-if="group.key==='inbounds'||group.key==='inboundDetour'">
+                        <label>监听地址
+                          <input :value="entry.listen??''" :disabled="busy"
+                            @change="visualSet(group.key,[i,'listen'],$event)" />
+                        </label>
+                        <label>监听端口
+                          <input type="number" min="0" max="65535" :value="entry.port??''" :disabled="busy"
+                            @change="visualSet(group.key,[i,'port'],$event,'number')" />
+                        </label>
+                      </template>
+                      <label v-else>发送地址（sendThrough）
+                        <input :value="entry.sendThrough??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'sendThrough'],$event)" />
+                      </label>
+                      <label v-if="entry.streamSettings">传输网络
+                        <input :value="entry.streamSettings.network??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'streamSettings','network'],$event)" />
+                      </label>
+                      <label v-if="entry.streamSettings">传输安全
+                        <input :value="entry.streamSettings.security??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'streamSettings','security'],$event)" />
+                      </label>
+                    </div>
+                    <div v-if="Array.isArray(entry.settings?.clients)" class="v2ray-visual-nested">
+                      <div class="v2ray-visual-entry-heading"><strong>客户端</strong>
+                        <button type="button" :disabled="busy" @click="visualAdd(group.key,[i,'settings','clients'],{id:''})">添加客户端</button>
+                      </div>
+                      <div v-for="(client,j) in entry.settings.clients" :key="j" class="v2ray-visual-fields">
+                        <label>客户端 {{ j+1 }} · ID
+                          <input type="password" autocomplete="off" :value="client.id??''" :disabled="busy"
+                            @change="visualSet(group.key,[i,'settings','clients',j,'id'],$event)" />
+                        </label>
+                        <label>邮件标识
+                          <input :value="client.email??''" :disabled="busy"
+                            @change="visualSet(group.key,[i,'settings','clients',j,'email'],$event)" />
+                        </label>
+                        <label>alterId
+                          <input type="number" min="0" max="65535" :value="client.alterId??''" :disabled="busy"
+                            @change="visualSet(group.key,[i,'settings','clients',j,'alterId'],$event,'number')" />
+                        </label>
+                        <button type="button" :disabled="busy"
+                          :aria-label="'移除客户端 '+(j+1)" @click="visualRemove(group.key,[i,'settings','clients',j])">移除客户端</button>
+                      </div>
+                    </div>
+                    <div v-for="arrayKey in ['vnext','servers']" :key="arrayKey">
+                      <div v-if="Array.isArray(entry.settings?.[arrayKey])" class="v2ray-visual-nested">
+                        <div class="v2ray-visual-entry-heading"><strong>{{ arrayKey==='vnext'?'目标服务器':'服务器' }}</strong>
+                          <button type="button" :disabled="busy" @click="visualAdd(group.key,[i,'settings',arrayKey],{address:'',port:443})">添加服务器</button>
+                        </div>
+                        <div v-for="(server,j) in entry.settings[arrayKey]" :key="j" class="v2ray-server-editor">
+                          <div class="v2ray-visual-fields">
+                            <label>服务器 {{ j+1 }} · 地址
+                              <input :value="server.address??''" :disabled="busy"
+                                @change="visualSet(group.key,[i,'settings',arrayKey,j,'address'],$event)" />
+                            </label>
+                            <label>服务器端口
+                              <input type="number" min="0" max="65535" :value="server.port??''" :disabled="busy"
+                                @change="visualSet(group.key,[i,'settings',arrayKey,j,'port'],$event,'number')" />
+                            </label>
+                            <label v-if="server.method!==undefined">加密方式
+                              <input :value="server.method??''" :disabled="busy"
+                                @change="visualSet(group.key,[i,'settings',arrayKey,j,'method'],$event)" />
+                            </label>
+                            <label v-if="server.password!==undefined">密码
+                              <input type="password" autocomplete="off" :value="server.password??''" :disabled="busy"
+                                @change="visualSet(group.key,[i,'settings',arrayKey,j,'password'],$event)" />
+                            </label>
+                            <button type="button" :disabled="busy"
+                              :aria-label="'移除服务器 '+(j+1)" @click="visualRemove(group.key,[i,'settings',arrayKey,j])">移除服务器</button>
+                          </div>
+                          <div v-if="Array.isArray(server.users)" class="v2ray-visual-nested">
+                            <div class="v2ray-visual-entry-heading"><strong>服务器用户</strong>
+                              <button type="button" :disabled="busy" @click="visualAdd(group.key,[i,'settings',arrayKey,j,'users'],{id:''})">添加用户</button>
+                            </div>
+                            <div v-for="(user,k) in server.users" :key="k" class="v2ray-visual-fields">
+                              <label>用户 {{ k+1 }} · ID
+                                <input type="password" autocomplete="off" :value="user.id??''" :disabled="busy"
+                                  @change="visualSet(group.key,[i,'settings',arrayKey,j,'users',k,'id'],$event)" />
+                              </label>
+                              <label>alterId
+                                <input type="number" min="0" max="65535" :value="user.alterId??''" :disabled="busy"
+                                  @change="visualSet(group.key,[i,'settings',arrayKey,j,'users',k,'alterId'],$event,'number')" />
+                              </label>
+                              <label>加密方式
+                                <input :value="user.security??''" :disabled="busy"
+                                  @change="visualSet(group.key,[i,'settings',arrayKey,j,'users',k,'security'],$event)" />
+                              </label>
+                              <button type="button" :disabled="busy"
+                                :aria-label="'移除用户 '+(k+1)" @click="visualRemove(group.key,[i,'settings',arrayKey,j,'users',k])">移除用户</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+            <label v-else class="v2ray-editor-label">
               {{ editorLabel }}
               <textarea v-if="section==='full'" v-model="draft" rows="22" spellcheck="false"
                 :disabled="busy" aria-label="完整 V2Ray JSON 配置" />
               <textarea v-else v-model="sectionText" rows="22" spellcheck="false"
                 :disabled="busy" aria-label="当前配置部分 JSON" />
             </label>
-            <div class="v2ray-toolbar v2ray-editor-actions">
-              <button type="button" :disabled="busy||!loaded" @click="validate">校验配置</button>
-              <button type="button" class="primary" :disabled="busy||!loaded||!dirty" @click="save">保存并应用</button>
-              <button type="button" :disabled="busy" @click="refreshAll">放弃修改并重新读取</button>
-              <span v-if="dirty" class="muted small">存在尚未保存的更改</span>
-            </div>
           </div>
         </div>
       </div>
@@ -228,6 +433,27 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-config-nav .v2ray-config-item:hover:not(:disabled):not(.selected){background:var(--button-bg)}
 .v2ray-editor-content{min-width:0}
 .v2ray-editor-actions{margin:12px 0 0}
+.v2ray-editor-header{display:flex;align-items:center;justify-content:space-between;
+  gap:8px 14px;flex-wrap:wrap;margin-bottom:12px}
+.v2ray-editor-header .v2ray-editor-actions{margin:0}
+.v2ray-view-toggle{display:flex;align-items:center;gap:0;margin-left:auto;
+  border:1px solid var(--button-border);border-radius:999px;overflow:hidden}
+.v2ray-view-toggle button{border:0;border-radius:0;min-height:32px;padding:4px 11px}
+.v2ray-view-toggle button[aria-pressed="true"]{background:var(--accent-bg);
+  color:var(--button-primary-text)}
+.v2ray-visual-editor{min-width:0;display:grid;gap:12px}
+.v2ray-visual-group-heading,.v2ray-visual-entry-heading{display:flex;gap:10px;
+  justify-content:space-between;align-items:center;flex-wrap:wrap}
+.v2ray-visual-group-heading{margin-top:5px}
+.v2ray-visual-entry{border-top:1px solid var(--border-rule);padding-top:14px;display:grid;gap:12px;min-width:0}
+.v2ray-visual-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr));
+  gap:10px;align-items:end;min-width:0}
+.v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem}
+.v2ray-visual-fields input,.v2ray-visual-fields textarea{box-sizing:border-box;width:100%;
+  min-width:0;padding:8px;border-radius:8px;border:1px solid var(--input-border);
+  color:var(--text-primary);background:var(--input-bg);font:inherit}
+.v2ray-visual-nested,.v2ray-server-editor{display:grid;gap:10px;min-width:0;
+  padding:10px 0 0 12px;border-left:2px solid var(--border-rule)}
 .v2ray-editor-label{display:grid;gap:8px;font-weight:600}
 .v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;
