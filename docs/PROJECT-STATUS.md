@@ -1,6 +1,7 @@
 # Linux Panel 当前状态
 
 ## 当前项目状态（2026-10-17）
+- 当前开发 PR #163（CI/部署待验收）：在同一个「Nginx 网站」模块中新建两个可见 Action，顺序 **Nginx 状态管理（nginx.status）→ 网站管理（nginx.sites）→ SSL 证书管理（nginx.certificates）**，辅助 root Action `nginx.service` / `nginx.renew` 隐藏在对应卡片中。状态区显示 Nginx 版本、systemd 状态/自启、语法检查，并经二次确认执行固定服务操作。证书区安全读取 Certbot live→archive 公有证书的域名、颁发者、到期时间，手动确认只对现有证书执行标准到期续期，成功后检验并按需重载。保护私钥，初次签发/撤销/手动路径证书扫描不在本次范围；生产验收仅只读，不操作真实证书或 Nginx 服务。
 - 当前开发 PR #162（合并/部署待验证）：V2Ray 入站连接、出站连接及旧版入站/出站扩展也改用与路由规则相同的「重命名」独立弹窗，按钮在「移除」左边。移除内联 tag 输入；弹窗只编辑显式 tag，缺失时空值，不按 protocol 回填；确认只改对应源数组候选 JSON，清空 tag 删除字段且标题回退，取消无更改。回归涵盖现代/旧版四类、既有与缺失 tag、取消/确定/清空、JSON 往返、无隐式保存。
 - 当前开发 PR #161（合并/部署待单独验收）：V2Ray 左侧导航无共同背景，独立「添加字段」按钮，单独有背景和圆角边框的「完整内容」区，单独有背景和圆角边框的字段列表区；**仅字段列表自身滚动**，上方按钮和完整内容保持固定，整个 nav 与顶部编辑工具栏依然 sticky。浏览器验证两块卡片边框/背景、透明父级、独立滚动、移动端与桌面。只变动前端与测试/文档，不改真实 V2Ray 配置。\n
 - **最近实机部署核验**：main `96ae79f5b8316ca3d3ad7ffc813f7b85a8e69de6`（[PR #159](https://github.com/Ran-ying/linux-panel/pull/159)）；受限 Broker durable success、Web/privileged/V2Ray/update.path active、HTTP 200、Git clean；后续交接见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
