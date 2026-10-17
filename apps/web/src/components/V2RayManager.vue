@@ -69,9 +69,17 @@ const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规
 const parse=()=>{const obj=JSON.parse(draft.value);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw Error('配置必须是 JSON 对象');return obj;};
 const dirty=computed(()=>draft.value!==original.value||
   (section.value!=='full'&&sectionText.value!==sectionOriginal.value));
-// The full document is a JSON root, not a literal config property named "root".
-const editorEntries=[{key:'full',label:'完整内容（JSON 根对象）'},
-  ...sections.map(key=>({key,label:names[key]+'（'+key+'）'}))];
+// Legacy inbound/outbound detours are independent editor categories; do not
+// generate an absent legacy key just by visiting its navigation entry.
+const editorEntries=computed(()=>{
+  let cfg;
+  try{cfg=parse();}
+  catch{return [{key:'full',label:'完整内容（JSON 根对象）'},
+    ...sections.map(key=>({key,label:names[key]+'（'+key+'）'}))];}
+  return [{key:'full',label:'完整内容（JSON 根对象）'},
+    ...sections.filter(key=>!['inboundDetour','outboundDetour'].includes(key)||
+      Object.hasOwn(cfg,key)).map(key=>({key,label:names[key]+'（'+key+'）'}))];
+});
 const editorLabel=computed(()=>section.value==='full'?'完整 V2Ray JSON 配置（根对象）':names[section.value]+'（'+section.value+'） · JSON');
 const visualAvailable=computed(()=>{
   try{return supportsVisual(parse(),section.value);}catch{return false;}
@@ -79,8 +87,8 @@ const visualAvailable=computed(()=>{
 const visualGroups=computed(()=>{
   if(!visualAvailable.value)return [];
   const cfg=parse(),key=section.value;
-  const keys=key==='inbounds'?['inbounds','inboundDetour']
-    :key==='outbounds'?['outbounds','outboundDetour']:[key];
+  // A section owns only its own list, including legacy in-/outbound detours.
+  const keys=[key];
   return keys.filter(source=>supportsVisual(cfg,source))
     .map(source=>({key:source,label:names[source],items:visualEntries(cfg,source)}));
 });
@@ -146,7 +154,8 @@ function showSection(key){
   section.value=key;
   if(key==='full'){sectionText.value='';sectionOriginal.value='';return;}
   const defaultValue=['inbounds','outbounds','inboundDetour','outboundDetour'].includes(key)?[]:{};
-  sectionText.value=JSON.stringify(obj[key]??defaultValue,null,2);
+  // A present null legacy field must remain "null", never an invented [].
+  sectionText.value=JSON.stringify(obj[key]===undefined?defaultValue:obj[key],null,2);
   sectionOriginal.value=sectionText.value;
 }
 function commitSection(){

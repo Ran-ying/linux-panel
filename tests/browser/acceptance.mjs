@@ -115,7 +115,9 @@ try {
     let v2rayConfig=JSON.stringify({inbounds:[{tag:'socks',listen:'192.0.2.55',
       port:10080,protocol:'socks',streamSettings:{network:'ws',security:'tls'},
       settings:{clients:[{id:'client-uuid-visible',level:1}]}}],outbounds:[{tag:'direct',protocol:'freedom'}],
-      dns:{servers:['1.1.1.1']},routing:{rules:[]},inboundDetour:null,customUnknown:{value:true}},null,2);
+      inboundDetour:[{tag:'legacy-in',protocol:'socks',listen:'127.0.0.1',port:12080}],
+      outboundDetour:[{tag:'legacy-out',protocol:'freedom',settings:{}}],
+      dns:{servers:['1.1.1.1']},routing:{rules:[]},customUnknown:{value:true}},null,2);
     const v2rayCalls=[];
     const v2rayDigest=()=>String(v2rayRevision).padStart(64,'b');
     await page.route('**/api/actions/v2ray.*/execute',async route=>{
@@ -1014,7 +1016,11 @@ try {
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         const inboundVisual=panel.locator('.v2ray-visual-editor');
         assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
-          'null legacy inboundDetour is skipped rather than breaking visual editing');
+          'standard inbounds must not render inboundDetour connections');
+        assert.ok((await inboundVisual.locator('.v2ray-visual-group-heading').innerText())
+          .includes('入站连接（inbounds）'));
+        assert.equal(await inboundVisual.getByText('legacy-in').count(),0,
+          'legacy inbound entry must stay outside standard inbound editor');
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),1);
         const allInputLabels=await inboundVisual.locator('.v2ray-visual-fields > label').allTextContents();
         for(const original of ['tag','protocol','listen','port','streamSettings.network',
@@ -1076,16 +1082,47 @@ try {
         await viewToggle.getByRole('button',{name:'可视化'}).click();
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).inputValue(),'json-changed',
           'JSON edits must carry into the visual form');
+        await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）',exact:true}).click();
+        assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
+          'legacy inbound has its own visual section');
+        assert.ok((await inboundVisual.locator('.v2ray-visual-group-heading').innerText())
+          .includes('旧版入站扩展（inboundDetour） · 1'));
+        assert.ok((await inboundVisual.locator('.v2ray-visual-entry-heading').first().innerText())
+          .includes('legacy-in'));
+        const legacyInboundTag=inboundVisual.getByRole('textbox',{name:'标签（tag）'});
+        await legacyInboundTag.fill('legacy-in-changed');
+        await legacyInboundTag.press('Tab');
+        await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
+        assert.equal(JSON.parse(await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue())[0].tag,
+          'legacy-in-changed','legacy inbound editing must write only inboundDetour JSON');
+        await nav.getByRole('button',{name:'入站连接（inbounds）',exact:true}).click();
+        assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1);
+        assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).inputValue(),'json-changed',
+          'legacy inbound edit must not change ordinary inbounds');
         await nav.getByRole('button',{name:'出站连接（outbounds）',exact:true}).click();
-        assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),2,
-          'visual outbound editor must include legacy outboundDetour entries');
-        const legacyHeading=inboundVisual.locator('.v2ray-visual-group-heading').filter({hasText:'旧版出站扩展'});
-        assert.ok((await legacyHeading.innerText()).includes('（outboundDetour）'),
-          'secondary visual groups annotate their originating JSON array');
+        assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
+          'outbounds and outboundDetour must have separate editors');
+        assert.ok((await inboundVisual.locator('.v2ray-visual-group-heading').innerText())
+          .includes('出站连接（outbounds） · 1'));
+        assert.equal(await inboundVisual.getByText('legacy-out').count(),0,
+          'ordinary outbound page must not show legacy outbound entry');
+        await nav.getByRole('button',{name:'旧版出站扩展（outboundDetour）',exact:true}).click();
+        const legacyHeading=inboundVisual.locator('.v2ray-visual-group-heading');
+        assert.equal(await legacyHeading.count(),1,
+          'legacy outbound has one standalone group');
+        assert.ok((await legacyHeading.innerText()).includes('旧版出站扩展（outboundDetour） · 1'));
+        assert.ok((await inboundVisual.locator('.v2ray-visual-entry-heading').first().innerText())
+          .includes('legacy-out'));
         await legacyHeading.getByRole('button',{name:'新增连接'}).click();
+        await inboundVisual.getByText('旧版出站扩展（outboundDetour） · 2').waitFor();
+        await inboundVisual.getByRole('button',{name:'移除旧版出站扩展2'}).click();
         await inboundVisual.getByText('旧版出站扩展（outboundDetour） · 1').waitFor();
-        await inboundVisual.getByRole('button',{name:'移除旧版出站扩展1'}).click();
-        await inboundVisual.getByText('旧版出站扩展（outboundDetour） · 0').waitFor();
+        await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
+        const legacyOut=JSON.parse(await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue());
+        assert.equal(legacyOut[0].tag,'legacy-out');
+        await nav.getByRole('button',{name:'出站连接（outbounds）',exact:true}).click();
+        assert.equal(await inboundVisual.locator('.v2ray-visual-entry-heading').count(),1,
+          'adding/removing old outbound entries never affects modern outbounds');
         // Force a tall editor in the disposable browser fixture to prove both controls
         // are sticky during document scrolling, rather than merely styled as sticky.
         await panel.locator('.v2ray-editor-content').evaluate(node=>{node.style.minHeight='2100px';});
@@ -1197,7 +1234,7 @@ try {
         const outboundSelect=routeEntry.getByRole('combobox',{name:'目标出站标签'});
         await outboundSelect.selectOption('direct');
         assert.deepEqual(await outboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value)),
-          ['','direct'],'route destinations must come from the current outbounds');
+          ['','direct','legacy-out'],'route destinations must include ordinary and legacy outbound tags');
         await routeEntry.getByRole('button',{name:'添加入站标签'}).click();
         const inboundSelect=routeEntry.getByRole('combobox',{name:'入站标签 1'});
         await inboundSelect.selectOption('json-changed');
@@ -1350,6 +1387,29 @@ try {
           'visual editor updates must not discard unrelated full-config settings');
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).isDisabled(),true,
           'the full raw configuration must remain a JSON-only editor');
+        // Presence-based navigation: a present null legacy field must stay listed
+        // as raw JSON, while truly absent legacy keys vanish from the sidebar.
+        const noLegacyConfig=JSON.parse(await editor.inputValue());
+        noLegacyConfig.inboundDetour=null;
+        await editor.fill(JSON.stringify(noLegacyConfig,null,2));
+        await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）',exact:true}).click();
+        assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).isDisabled(),true,
+          'legacy null is not an editable array');
+        assert.equal((await part.inputValue()).trim(),'null',
+          'present null legacy field must not silently display a new []');
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        const removedLegacy=JSON.parse(await editor.inputValue());
+        delete removedLegacy.inboundDetour;
+        delete removedLegacy.outboundDetour;
+        await editor.fill(JSON.stringify(removedLegacy,null,2));
+        assert.equal(await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）'}).count(),0,
+          'missing inboundDetour must not get a sidebar item');
+        assert.equal(await nav.getByRole('button',{name:'旧版出站扩展（outboundDetour）'}).count(),0,
+          'missing outboundDetour must not get a sidebar item');
+        assert.equal(await nav.getByRole('button',{name:'入站连接（inbounds）'}).count(),1);
+        assert.equal(await nav.getByRole('button',{name:'出站连接（outbounds）'}).count(),1);
+        assert.ok(!Object.hasOwn(JSON.parse(await editor.inputValue()),'inboundDetour'));
+        assert.ok(!Object.hasOwn(JSON.parse(await editor.inputValue()),'outboundDetour'));
         assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1,
           'visual edits must remain local unless the operator clicks Save');
         await serviceCard.getByRole('button',{name:'停止',exact:true}).click();
