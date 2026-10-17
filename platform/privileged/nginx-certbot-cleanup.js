@@ -81,7 +81,7 @@ export function createNginxCertbotCleanup({
     for(const name of data.names){
       const renewal=join(renew,name+'.conf');
       try{
-        const st=await fs.lstat(renew);
+        const st=await fs.lstat(renewal);
         if(!st.isFile()||st.isSymbolicLink()||(requireRoot&&(st.uid!==0||(st.mode&0o022)!==0)))continue;
         const dir=await fs.lstat(join(live,name));
         if(!dir.isDirectory()||dir.isSymbolicLink())continue;
