@@ -1,10 +1,10 @@
 # Linux Panel 当前状态
 
-## 当前项目状态（2026-10-17）
+## 当前项目与路由布局修正（2026-10-17）
 
-- 最近实机部署验收：Linux Panel v0.5.0，main `2755b00dc23e4597cea518015fce0cc004e45a52`，关联 [PR #154](https://github.com/Ran-ying/linux-panel/pull/154)；`linux-panel.service`、特权执行器、V2Ray、更新 watcher 均 active，认证 API HTTP 200，Git 工作区 clean。相关证据与交接见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
-- 当前开发 PR（未合并、未部署前）：V2Ray 路由可视化已有规则只显示非空可选条件，空属性保留在原 JSON；新增规则只初始化 type、inboundTag、outboundTag，选取「选择条件 + 添加条件」后局部展开其它字段，展开空字段不修改草稿。IP 条件位于末尾、整行宽度，并随内容自动扩展高度；保留未知属性与历史路由结构。测试涵盖响应式浏览器和 JSON 往返。待 CI、合并、Broker 部署独立核验，不能视为已上线。
-- 仅 Web 前端、单元/浏览器测试和文档更改；不得对实际 V2Ray 配置、网络、证书、root Handler 或服务进行测试性写入。移动设备实体视觉检查仍建议单独进行。
+- **最后已观察的服务器部署**：Linux Panel v0.5.0，main `f0ef4cf42ba61fc2b7a6b363986f8e65ed9931d0`（[PR #155](https://github.com/Ran-ying/linux-panel/pull/155)）；独立确认普通 Web UID 下 Git 工作区干净、Panel/privileged/V2Ray/update.path 活跃、HTTP 200，受限 root Broker 最后事务 success。证据及交接见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 本次布局修正开发中（须独立核验 CI、合并、生产部署）：V2Ray 路由规则底部保留 **「选择条件 + 添加条件」**，排在含 IP 的可选条件之后；两项控件统一 38px 高。类型、入站标签、目标出站标签三个基本字段采用一致的 38px 控件高度及顶端对齐，防止多行入站标签将其它项挤到底部。规则标题继续按 `entry.tag || entry.outboundTag || entry.protocol || '未命名'` 取值，即没有自定义 tag 时显示 `outboundTag`（如 `out_direct`），此次不变更其语义。
+- 本次只调整 Web 展示、浏览器验收与文档，**不会改变真实 V2Ray 配置、网络服务或 root Handler**；不将合并/排队请求误当作部署成功。手机真机视觉观察尚须独立确认。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 
