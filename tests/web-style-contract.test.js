@@ -31,7 +31,7 @@ test('all module confirmation dialogs share themed background and backdrop',()=>
  for(const [name,selector] of [
   ['ManagedConfigs.vue','config-dialog'],['ScheduledTasks.vue','task-dialog'],
   ['V2RayManager.vue','v2ray-dialog'],['NginxService.vue','nginx-control-dialog'],
-  ['NginxCertificates.vue','nginx-certificate-dialog']]){
+  ['CertbotManager.vue','certbot-confirm']]){
   const declaration=style(name).match(new RegExp('\\.'+selector+'\\{([^}]+)\\}'))?.[1]||'';
   for(const required of ['background:var(--panel-bg)','border-radius:var(--ui-card-radius)',
    'padding:var(--ui-dialog-padding)','box-shadow:var(--ui-dialog-shadow)']){
