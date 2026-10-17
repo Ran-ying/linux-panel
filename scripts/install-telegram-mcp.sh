@@ -28,6 +28,8 @@ git -C "$SRC" checkout -q --detach "$PIN"
 # Setuptools may write egg-info to the source tree during the build.
 if [[ ! -x "$SRC/.venv/bin/python" ]]; then
   chown -R telegrammcp:telegrammcp "$SRC"
+  # Keep the checkout immutable if dependency installation fails partway.
+  trap 'chown -R root:root "$SRC"; chmod -R go-w "$SRC"' EXIT
   install -d -m 0755 -o telegrammcp -g telegrammcp "$SRC/.venv"
   runuser -u telegrammcp -- python3 -m venv "$SRC/.venv"
   runuser -u telegrammcp -- "$SRC/.venv/bin/python" -m pip install --disable-pip-version-check --no-cache-dir "$SRC"
@@ -35,6 +37,7 @@ fi
 # After the build, freeze both source and venv against runtime modifications.
 chown -R root:root "$SRC"
 chmod -R go-w "$SRC"
+trap - EXIT
 
 if [[ ! -e "$CONF" ]]; then
   cat > "$CONF" <<'ENV'
