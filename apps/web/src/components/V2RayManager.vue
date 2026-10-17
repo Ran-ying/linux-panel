@@ -1,6 +1,7 @@
 <script setup>
 import {computed,nextTick,onMounted,ref,watch} from 'vue';
 import {VISUAL_SECTIONS,visualEntries,supportsVisual,formatList,patchVisual} from './v2ray-visual.js';
+import {v2raySelectChoices} from './v2ray-choices.js';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true}
@@ -31,6 +32,7 @@ const visualGroups=computed(()=>{
     .map(source=>({key:source,label:names[source],items:visualEntries(cfg,source)}));
 });
 const listString=value=>formatList(value);
+const selectChoices=v2raySelectChoices;
 function changeVisual(source,action,path=[],value,kind='text',item){
   try{
     const cfg=patchVisual(parse(),source,{action,path,value,kind,item});
@@ -214,7 +216,6 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
             <p v-if="section==='full'" class="muted small">完整配置使用 JSON 编辑；入站、出站和路由可在左侧选择后切换可视化。</p>
             <p v-else-if="!visualAvailable" class="muted small">当前分类使用 JSON 编辑，或其结构不适合可视化。</p>
             <div v-if="editorMode==='visual'&&visualAvailable" class="v2ray-visual-editor" aria-label="V2Ray 可视化配置">
-              <p class="muted small">此处修改的是本地候选配置，只有点击「保存并应用」才会更改服务。复杂参数和未显示的字段可通过 JSON 编辑，切换视图不会删除它们。</p>
               <template v-for="group in visualGroups" :key="group.key">
                 <div class="v2ray-visual-group-heading">
                   <strong>{{ group.label }}（{{ group.items.length }}）</strong>
@@ -273,13 +274,20 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                           @change="visualSet(group.key,[i,'tag'],$event)" />
                       </label>
                       <label>协议
-                        <input :value="entry.protocol??''" :disabled="busy"
-                          @change="visualSet(group.key,[i,'protocol'],$event)" />
+                        <select :value="entry.protocol??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'protocol'],$event)">
+                          <option v-for="choice in selectChoices(
+                            group.key==='inbounds'||group.key==='inboundDetour'?'inboundProtocol':'outboundProtocol',
+                            entry.protocol)" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                        </select>
                       </label>
                       <template v-if="group.key==='inbounds'||group.key==='inboundDetour'">
                         <label>监听地址
-                          <input :value="entry.listen??''" :disabled="busy"
-                            @change="visualSet(group.key,[i,'listen'],$event)" />
+                          <select :value="entry.listen??''" :disabled="busy"
+                            @change="visualSet(group.key,[i,'listen'],$event)">
+                            <option v-for="choice in selectChoices('listen',entry.listen)"
+                              :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                          </select>
                         </label>
                         <label>监听端口
                           <input type="number" min="0" max="65535" :value="entry.port??''" :disabled="busy"
@@ -291,12 +299,18 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                           @change="visualSet(group.key,[i,'sendThrough'],$event)" />
                       </label>
                       <label v-if="entry.streamSettings">传输网络
-                        <input :value="entry.streamSettings.network??''" :disabled="busy"
-                          @change="visualSet(group.key,[i,'streamSettings','network'],$event)" />
+                        <select :value="entry.streamSettings.network??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'streamSettings','network'],$event)">
+                          <option v-for="choice in selectChoices('network',entry.streamSettings.network)"
+                            :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                        </select>
                       </label>
                       <label v-if="entry.streamSettings">传输安全
-                        <input :value="entry.streamSettings.security??''" :disabled="busy"
-                          @change="visualSet(group.key,[i,'streamSettings','security'],$event)" />
+                        <select :value="entry.streamSettings.security??''" :disabled="busy"
+                          @change="visualSet(group.key,[i,'streamSettings','security'],$event)">
+                          <option v-for="choice in selectChoices('security',entry.streamSettings.security)"
+                            :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                        </select>
                       </label>
                     </div>
                     <div v-if="Array.isArray(entry.settings?.clients)" class="v2ray-visual-nested">
@@ -305,7 +319,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       </div>
                       <div v-for="(client,j) in entry.settings.clients" :key="j" class="v2ray-visual-fields">
                         <label>客户端 {{ j+1 }} · ID
-                          <input type="password" autocomplete="off" :value="client.id??''" :disabled="busy"
+                          <input type="text" autocomplete="off" :value="client.id??''" :disabled="busy"
                             @change="visualSet(group.key,[i,'settings','clients',j,'id'],$event)" />
                         </label>
                         <label>邮件标识
@@ -352,7 +366,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                             </div>
                             <div v-for="(user,k) in server.users" :key="k" class="v2ray-visual-fields">
                               <label>用户 {{ k+1 }} · ID
-                                <input type="password" autocomplete="off" :value="user.id??''" :disabled="busy"
+                                <input type="text" autocomplete="off" :value="user.id??''" :disabled="busy"
                                   @change="visualSet(group.key,[i,'settings',arrayKey,j,'users',k,'id'],$event)" />
                               </label>
                               <label>alterId
@@ -423,10 +437,13 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-config-line button{flex:none;margin-left:auto}
 .v2ray-manager code{overflow-wrap:anywhere}
 .v2ray-empty{display:grid;gap:10px}
-.v2ray-editor-layout{display:grid;grid-template-columns:minmax(145px,200px) minmax(0,1fr);
+.v2ray-editor-layout{--v2ray-sticky-top:var(--sidebar-space,16px);
+  display:grid;grid-template-columns:minmax(145px,200px) minmax(0,1fr);
   gap:16px;align-items:start;min-width:0}
 .v2ray-config-nav{display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
-  max-height:min(75vh,38rem);overflow-y:auto;overscroll-behavior:contain}
+  position:sticky;top:var(--v2ray-sticky-top);align-self:start;z-index:4;
+  max-height:calc(100dvh - var(--v2ray-sticky-top) - 14px);
+  overflow-y:auto;overscroll-behavior:contain;background:var(--page-bg)}
 .v2ray-config-nav .v2ray-config-item{box-sizing:border-box;display:block;width:100%;flex:none;
   padding:9px 11px;border:0;border-radius:8px;text-align:left;white-space:normal;
   background:transparent;color:var(--text-primary);font:inherit;font-size:.86rem}
@@ -435,7 +452,9 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-editor-content{min-width:0}
 .v2ray-editor-actions{margin:12px 0 0}
 .v2ray-editor-header{display:flex;align-items:center;justify-content:space-between;
-  gap:8px 14px;flex-wrap:wrap;margin-bottom:12px}
+  gap:8px 14px;flex-wrap:wrap;margin-bottom:12px;
+  position:sticky;top:var(--v2ray-sticky-top);z-index:5;
+  padding:8px 0;background:var(--page-bg)}
 .v2ray-editor-header .v2ray-editor-actions{margin:0}
 .v2ray-view-toggle{display:flex;align-items:center;gap:0;margin-left:auto;
   border:1px solid var(--button-border);border-radius:999px;overflow:hidden}
@@ -450,9 +469,11 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr));
   gap:10px;align-items:end;min-width:0}
 .v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem}
-.v2ray-visual-fields input,.v2ray-visual-fields textarea{box-sizing:border-box;width:100%;
-  min-width:0;padding:8px;border-radius:8px;border:1px solid var(--input-border);
+.v2ray-visual-fields input,.v2ray-visual-fields textarea,.v2ray-visual-fields select{
+  box-sizing:border-box;width:100%;min-width:0;padding:8px;
+  border-radius:8px;border:1px solid var(--input-border);
   color:var(--text-primary);background:var(--input-bg);font:inherit}
+.v2ray-visual-fields select{padding-right:22px}
 .v2ray-visual-nested,.v2ray-server-editor{display:grid;gap:10px;min-width:0;
   padding:10px 0 0 12px;border-left:2px solid var(--border-rule)}
 .v2ray-editor-label{display:grid;gap:8px;font-weight:600}
@@ -469,7 +490,8 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-dialog-content h3{margin:0}
 @media(max-width:730px){
   .v2ray-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-  .v2ray-editor-layout{grid-template-columns:minmax(105px,128px) minmax(0,1fr);gap:10px}
+  .v2ray-editor-layout{--v2ray-sticky-top:calc(var(--mobile-top,16px) + var(--mobile-header-height,110px) + 10px);
+    grid-template-columns:minmax(105px,128px) minmax(0,1fr);gap:10px}
   .v2ray-config-nav .v2ray-config-item{padding:8px 7px;font-size:.8rem}
   .v2ray-editor-label textarea{padding:8px}
   .v2ray-dialog{padding:14px}
