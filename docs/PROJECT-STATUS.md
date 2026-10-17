@@ -1,18 +1,10 @@
 # Linux Panel 当前状态
 
-## Broker 激活检查 SIGPIPE 误判（2026-10-17）
+## 当前部署与 UI 开发状态（2026-10-17）
 
-测试 VPS 已通过管理员现场操作升级不可变 root Broker worker；`upgrade-update-broker.sh --check/--apply/--verify` 均为 0 BLOCK，真实 Web UID `git cat-file -t HEAD` 返回 `commit` 且 `git status` 正常。**Issue #150 的现场 Git 对象读取权限已修复**。重新激活时，旧 `install-update-broker.sh` 将已经正确加载的 `ConditionPathExists` guard 偶发误判为 missing，因此自动更新入口目前保持关闭；Web、受控 root 执行器和 V2Ray 服务仍 active。现场只读循环确认旧 `systemctl cat | grep -Fq` 在 `pipefail` 下交替返回 0 / SIGPIPE 141。
-
-本 PR 将激活验证改为先完整捕获 `systemctl cat` 输出，再对其执行两项完整行匹配，同时保留缺失/失败即拒绝的安全行为。尚未部署此修复、恢复自动更新开关；合并状态、CI 及最终实机复测以 Issue #54 为准。
-
-
-## Git 对象权限回归（2026-10-17，Issue #150）
-
-实时只读验收：部署于测试 VPS 的 `main` SHA `74e8b217`、Panel v0.5.0，Web/root/V2Ray 服务 active，本地认证 HTTP 200，最后一次更新结果 success；但普通 `linuxpanel` UID 无法读取若干 `0400` Git loose objects，`git cat-file -t HEAD` 和 `git status` 失败（单独读取 SHA 的 `rev-parse` 不足以判定 Git 可用）。
-
-[PR #151](https://github.com/Ran-ying/linux-panel/pull/151) 在不可变 Broker worker 中新增以 updater UID 执行的对象 ACL 补全逻辑，并补充真实跨账户系统集成验收。**修复源码的 CI、合并状态以 PR #151 为准；现场固定 root worker 仍未更新，实机 Git 读取权限尚未验收恢复。** 来源/部署以 Issue #150 与 #54 为准。不可把 PR 合并等同于修复已上线。
-
+- 最近独立实机验收：Linux Panel `0.5.0`，Git main `46f71713ee22e8562296ecd24b702c1bb73b75a9`（[PR #152](https://github.com/Ran-ying/linux-panel/pull/152) 合并并部署）；Web/root 执行器/V2Ray/更新 watcher active，API HTTP 200，Git commit/tree/blob 在 Web UID 可读取但不可写，Git 状态 clean，受控 root Broker 最新一次事务 success。Git 对象权限缺陷 [#150](https://github.com/Ran-ying/linux-panel/issues/150) 已解决并关闭。长期交接证据见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 本 PR（未合并/未部署时）：统一所有原生单选框的右侧小三角留白（右边距 26px、文字右内边距 50px，明暗配色共用）；V2Ray 路由出站标签改为读取当前配置（包括旧版 outboundDetour）的下拉框；入站标签支持多个下拉框增删，保留未知/历史标签及未保存的本地配置。先完成单元/浏览器 CI，再判断是否合并及受控部署。不得把 PR 或测试通过当作已部署。
+- 此功能只涉及 Vue/CSS/测试/文档，不改变 V2Ray 服务、真实配置文件、证书、端口或 root Broker。iPhone/Android 真机视觉和最终上线健康检查仍需单独验收。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 
