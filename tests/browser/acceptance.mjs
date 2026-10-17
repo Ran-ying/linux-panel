@@ -1099,6 +1099,54 @@ try {
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         await inboundVisual.getByRole('button',{name:'新增规则'}).click();
         const routeEntry=inboundVisual.locator('.v2ray-visual-entry').first();
+        const heading=routeEntry.locator('.v2ray-visual-entry-heading').first();
+        const rename=heading.getByRole('button',{name:'重命名路由规则 1'});
+        const remove=heading.getByRole('button',{name:'移除路由规则1'});
+        assert.equal(await rename.count(),1,'rename button must exist for each routing rule');
+        const buttonOrder=await heading.locator('.v2ray-visual-entry-actions button').allTextContents();
+        assert.deepEqual(buttonOrder.map(text=>text.trim()),['重命名','移除'],
+          'rename must appear to the left of remove');
+        assert.equal(await remove.count(),1);
+
+        await rename.click();
+        const renameDialog=panel.getByRole('dialog',{name:'重命名路由规则'});
+        const tagInput=renameDialog.getByRole('textbox',{name:'规则标签（tag）'});
+        await renameDialog.waitFor();
+        assert.equal(await tagInput.inputValue(),'',
+          'new rules without a tag MUST show an empty rename input, not outboundTag');
+        await tagInput.fill('not-applied');
+        await renameDialog.getByRole('button',{name:'取消'}).click();
+        await renameDialog.waitFor({state:'hidden'});
+        assert.ok((await heading.innerText()).includes('规则 1 · 未命名'),
+          'cancel must not change title or create tag');
+
+        await rename.click();
+        assert.equal(await tagInput.inputValue(),'');
+        await tagInput.fill('custom-route');
+        await renameDialog.getByRole('button',{name:'确认',exact:true}).click();
+        await renameDialog.waitFor({state:'hidden'});
+        assert.ok((await heading.innerText()).includes('规则 1 · custom-route'));
+        await rename.click();
+        assert.equal(await tagInput.inputValue(),'custom-route',
+          'existing route tag should prefill the dialog exactly');
+        await tagInput.fill('');
+        await tagInput.press('Enter');
+        await renameDialog.waitFor({state:'hidden'});
+        assert.ok((await heading.innerText()).includes('规则 1 · 未命名'),
+          'clearing rule tag should restore outboundTag fallback');
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1,
+          'renaming must only change local draft before explicit Save');
+        const fieldCaptions=await routeEntry.locator(
+          '.v2ray-routing-fields > label, .v2ray-routing-tags > span'
+        ).allTextContents();
+        for(const annotated of ['类型（type）','入站标签（inboundTag）',
+          '目标出站标签（outboundTag）']){
+          assert.ok(fieldCaptions.some(s=>s.includes(annotated)),
+            'routing field must identify the original JSON property: '+annotated);
+        }
+        assert.ok((await routeEntry.getByRole('combobox',{name:'选择条件 1'}).locator('option').allTextContents())
+          .some(label=>label.includes('IP 条件（ip）')),
+          'optional condition choice labels must annotate the original key');
         const routeFields=routeEntry.locator(':scope > .v2ray-visual-fields');
         assert.equal(await routeFields.evaluate(node=>getComputedStyle(node).alignItems),'start',
           'routing grid top-aligns each field instead of bottom-aligning against tall inbound tags');
@@ -1216,6 +1264,8 @@ try {
           ['geoip:private','10.0.0.0/8','192.168.0.0/16','2001:db8::/32']);
         assert.deepEqual(routingCandidate.rules[0].inboundTag,['json-changed']);
         assert.equal(routingCandidate.rules[0].outboundTag,'direct');
+        assert.equal(Object.hasOwn(routingCandidate.rules[0],'tag'),false,
+          'clearing route tag in the separate dialog should delete only the tag key');
         assert.deepEqual(Object.keys(routingCandidate.rules[0]).sort(),
           ['type','inboundTag','outboundTag','ip','domain'].sort(),
           'Add condition should not initialize unused fields');
