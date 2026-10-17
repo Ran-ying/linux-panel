@@ -33,7 +33,7 @@ async function refresh(){
   privateValues.value={};
   controller?.abort();controller=new AbortController();
   try{
-    const value=await request(props.operations.siteTls,{name:props.siteName},controller.signal);
+    const value=await request(props.operations.certificates,{name:props.siteName},controller.signal);
     if(alive)data.value=value;
   }catch(e){if(alive&&e.name!=='AbortError')error.value=e.message;}
   finally{if(alive){busy.value=false;loading.value=false;}}
@@ -45,7 +45,7 @@ async function togglePrivate(index){
   try{
     // A second authenticated, CSRF-protected Web-only request is made only
     // after explicit interaction; the root read never appears in list/MCP.
-    const result=await request(props.operations.siteTlsKey,{name:props.siteName,index});
+    const result=await request(props.operations.renew,{name:props.siteName,index});
     if(alive)privateValues.value={...privateValues.value,[index]:result.privatePem};
   }catch(e){if(alive)error.value=e.message;}
   finally{if(alive)privateBusy.value=null;}
