@@ -7,13 +7,6 @@ import {NGINX_TLS_CONTRACTS} from '../../platform/privileged/nginx-tls-contracts
 export async function setup({actions,moduleId}){
   const operations=createNginxOperations({requireRoot:false});
   actions.register(moduleId,renewalReconfigure);
-  for(const [name,contract] of Object.entries(NGINX_TLS_CONTRACTS)){
-    actions.register(moduleId,{...contract,id:'nginx.'+name,
-      kind:name==='siteTlsKey'?'write':'read',permission:'nginx:read',
-      executionPolicy:name==='siteTlsKey'?'privileged':undefined,
-      exposure:{web:true,mcp:false},privileged:{channels:['web']},
-      execute:async()=>{throw Object.assign(new Error('需要最新版 Nginx root 执行器'),{statusCode:503});}});
-  }
   actions.register(moduleId,{
     ...NGINX_UNIT_CONTRACT,id:'nginx.repairExecutor',kind:'write',
     permission:'nginx:write',executionPolicy:'privileged',
@@ -37,5 +30,12 @@ export async function setup({actions,moduleId}){
       execute:write?async()=>{throw Object.assign(new Error('需要启用并安装 Nginx root 执行器'),{statusCode:503});}
         :operations[name]
     });
+  }
+  for(const [name,contract] of Object.entries(NGINX_TLS_CONTRACTS)){
+    actions.register(moduleId,{...contract,id:'nginx.'+name,
+      kind:name==='siteTlsKey'?'write':'read',permission:'nginx:read',
+      executionPolicy:name==='siteTlsKey'?'privileged':undefined,
+      exposure:{web:true,mcp:false},privileged:{channels:['web']},
+      execute:async()=>{throw Object.assign(new Error('需要最新版 Nginx root 执行器'),{statusCode:503});}});
   }
 }
