@@ -43,6 +43,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('v2ray.status').renderer,'v2ray-manager');
+  assert.equal(configured.get('v2ray.status').chrome,'flat');
   assert.equal(configured.get('v2ray.status').operations.install,'v2ray.install');
   assert.equal(registry.get('v2ray.read').exposure.mcp,false);
   assert.equal(registry.get('v2ray.install').exposure.mcp,false);
