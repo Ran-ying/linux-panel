@@ -14,7 +14,7 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 34);
+  assert.equal(presentations.length, 38);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').renderer, 'metrics');
   assert.equal(configured.get('system.resources').layout,'grid');
@@ -42,7 +42,7 @@ test('each module owns its Web render configuration separately from Action metad
     assert.ok(action.outputSchema);
   }
   const mcpActions = registry.list('mcp');
-  assert.equal(mcpActions.length, actions.length-23);
+  assert.equal(mcpActions.length, actions.length-27);
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('v2ray.status').renderer,'v2ray-manager');
@@ -51,7 +51,7 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(registry.get('v2ray.read').exposure.mcp,false);
   assert.equal(registry.get('v2ray.install').exposure.mcp,false);
   const nginxActions=registry.list('web').filter(a=>a.moduleId==='nginx').map(a=>a.id);
-  assert.deepEqual(nginxActions.slice(1,4),['nginx.status','nginx.sites','nginx.certificates'],
+  assert.deepEqual(nginxActions.slice(1,4),['nginx.siteTls','nginx.siteTlsKey','nginx.status'],
     'Nginx visible Actions register in status → sites → SSL order after embedded repair');
   assert.deepEqual(presentations.filter(p=>p.actionId.startsWith('nginx.')&&!p.embedded)
     .map(p=>p.actionId),['nginx.status','nginx.sites'],
@@ -59,10 +59,10 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('nginx.status').renderer,'nginx-service');
   assert.equal(configured.get('nginx.status').chrome,'flat');
   assert.equal(configured.get('nginx.status').operations.service,'nginx.service');
-  assert.equal(configured.get('nginx.certificates').renderer,'metrics');
+  assert.equal(configured.get('nginx.siteTls').renderer,'metrics');
   assert.equal(configured.get('nginx.certificates').embedded,true);
   assert.equal(configured.get('nginx.sites').operations.certificates,'nginx.certificates');
-  assert.equal(configured.get('nginx.sites').operations.renew,'nginx.renew');
+  assert.equal(configured.get('nginx.sites').operations.renew,'nginx.siteTlsKey');
   assert.equal(configured.get('nginx.service').embedded,true);
   assert.equal(configured.get('nginx.renew').embedded,true);
   assert.equal(registry.get('nginx.certificates').exposure.mcp,false);
@@ -80,6 +80,9 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('files.list').operations.accounts,'files.accounts');
   assert.equal(configured.get('files.accounts').embedded,true);
   assert.equal(registry.get('files.accounts').exposure.mcp,false);
+  assert.equal(configured.get('certbot.list').renderer,'certbot-manager');
+  assert.equal(configured.get('certbot.list').operations.renew,'certbot.renew');
+  assert.equal(registry.get('nginx.siteTlsKey').exposure.mcp,false);
   assert.ok(mcpActions.every(a => !Object.hasOwn(a, 'presentation')));
 });
 
