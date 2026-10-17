@@ -106,13 +106,13 @@ test('Nginx safety: no arbitrary links, files, arguments, overlarge configs or e
   await assert.rejects(f.ops.apply({name:'alpha',operation:'remove',revision:''}),{statusCode:409});
   await assert.rejects(f.ops.apply({name:'../../outside',operation:'create',revision:'',content:'x'}),{statusCode:400});
   const handlers=createPrivilegedHandlers({privileged:false});
-  for(const name of ['status','service','certificates','renew','sites','read','check','apply']){
+  for(const name of ['status','service','certificates','renew','listenAddresses','sites','read','check','apply']){
     assert.equal(handlers.has('nginx.'+name),true);
     await assert.rejects(dispatchPrivileged({version:1,channel:'web',action:'nginx.'+name,input:{shell:'id'}},handlers),{statusCode:400});
     await assert.rejects(dispatchPrivileged({version:1,channel:'mcp',action:'nginx.'+name,input:{}},handlers),{statusCode:403});
   }
   assert.deepEqual(Object.keys(NGINX_CONTRACTS),
-    ['status','service','certificates','renew','sites','read','check','apply']);
+    ['status','service','certificates','renew','listenAddresses','sites','read','check','apply']);
   assert.equal(handlers.has('nginx.repairExecutor'),true);
   for(const input of [{mode:'restart'}, {mode:'bad',confirmation:'APPLY_REVIEWED_NGINX_UNIT'},
     {mode:'stage',confirmation:'APPLY_REVIEWED_NGINX_UNIT',path:'/etc/systemd/system/ssh.service'}]){
@@ -193,4 +193,19 @@ test('Nginx Web routes preserve write policy; MCP has only fixed Certbot write a
   assert.equal(created.result.ok,true);
   await assert.rejects(engine.run('nginx.apply',{name:'foo',operation:'create',revision:'',content:'server{}'},'mcp',{authenticated:true,userId:'admin',channel:'mcp'}),{statusCode:404});
   await assert.rejects(engine.run('nginx.apply',{name:'foo',operation:'create',revision:'',content:'server{}',extra:true},'web',context),{statusCode:400});
+});
+
+test('Nginx listen IP inventory includes wildcard, loopback and current host IPv4 only',async()=>{
+  const ops=createNginxOperations({requireRoot:false});
+  const data=await ops.listenAddresses();
+  assert.deepEqual(data.addresses.slice(0,2),[
+    {address:'0.0.0.0',interface:'所有 IPv4 接口'},
+    {address:'127.0.0.1',interface:'本机回环'}]);
+  const seen=new Set();
+  for(const row of data.addresses){
+    assert.match(row.address,/^\d{1,3}(?:\.\d{1,3}){3}$/);
+    assert.equal(seen.has(row.address),false,'no duplicate listen choices');
+    seen.add(row.address);
+    assert.ok(row.interface.length>0);
+  }
 });
