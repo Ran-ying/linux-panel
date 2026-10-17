@@ -1,14 +1,18 @@
 <script setup>
-import {computed,ref,watch} from 'vue';
+import {computed,ref,onMounted} from 'vue';
+import {matchingCertificates} from '../nginx-certificates.js';
 const props=defineProps({
-  initialData:{type:Object,required:true},listAction:{type:String,required:true},
+  siteName:{type:String,required:true},siteDomains:{type:Array,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true}
 });
-const emit=defineEmits(['unauthorized','listing-change']);
-const data=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref(''),detail=ref('');
+const emit=defineEmits(['unauthorized']);
+const data=ref({provider:'Certbot / Let’s Encrypt',installed:true,count:0,certificates:[],warnings:[]});
+const loading=ref(true),busy=ref(false),error=ref(''),notice=ref(''),detail=ref('');
 const confirmation=ref(null),selected=ref('');
-watch(()=>props.initialData,value=>{data.value=value;});
-const countText=computed(()=>data.value.count+' 张已管理证书');
+const matched=computed(()=>matchingCertificates(data.value.certificates,props.siteDomains));
+const countText=computed(()=>matched.value.length+' 张域名匹配的证书');
+onMounted(async()=>{try{await refresh();}catch(e){error.value=e.message||'读取证书失败';}
+  finally{loading.value=false;}});
 async function request(action,input={}){
   const reply=await fetch('/api/actions/'+encodeURIComponent(action)+'/execute',{
     method:'POST',headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
@@ -26,11 +30,10 @@ async function work(callback){
   finally{busy.value=false;}
 }
 async function refresh(){
-  const listing=await request(props.listAction);
-  data.value=listing;emit('listing-change',listing);
+  data.value=await request(props.operations.certificates);
 }
 function ask(name){
-  if(busy.value||!data.value.certificates.some(cert=>cert.name===name))return;
+  if(busy.value||!matched.value.some(cert=>cert.name===name))return;
   selected.value=name;detail.value='';
   confirmation.value?.showModal();
 }
@@ -49,15 +52,17 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
 </script>
 
 <template>
-  <section class="nginx-certificates" aria-label="SSL 证书管理面板">
+  <section class="nginx-certificates" :aria-label="'SSL 证书管理：'+siteName">
+    <h4 class="nginx-cert-section-title">SSL 证书管理</h4>
     <div class="nginx-certs-toolbar">
-      <p class="muted small">{{ data.provider }} · {{ countText }}</p>
+      <p class="muted small">{{ data.provider }} · {{ loading?'正在读取证书…':countText }}</p>
       <button type="button" :disabled="busy" @click="work(refresh)">刷新证书</button>
     </div>
-    <p v-if="!data.installed" class="muted small">未检测到 Certbot。证书签发与续期需要先安装并配置 Certbot。</p>
-    <p v-else-if="!data.certificates.length" class="muted small">未发现受管的 Certbot 证书。其他手动安装的证书尚未纳入列表。</p>
-    <div v-else class="nginx-cert-list">
-      <article v-for="cert in data.certificates" :key="cert.name" class="nginx-cert-card">
+    <p v-if="!loading && !data.installed" class="muted small">未检测到 Certbot。</p>
+    <p v-else-if="!loading && !matched.length" class="muted small">没有发现域名匹配的 Certbot 证书。此列表不代表网站是否启用了 HTTPS。</p>
+    <p v-if="!loading && matched.length" class="muted small">以下证书按网站域名与证书 SAN 匹配，并不证明 Nginx 正在引用该证书。</p>
+    <div v-if="!loading && matched.length" class="nginx-cert-list">
+      <article v-for="cert in matched" :key="cert.name" class="nginx-cert-card">
         <div class="nginx-cert-heading">
           <strong>{{ cert.name }}</strong>
           <span>{{ condition(cert) }} · {{ cert.daysRemaining }} 天</span>
@@ -105,11 +110,12 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
 </template>
 
 <style scoped>
-.nginx-certificates{display:grid;gap:12px}
+.nginx-certificates{display:grid;gap:12px;min-width:0}
+.nginx-cert-section-title{margin:0;font-size:1rem;font-weight:600}
 .nginx-certs-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .nginx-certs-toolbar p{margin:0}
 .nginx-certs-toolbar button,.nginx-cert-actions button,.nginx-renew-actions button{
-  min-height:34px;padding:5px 11px;font:inherit;font-size:.85rem}
+  font:inherit;min-height:2.35rem;padding:.35rem .8rem}
 .nginx-cert-list{display:grid;gap:12px}
 .nginx-cert-card{border:1px solid var(--border-panel);border-radius:12px;
   background:var(--panel-bg);padding:14px;display:grid;gap:10px;min-width:0}
