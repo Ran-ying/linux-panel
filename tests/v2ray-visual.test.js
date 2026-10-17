@@ -117,3 +117,34 @@ test('route rename edits only tag and preserves outboundTag fallback and legacy 
   assert.equal(cleared.routing.settings.rules[0].outboundTag,'out_direct');
   assert.deepEqual(cleared,original);
 });
+
+test('current and legacy inbound/outbound rename changes only the selected tag',()=>{
+  for(const source of ['inbounds','outbounds','inboundDetour','outboundDetour']){
+    const initial={
+      inbounds:[{tag:'in-current',protocol:'socks',port:1080,private:{keep:'in'}}],
+      outbounds:[{tag:'out-current',protocol:'freedom',settings:{keep:'out'}}],
+      inboundDetour:[{tag:'in-old',protocol:'http',listen:'127.0.0.1'}],
+      outboundDetour:[{tag:'out-old',protocol:'vmess',settings:{vnext:[{address:'example.invalid'}]}}],
+      routing:{rules:[{type:'field',inboundTag:['in-current'],outboundTag:'out-current'}]},
+      vendorSecrets:{untouched:'yes'}
+    };
+    const original=structuredClone(initial);
+    const renamed=patchVisual(initial,source,{action:'set',path:[0,'tag'],value:'new-tag'});
+    assert.equal(renamed[source][0].tag,'new-tag',source+' should update only its tag');
+    assert.deepEqual({...renamed[source][0],tag:original[source][0].tag},original[source][0]);
+    for(const other of ['inbounds','outbounds','inboundDetour','outboundDetour','routing','vendorSecrets']){
+      if(other!==source)assert.deepEqual(renamed[other],original[other],
+        source+' rename must not modify '+other);
+    }
+    const cleared=patchVisual(renamed,source,{action:'set',path:[0,'tag'],value:''});
+    assert.equal(Object.hasOwn(cleared[source][0],'tag'),false);
+    assert.equal(cleared[source][0].protocol,original[source][0].protocol,
+      'clearing tag must never clear protocol');
+    assert.deepEqual(initial,original,'all rename operations remain on cloned local draft');
+    const tagless=structuredClone(initial);
+    delete tagless[source][0].tag;
+    const created=patchVisual(tagless,source,{action:'set',path:[0,'tag'],value:'added-tag'});
+    assert.equal(created[source][0].tag,'added-tag');
+    assert.equal(Object.hasOwn(tagless[source][0],'tag'),false);
+  }
+});
