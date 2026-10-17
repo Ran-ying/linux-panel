@@ -8,7 +8,7 @@ export const SERVICE_LOGS_CONTRACT={
   }},
   outputSchema:{type:'object',required:['unit','source','lines','output','truncated'],additionalProperties:false,properties:{
     unit:{type:'string'},source:{type:'string',enum:['journalctl']},
-    lines:{type:'integer',minimum:0,maximum:200},
+    lines:{type:'integer',minimum:0},
     output:{type:'string',maxLength:50000},truncated:{type:'boolean'}
   }}
 };
