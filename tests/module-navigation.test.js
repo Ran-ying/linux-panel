@@ -7,7 +7,7 @@ test('navigation maps loaded modules and their Actions without business-specific
   const actions=[{id:'system.info',moduleId:'system'},{id:'system.resources',moduleId:'system'},
     {id:'services.list',moduleId:'services'},{id:'other.read',moduleId:'other'}];
   const groups=buildModuleNavigation(modules,actions);
-  assert.deepEqual(groups.map(g=>g.actions.map(a=>a.id)),[['system.info','system.resources'],['services.list']]);
+  assert.deepEqual(groups.map(g=>g.actions.map(a=>a.id)),[['system.info','system.resources'],['services.list','services.logs']]);
   assert.equal(groups[0].actions[0],actions[0]);
   assert.equal(Object.hasOwn(modules[0],'actions'),false);
 });
