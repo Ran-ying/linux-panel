@@ -1131,7 +1131,7 @@ try {
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),0,
           'connection tag must be edited through the standalone rename dialog, not inline');
         const inboundEntry=inboundVisual.locator('.v2ray-visual-entry').first();
-        const inboundHeading=inboundEntry.locator('.v2ray-visual-entry-heading');
+        const inboundHeading=inboundEntry.locator(':scope > .v2ray-visual-entry-heading');
         const inboundRename=inboundHeading.getByRole('button',{name:'重命名入站连接1'});
         assert.deepEqual((await inboundHeading.locator('.v2ray-visual-entry-actions button')
           .allTextContents()).map(s=>s.trim()),['重命名','移除']);
