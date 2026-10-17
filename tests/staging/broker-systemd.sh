@@ -155,6 +155,19 @@ assert_web_git_acl(){
    fail "Web sees wrong Git HEAD: $web_sha"
  runuser -u linuxpanel -- test -r "$ROOT/.git/refs/heads/main" ||
    fail 'Web cannot read loose local main ref'
+ # rev-parse checks only ref text. Actual commit/tree/blob reads once failed
+ # despite green installer staging and the Web service being healthy.
+ [[ "$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+   -C "$ROOT" cat-file -t HEAD)" == commit ]] ||
+   fail 'Web cannot read current commit object'
+ runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+   -C "$ROOT" show HEAD:package.json >/dev/null ||
+   fail 'Web cannot read a tracked Git blob'
+ runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+   -C "$ROOT" status --porcelain >/dev/null ||
+   fail 'Web cannot traverse Git tree/index'
+ ! runuser -u linuxpanel -- test -w "$ROOT/.git/objects" ||
+   fail 'Web gained write access to Git object store'
  ! runuser -u linuxpanel -- test -w "$ROOT/.git/refs/heads/main" ||
    fail 'Web account must not write local main ref'
  /usr/bin/python3 -I - "$ROOT" <<'PY_ACL'
@@ -171,6 +184,20 @@ assert_web_git_acl "$TARGET"
 # for the actual Broker fast-forward without touching installed root artifacts.
 runuser -u linuxpanel-updater -- git -C "$ROOT" reset --hard "$OLD"
 assert_web_git_acl "$OLD"
+# Create an actual Git blob with the failure mode observed on the VPS:
+# an updater-owned object whose effective group mask is deliberately 0.
+# A ref-only assertion cannot distinguish this from a working object store.
+acl_probe_sha="$(printf 'stage-object-acl-%s\\n' "$TARGET" |
+  runuser -u linuxpanel-updater -- sh -c 'umask 077; git -C /opt/linux-panel hash-object -w --stdin')" ||
+  fail 'Could not create restrictive Git object fixture'
+acl_probe_path="$ROOT/.git/objects/${acl_probe_sha:0:2}/${acl_probe_sha:2}"
+[[ -f "$acl_probe_path" ]] || fail 'Expected a newly created loose Git blob'
+runuser -u linuxpanel-updater -- chmod 0400 "$acl_probe_path"
+if runuser -u linuxpanel -- git -c "safe.directory=$ROOT" -C "$ROOT" \
+    cat-file -t "$acl_probe_sha" >/dev/null 2>&1;then
+  fail 'ACL fault injection unexpectedly still readable as Web'
+fi
+note 'Injected real 0400 loose Git object, unreadable to Web'
 # Reproduce the exact live outage from 2026-10-15. A restrictive Git
 # checkout leaves the package manifest / API source unreadable by the Web UID.
 # The root Broker must repair this BEFORE it restarts the panel, on normal
@@ -241,6 +268,14 @@ queue 11111111111111111111111111111111 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 wait_result 11111111111111111111111111111111 failed
 [[ "$(head_now)" == "$OLD" ]] || fail 'Wrong SHA changed checkout'
 healthy || fail 'Wrong SHA broke panel'
+[[ "$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+  -C "$ROOT" cat-file -t "$acl_probe_sha")" == blob ]] ||
+  fail 'Post-fetch ACL repair did not make 0400 object readable'
+# Inject the same restrictive mode again so rollback separately proves repair.
+runuser -u linuxpanel-updater -- chmod 0400 "$acl_probe_path"
+! runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+  -C "$ROOT" cat-file -t "$acl_probe_sha" >/dev/null 2>&1 ||
+  fail 'Pre-rollback ACL fault injection unexpectedly readable'
 
 note 'Case 2: actual npm test failure causes real Git rollback and Web restart'
 touch /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE
@@ -251,6 +286,12 @@ wait_result 22222222222222222222222222222222 rolled_back
 [[ "$(head_now)" == "$OLD" ]] || fail 'Rollback did not restore HEAD'
 wait_healthy || fail 'Rollback did not restore Web'
 assert_web_runtime  # Detect mode regressions after rollback npm ci.
+assert_web_git_acl "$OLD"  # Objects from the fetched target stay Web-readable.
+[[ "$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+  -C "$ROOT" cat-file -t "$acl_probe_sha")" == blob ]] ||
+  fail 'Updated Broker did not repair injected unreadable loose object'
+! runuser -u linuxpanel -- test -w "$acl_probe_path" ||
+  fail 'Git object ACL repair gave Web write access'
 [[ -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-22222222222222222222222222222222" ]] ||
  fail 'Per-request backup missing'
 
@@ -285,6 +326,7 @@ note 'Boot recovery unit returned; examining exact transaction result'
 wait_result 44444444444444444444444444444444 rolled_back
 [[ "$(head_now)" == "$OLD" ]] || fail 'Recovery did not restore old Git revision'
 wait_healthy || fail 'Recovery failed to restart healthy Web'
+assert_web_git_acl "$OLD"  # Boot recovery must restore Git object access.
 [[ ! -e "$transaction" && ! -e /var/lib/linux-panel/update-processing ]] ||
  fail 'Recovery left active transaction or processing file'
 # Recovery entrypoint must never consume a fresh unrelated trigger.

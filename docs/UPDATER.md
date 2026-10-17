@@ -149,6 +149,38 @@ restrictive umask without making Git explicitly request SGID bits.
 Named `linuxpanel` group entries grant only read/traverse, not write.
 New installs apply this before activating the Broker.
 
+### Git object ACL regression discovered 2026-10-17 — Issue #150 / PR #151
+
+A directory default ACL alone does **not** guarantee access to the actual
+loose Git objects. Fetches under the immutable Broker's restrictive
+`umask 077` produced updater-owned commit objects with effective mode `0400`.
+On the live test VPS, Web's `git rev-parse HEAD` returned the correct SHA,
+but `git cat-file -t HEAD` and `git status` failed `Permission denied`.
+This is distinct from the old new-ref and npm dependency permission issues.
+
+[PR #151](https://github.com/Ran-ying/linux-panel/pull/151) makes the
+**immutable** worker repair the entire existing and newly fetched Git object
+store **as linuxpanel-updater**, after fetch and before every Web restart
+(normal success, rollback, and boot recovery). The routine is embedded in
+the installed fixed worker rather than executing a mutable checkout script
+as root. It validates the fixed owner and object types, rejects symlinks
+via directory FDs and `O_NOFOLLOW`, sets POSIX ACLs for the `linuxpanel`
+group to read/traverse only, and verifies a real Web UID commit-object read.
+Missing ACL filesystem support fails closed; Web gets no write permission.
+The disposable systemd tests must verify `cat-file`, `show` and
+`status` using the separate Web identity, not only readable refs.
+
+**Source merge is not worker deployment.** The currently installed root-owned
+`/usr/local/libexec/linux-panel-update-worker` must be upgraded through
+the existing controlled privileged Broker migration after PR/CI acceptance,
+then the operator must confirm `git cat-file -t HEAD` and
+`git status --porcelain` under `linuxpanel`, root journal cleanliness,
+and normal Panel HTTP health. Do not edit permissions manually from
+`linuxpanel` or grant it Git-object write access; do not use an unreviewed
+checkout script as root. Until the migration is actually verified, the
+observed test VPS remains affected and CI success cannot be called recovery.
+
+
 ### Already-installed Broker: one-time scoped operator repair
 
 When an MCP execution returns `queued` then a durable `failed` result,
