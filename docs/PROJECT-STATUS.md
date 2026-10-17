@@ -2,9 +2,9 @@
 
 ## 当前项目状态（2026-10-17）
 
-- 最近实机验收部署：main `9fe23b4435b8d611db291905e2714995ff4800ba`（[PR #156](https://github.com/Ran-ying/linux-panel/pull/156)），Panel、privileged、V2Ray 与更新 watcher active、HTTP 200、Git clean；完整证据持续写入 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
-- 本 PR（待 CI/合并/实机部署核验）：路由标题「移除」左侧增加「重命名」，独立弹窗只编辑 rule.tag。没有 tag 时输入框必须为空；确认才产生本地候选 JSON 更改，清空删除 tag 并恢复 outboundTag 标题回退；取消不写。路由可视化所有有原始 JSON 键的中文字段、可选条件下拉选项均后缀相应 key。补充浏览器与单元测试验证独立字段、旧版路由对象和其他配置无损。请勿把 PR 合并视作生产部署成功。
-- 本次仅 Vue 前端 / 测试 / 文档变动，无 V2Ray 配置或 root Handler 变动；不得在生产实机修改正在运行的 V2Ray 用户配置进行测试。
+- **最后实机部署确认**：main `8648a66742197d9d2cbf059828585fd594f9a7ea`（[PR #157](https://github.com/Ran-ying/linux-panel/pull/157)），Broker durable success、Web/root 执行器/V2Ray/update.path active、HTTP 200、Git clean；事实与部署证据持续写入 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 当前开发 PR（须单独 CI、合并、部署验收）：将 V2Ray 可视化全部字段**标题粗体 600，输入/下拉内容正常 400**。将原始 JSON key 标注扩展到左侧完整配置目录全部真实 section、右侧所有连接编辑器、嵌套客户端/服务器/用户标题及字段、路由选项、JSON 分项编辑标题。完整 JSON 根对象没有属性名，不虚构键。浏览器测试增加真实 computed-style 字重和导航及嵌套字段覆盖；不要把源码修改视作已在服务器生效。
+- 仅 Web/CSS、浏览器测试及文档，不改真实 V2Ray 配置、root Handler 或服务。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 

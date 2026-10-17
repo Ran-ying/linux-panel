@@ -69,8 +69,10 @@ const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规
 const parse=()=>{const obj=JSON.parse(draft.value);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw Error('配置必须是 JSON 对象');return obj;};
 const dirty=computed(()=>draft.value!==original.value||
   (section.value!=='full'&&sectionText.value!==sectionOriginal.value));
-const editorEntries=[{key:'full',label:'完整内容'},...sections.map(key=>({key,label:names[key]}))];
-const editorLabel=computed(()=>section.value==='full'?'完整 V2Ray JSON 配置':names[section.value]+' · JSON');
+// The full document is a JSON root, not a literal config property named "root".
+const editorEntries=[{key:'full',label:'完整内容（JSON 根对象）'},
+  ...sections.map(key=>({key,label:names[key]+'（'+key+'）'}))];
+const editorLabel=computed(()=>section.value==='full'?'完整 V2Ray JSON 配置（根对象）':names[section.value]+'（'+section.value+'） · JSON');
 const visualAvailable=computed(()=>{
   try{return supportsVisual(parse(),section.value);}catch{return false;}
 });
@@ -287,7 +289,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
             <div v-if="editorMode==='visual'&&visualAvailable" class="v2ray-visual-editor" aria-label="V2Ray 可视化配置">
               <template v-for="group in visualGroups" :key="group.key">
                 <div class="v2ray-visual-group-heading">
-                  <strong>{{ group.label }}（{{ group.items.length }}）</strong>
+                  <strong>{{ group.label }}（{{ group.key }}） · {{ group.items.length }}</strong>
                   <button type="button" :disabled="busy" @click="addConnection(group.key)">
                     {{ section==='routing'?'新增规则':'新增连接' }}
                   </button>
@@ -379,7 +381,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                         <input :value="entry.tag??''" :disabled="busy"
                           @change="visualSet(group.key,[i,'tag'],$event)" />
                       </label>
-                      <label>协议
+                      <label>协议（protocol）
                         <select :value="entry.protocol??''" :disabled="busy"
                           @change="visualSet(group.key,[i,'protocol'],$event)">
                           <option v-for="choice in selectChoices(
@@ -388,14 +390,14 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                         </select>
                       </label>
                       <template v-if="group.key==='inbounds'||group.key==='inboundDetour'">
-                        <label>监听地址
+                        <label>监听地址（listen）
                           <select :value="entry.listen??''" :disabled="busy"
                             @change="visualSet(group.key,[i,'listen'],$event)">
                             <option v-for="choice in selectChoices('listen',entry.listen)"
                               :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                           </select>
                         </label>
-                        <label>监听端口
+                        <label>监听端口（port）
                           <input type="number" min="0" max="65535" :value="entry.port??''" :disabled="busy"
                             @change="visualSet(group.key,[i,'port'],$event,'number')" />
                         </label>
@@ -404,14 +406,14 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                         <input :value="entry.sendThrough??''" :disabled="busy"
                           @change="visualSet(group.key,[i,'sendThrough'],$event)" />
                       </label>
-                      <label v-if="entry.streamSettings">传输网络
+                      <label v-if="entry.streamSettings">传输网络（streamSettings.network）
                         <select :value="entry.streamSettings.network??''" :disabled="busy"
                           @change="visualSet(group.key,[i,'streamSettings','network'],$event)">
                           <option v-for="choice in selectChoices('network',entry.streamSettings.network)"
                             :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                         </select>
                       </label>
-                      <label v-if="entry.streamSettings">传输安全
+                      <label v-if="entry.streamSettings">传输安全（streamSettings.security）
                         <select :value="entry.streamSettings.security??''" :disabled="busy"
                           @change="visualSet(group.key,[i,'streamSettings','security'],$event)">
                           <option v-for="choice in selectChoices('security',entry.streamSettings.security)"
@@ -420,19 +422,19 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       </label>
                     </div>
                     <div v-if="Array.isArray(entry.settings?.clients)" class="v2ray-visual-nested">
-                      <div class="v2ray-visual-entry-heading"><strong>客户端</strong>
+                      <div class="v2ray-visual-entry-heading"><strong>客户端（settings.clients）</strong>
                         <button type="button" :disabled="busy" @click="visualAdd(group.key,[i,'settings','clients'],{id:''})">添加客户端</button>
                       </div>
                       <div v-for="(client,j) in entry.settings.clients" :key="j" class="v2ray-visual-fields">
-                        <label>客户端 {{ j+1 }} · ID
+                        <label>客户端 {{ j+1 }} · ID（id）
                           <input type="text" autocomplete="off" :value="client.id??''" :disabled="busy"
                             @change="visualSet(group.key,[i,'settings','clients',j,'id'],$event)" />
                         </label>
-                        <label>邮件标识
+                        <label>邮件标识（email）
                           <input :value="client.email??''" :disabled="busy"
                             @change="visualSet(group.key,[i,'settings','clients',j,'email'],$event)" />
                         </label>
-                        <label>alterId
+                        <label>alterId（alterId）
                           <input type="number" min="0" max="65535" :value="client.alterId??''" :disabled="busy"
                             @change="visualSet(group.key,[i,'settings','clients',j,'alterId'],$event,'number')" />
                         </label>
@@ -442,24 +444,24 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                     </div>
                     <div v-for="arrayKey in ['vnext','servers']" :key="arrayKey">
                       <div v-if="Array.isArray(entry.settings?.[arrayKey])" class="v2ray-visual-nested">
-                        <div class="v2ray-visual-entry-heading"><strong>{{ arrayKey==='vnext'?'目标服务器':'服务器' }}</strong>
+                        <div class="v2ray-visual-entry-heading"><strong>{{ arrayKey==='vnext'?'目标服务器（settings.vnext）':'服务器（settings.servers）' }}</strong>
                           <button type="button" :disabled="busy" @click="visualAdd(group.key,[i,'settings',arrayKey],{address:'',port:443})">添加服务器</button>
                         </div>
                         <div v-for="(server,j) in entry.settings[arrayKey]" :key="j" class="v2ray-server-editor">
                           <div class="v2ray-visual-fields">
-                            <label>服务器 {{ j+1 }} · 地址
+                            <label>服务器 {{ j+1 }} · 地址（address）
                               <input :value="server.address??''" :disabled="busy"
                                 @change="visualSet(group.key,[i,'settings',arrayKey,j,'address'],$event)" />
                             </label>
-                            <label>服务器端口
+                            <label>服务器端口（port）
                               <input type="number" min="0" max="65535" :value="server.port??''" :disabled="busy"
                                 @change="visualSet(group.key,[i,'settings',arrayKey,j,'port'],$event,'number')" />
                             </label>
-                            <label v-if="server.method!==undefined">加密方式
+                            <label v-if="server.method!==undefined">加密方式（method）
                               <input :value="server.method??''" :disabled="busy"
                                 @change="visualSet(group.key,[i,'settings',arrayKey,j,'method'],$event)" />
                             </label>
-                            <label v-if="server.password!==undefined">密码
+                            <label v-if="server.password!==undefined">密码（password）
                               <input type="password" autocomplete="off" :value="server.password??''" :disabled="busy"
                                 @change="visualSet(group.key,[i,'settings',arrayKey,j,'password'],$event)" />
                             </label>
@@ -467,19 +469,19 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                               :aria-label="'移除服务器 '+(j+1)" @click="visualRemove(group.key,[i,'settings',arrayKey,j])">移除服务器</button>
                           </div>
                           <div v-if="Array.isArray(server.users)" class="v2ray-visual-nested">
-                            <div class="v2ray-visual-entry-heading"><strong>服务器用户</strong>
+                            <div class="v2ray-visual-entry-heading"><strong>服务器用户（users）</strong>
                               <button type="button" :disabled="busy" @click="visualAdd(group.key,[i,'settings',arrayKey,j,'users'],{id:''})">添加用户</button>
                             </div>
                             <div v-for="(user,k) in server.users" :key="k" class="v2ray-visual-fields">
-                              <label>用户 {{ k+1 }} · ID
+                              <label>用户 {{ k+1 }} · ID（id）
                                 <input type="text" autocomplete="off" :value="user.id??''" :disabled="busy"
                                   @change="visualSet(group.key,[i,'settings',arrayKey,j,'users',k,'id'],$event)" />
                               </label>
-                              <label>alterId
+                              <label>alterId（alterId）
                                 <input type="number" min="0" max="65535" :value="user.alterId??''" :disabled="busy"
                                   @change="visualSet(group.key,[i,'settings',arrayKey,j,'users',k,'alterId'],$event,'number')" />
                               </label>
-                              <label>加密方式
+                              <label>加密方式（security）
                                 <input :value="user.security??''" :disabled="busy"
                                   @change="visualSet(group.key,[i,'settings',arrayKey,j,'users',k,'security'],$event)" />
                               </label>
@@ -589,7 +591,9 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-entry{border-top:1px solid var(--border-rule);padding-top:14px;display:grid;gap:12px;min-width:0}
 .v2ray-visual-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr));
   gap:10px;align-items:end;min-width:0}
-.v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem}
+.v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:600}
+/* Caption titles are bold, but values (including selects and their options) never
+   inherit the field's bold weight. This must apply to all visual editor sections. */
 /* Routing's three permanent fields share the same top baseline, even when
    inboundTag contains several rows or its add button makes that cell taller. */
 .v2ray-visual-fields.v2ray-routing-fields{align-items:start}
@@ -608,8 +612,10 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-fields input,.v2ray-visual-fields textarea,.v2ray-visual-fields select{
   box-sizing:border-box;width:100%;min-width:0;padding:8px;
   border-radius:8px;border:1px solid var(--input-border);
-  color:var(--text-primary);background:var(--input-bg);font:inherit}
-.v2ray-routing-tags{display:grid;gap:5px;min-width:0;font-size:.85rem}
+  color:var(--text-primary);background:var(--input-bg);font:inherit;font-weight:400}
+.v2ray-routing-tags{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:400}
+.v2ray-routing-tags>span:first-child{font-weight:600}
+.v2ray-routing-tags select,.v2ray-routing-tags button{font-weight:400}
 /* The JSON-key captions can wrap on narrow screens. Reserve the same two-line
    caption slot so base inputs start at an equal top offset on any viewport. */
 .v2ray-routing-fields>.v2ray-route-base-field>span,
@@ -621,7 +627,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-nested,.v2ray-server-editor{display:grid;gap:10px;min-width:0;
   padding:10px 0 0 12px;border-left:2px solid var(--border-rule)}
 .v2ray-editor-label{display:grid;gap:8px;font-weight:600}
-.v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;
+.v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;font-weight:400;
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;
   padding:12px;border-radius:10px;border:1px solid var(--input-border);
   background:var(--input-bg);color:var(--text-primary);resize:vertical}
@@ -632,10 +638,10 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-dialog::backdrop{background:#0008}
 .v2ray-dialog-content{display:grid;gap:12px}
 .v2ray-dialog-content h3{margin:0}
-.v2ray-rename-label{display:grid;gap:6px;min-width:0;font-size:.9rem}
+.v2ray-rename-label{display:grid;gap:6px;min-width:0;font-size:.9rem;font-weight:600}
 .v2ray-rename-label input{box-sizing:border-box;width:100%;min-height:38px;padding:8px 10px;
   border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);
-  color:var(--text-primary);font:inherit}
+  color:var(--text-primary);font:inherit;font-weight:400}
 @media(max-width:730px){
   .v2ray-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
   .v2ray-editor-layout{--v2ray-sticky-top:calc(var(--mobile-top,16px) + var(--mobile-header-height,110px) + 10px);
