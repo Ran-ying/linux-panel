@@ -594,9 +594,6 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:600}
 /* Caption titles are bold, but values (including selects and their options) never
    inherit the field's bold weight. This must apply to all visual editor sections. */
-.v2ray-visual-fields input,.v2ray-visual-fields select,.v2ray-visual-fields textarea{
-  font-weight:400
-}
 /* Routing's three permanent fields share the same top baseline, even when
    inboundTag contains several rows or its add button makes that cell taller. */
 .v2ray-visual-fields.v2ray-routing-fields{align-items:start}
@@ -615,7 +612,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-fields input,.v2ray-visual-fields textarea,.v2ray-visual-fields select{
   box-sizing:border-box;width:100%;min-width:0;padding:8px;
   border-radius:8px;border:1px solid var(--input-border);
-  color:var(--text-primary);background:var(--input-bg);font:inherit}
+  color:var(--text-primary);background:var(--input-bg);font:inherit;font-weight:400}
 .v2ray-routing-tags{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:400}
 .v2ray-routing-tags>span:first-child{font-weight:600}
 .v2ray-routing-tags select,.v2ray-routing-tags button{font-weight:400}
@@ -630,7 +627,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-nested,.v2ray-server-editor{display:grid;gap:10px;min-width:0;
   padding:10px 0 0 12px;border-left:2px solid var(--border-rule)}
 .v2ray-editor-label{display:grid;gap:8px;font-weight:600}
-.v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;
+.v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;font-weight:400;
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;
   padding:12px;border-radius:10px;border:1px solid var(--input-border);
   background:var(--input-bg);color:var(--text-primary);resize:vertical}
