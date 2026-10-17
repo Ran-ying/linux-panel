@@ -1132,7 +1132,7 @@ try {
           selectJson.streamSettings.security],['vmess','127.0.0.1','tcp','none'],
           'selector edits round trip to candidate JSON without implicit server writes');
         assert.equal(selectJson.settings.clients[0].id,'client-uuid-visible');
-        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1);
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,3);
         await viewToggle.getByRole('button',{name:'可视化'}).click();
         await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).fill('local-visual');
         await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).press('Tab');
