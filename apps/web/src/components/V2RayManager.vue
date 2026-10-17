@@ -119,33 +119,36 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 
 <template>
   <section class="v2ray-manager" aria-label="V2Ray 控制台">
-    <div class="v2ray-toolbar">
-      <button type="button" :disabled="busy" @click="refreshAll">刷新状态与配置</button>
-      <span v-if="busy" class="muted small" role="status">正在处理…</span>
-    </div>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="notice" class="muted small" role="status">{{ notice }}</p>
-    <div class="v2ray-summary">
+    <div class="v2ray-summary" aria-label="V2Ray 状态摘要">
       <div><span class="muted small">内核</span><strong>{{ data.installed ? (data.version||'已安装') : '未安装' }}</strong></div>
       <div><span class="muted small">服务</span><strong>{{ data.installed ? (data.service==='running'?'运行中':'已停止') : '—' }}</strong></div>
       <div><span class="muted small">开机启动</span><strong>{{ data.installed?(data.enabled?'已启用':'未启用'):'—' }}</strong></div>
       <div><span class="muted small">入站 / 出站</span><strong>{{ data.inbounds }} / {{ data.outbounds }}</strong></div>
     </div>
-    <p class="muted small">配置文件：<code>{{ data.configPath }}</code></p>
+    <div class="v2ray-toolbar v2ray-service-toolbar" aria-label="V2Ray 主要操作">
+      <button type="button" :disabled="busy" @click="refreshAll">刷新状态与配置</button>
+      <template v-if="data.installed">
+        <button type="button" :disabled="busy||data.service==='running'" @click="ask('start')">启动</button>
+        <button type="button" :disabled="busy||data.service!=='running'" @click="ask('stop')">停止</button>
+        <button type="button" :disabled="busy" @click="ask('restart')">重启</button>
+      </template>
+    </div>
+    <div class="v2ray-config-line">
+      <p class="muted small v2ray-config-path">配置文件：<code>{{ data.configPath }}</code></p>
+      <button v-if="data.installed" type="button" :disabled="busy"
+        @click="ask(data.enabled?'disable':'enable')">
+        {{ data.enabled?'关闭开机自启':'启用开机自启' }}
+      </button>
+    </div>
+    <p v-if="busy" class="muted small" role="status">正在处理…</p>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <p v-if="notice" class="muted small" role="status">{{ notice }}</p>
     <p v-if="data.installed&&!data.configExists" class="error">没有找到主配置，请先确认 V2Ray 的实际配置文件路径。</p>
     <div v-if="!data.installed" class="v2ray-empty">
       <p>未找到 V2Ray 内核。可安装经过 SHA-256 固定校验的 V2Fly 5.47.0。默认只建立本机回环 SOCKS 监听，不开放公网代理端口。</p>
       <button type="button" class="primary" :disabled="busy" @click="ask('install')">安装 V2Ray 5.47.0</button>
     </div>
     <template v-else>
-      <div class="v2ray-toolbar">
-        <button type="button" :disabled="busy||data.service==='running'" @click="ask('start')">启动</button>
-        <button type="button" :disabled="busy||data.service!=='running'" @click="ask('stop')">停止</button>
-        <button type="button" :disabled="busy" @click="ask('restart')">重启</button>
-        <button type="button" :disabled="busy" @click="ask(data.enabled?'disable':'enable')">
-          {{ data.enabled?'关闭开机自启':'启用开机自启' }}
-        </button>
-      </div>
       <div v-if="loaded" class="v2ray-editor">
         <div class="v2ray-tabbar" role="tablist" aria-label="V2Ray 管理视图">
           <button type="button" role="tab" :aria-selected="tab==='overview'" @click="chooseTab('overview')">能力概览</button>
@@ -213,14 +216,21 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   color:var(--button-text);font:inherit;font-size:.85rem;cursor:pointer}
 .v2ray-manager button.primary{background:var(--accent-bg);color:var(--button-primary-text);border-color:var(--accent-bg)}
 .v2ray-manager button:disabled{opacity:.5;cursor:not-allowed}
-.v2ray-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,125px),1fr));gap:10px;margin:12px 0}
-.v2ray-summary>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px;
-  border:1px solid var(--border-panel);border-radius:10px}
+/* The parent ActionCard is the only surrounding rounded panel.
+   Summary fields and capability groups are content, not nested cards. */
+.v2ray-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 18px}
+.v2ray-summary>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:0;
+  border:0;border-radius:0;box-shadow:none;background:transparent}
+.v2ray-service-toolbar{margin:0 0 12px}
+.v2ray-config-line{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;
+  flex-wrap:wrap;margin:0 0 14px}
+.v2ray-config-line .v2ray-config-path{min-width:0;flex:1 1 auto;margin:0}
+.v2ray-config-line button{flex:none}
 .v2ray-summary strong{overflow-wrap:anywhere}
 .v2ray-manager code{overflow-wrap:anywhere}
 .v2ray-empty{display:grid;gap:10px}
 .v2ray-rows{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));margin:1rem 0}
-.v2ray-rows>div{padding:12px;border:1px solid var(--border-panel);border-radius:10px;min-width:0}
+.v2ray-rows>div{padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;min-width:0}
 .v2ray-rows p{margin:6px 0;overflow-wrap:anywhere}
 .v2ray-tabbar{display:flex;gap:8px;flex-wrap:wrap;margin:1rem 0}
 .v2ray-tabbar button[aria-selected="true"]{background:var(--accent-bg);border-color:var(--accent-bg);color:var(--button-primary-text)}
@@ -232,12 +242,15 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;
   padding:12px;border-radius:10px;border:1px solid var(--input-border);
   background:var(--input-bg);color:var(--text-primary);resize:vertical}
-.v2ray-output{padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;
-  background:var(--panel-alt-bg);border:1px solid var(--border-panel);border-radius:10px}
+.v2ray-output{padding:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;
+  background:transparent;border:0;border-top:1px solid var(--border-rule);border-radius:0}
 .v2ray-dialog{background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border-panel);
   border-radius:12px;padding:18px;width:min(94vw,35rem);max-height:85dvh}
 .v2ray-dialog::backdrop{background:#0008}
 .v2ray-dialog-content{display:grid;gap:12px}
 .v2ray-dialog-content h3{margin:0}
-@media(max-width:730px){.v2ray-dialog{padding:14px}.v2ray-tabbar button{flex:1}}
+@media(max-width:730px){
+  .v2ray-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
+  .v2ray-dialog{padding:14px}.v2ray-tabbar button{flex:1}
+}
 </style>

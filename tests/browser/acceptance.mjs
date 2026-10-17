@@ -877,6 +877,59 @@ try {
         const panel=page.locator('.v2ray-manager');
         await panel.waitFor();
         await panel.getByText('V2Ray 5.47.0').waitFor();
+        const summary=panel.locator(':scope > .v2ray-summary');
+        const toolbar=panel.locator(':scope > .v2ray-service-toolbar');
+        const configLine=panel.locator(':scope > .v2ray-config-line');
+        assert.deepEqual(await summary.locator(':scope > div > span').allTextContents(),
+          ['内核','服务','开机启动','入站 / 出站'],
+          'the four status fields are the first content row, in requested order');
+        assert.deepEqual(await summary.locator(':scope > div > strong').allTextContents(),
+          ['V2Ray 5.47.0','运行中','已启用','1 / 1']);
+        assert.deepEqual((await toolbar.getByRole('button').allTextContents()).map(s=>s.trim()),
+          ['刷新状态与配置','启动','停止','重启'],
+          'the next row must contain the four primary commands, with no extra buttons');
+        assert.equal((await configLine.locator('.v2ray-config-path').innerText()).trim(),
+          '配置文件：/usr/local/etc/v2ray/config.json');
+        assert.equal(await configLine.getByRole('button',{name:'关闭开机自启'}).count(),1,
+          'the auto-start action remains available but does not intrude into the primary toolbar');
+        const geometry=await panel.evaluate(node=>{
+          const row=node.querySelector('.v2ray-summary');
+          const bar=node.querySelector('.v2ray-service-toolbar');
+          const path=node.querySelector('.v2ray-config-line');
+          const groups=[...node.querySelectorAll('.v2ray-summary > div, .v2ray-rows > div')];
+          const shape=n=>{
+            const css=getComputedStyle(n),r=n.getBoundingClientRect();
+            return {top:r.top,bottom:r.bottom,left:r.left,border:css.borderTopWidth,
+              radius:css.borderTopLeftRadius,padding:css.paddingLeft,background:css.backgroundColor};
+          };
+          const wrapper=node.closest('.action-card'),outer=getComputedStyle(wrapper);
+          return {summary:shape(row),toolbar:shape(bar),config:shape(path),
+            stats:[...row.children].map(shape),
+            groups:groups.map(shape),outer:{radius:outer.borderTopLeftRadius,
+              border:outer.borderTopWidth,background:outer.backgroundColor,
+              padding:outer.paddingLeft}};
+        });
+        assert.ok(geometry.summary.bottom<=geometry.toolbar.top &&
+          geometry.toolbar.bottom<=geometry.config.top,
+          'summary first, command toolbar second, config path third');
+        assert.ok(geometry.stats.every(r=>r.border==='0px'&&r.radius==='0px'&&r.padding==='0px'
+          && r.background==='rgba(0, 0, 0, 0)'),
+          'status values must not be inside nested rounded cards');
+        assert.ok(parseFloat(geometry.outer.radius)>0 && geometry.outer.border==='1px'
+          && parseFloat(geometry.outer.padding)>0
+          && geometry.outer.background!=='rgba(0, 0, 0, 0)',
+          'the V2Ray action itself must retain its outer rounded container');
+        if(width===1280)assert.ok(geometry.stats.every(r=>r.top===geometry.stats[0].top),
+          'all four metrics should be in one row on desktop');
+        await panel.locator('.v2ray-rows > div').first().waitFor();
+        const capabilityFrames=await panel.locator('.v2ray-rows > div').evaluateAll(nodes=>nodes.map(node=>{
+          const s=getComputedStyle(node);
+          return {border:s.borderTopWidth,radius:s.borderTopLeftRadius,padding:s.paddingLeft,
+            background:s.backgroundColor};
+        }));
+        assert.ok(capabilityFrames.every(r=>r.border==='0px'&&r.radius==='0px'&&r.padding==='0px'
+          && r.background==='rgba(0, 0, 0, 0)'),
+          'V2Ray capability overview must remain unboxed inside the one outer module card');
         assert.equal(await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).count(),0,
           'installation must be hidden while V2Ray is installed');
         await panel.getByRole('tab',{name:'完整 JSON'}).click();
