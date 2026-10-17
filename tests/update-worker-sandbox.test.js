@@ -95,6 +95,17 @@ function prepare({withPrivileged=false}={}){
  const meminfo=join(base,'meminfo');
  writeFileSync(meminfo,'MemAvailable:    3000000 kB\\nSwapFree:    3000000 kB\\n'.replaceAll('\\n','\n'));
  let worker=original.replaceAll('/proc/meminfo',JSON.stringify(meminfo));
+
+ // This rootless fixture has no system users named linuxpanel-updater or
+ // linuxpanel. Keep the real embedded ACL code and exercise it as the fixture
+ // checkout owner, then let the separate systemd suite verify distinct UIDs.
+ worker=swap(worker,
+  'as_updater /usr/bin/python3 -I - "$ROOT" "$USER" linuxpanel <<',
+  'as_updater /usr/bin/python3 -I - "$ROOT" "$(id -un)" "$(id -gn)" <<');
+ worker=swap(worker,
+  '/usr/bin/setpriv --reuid=linuxpanel --regid=linuxpanel --init-groups \\\n    --inh-caps=-all --no-new-privs -- \\\n    /usr/bin/git -c "safe.directory=$ROOT" -C "$ROOT" cat-file -t HEAD >/dev/null',
+  '/usr/bin/git -C "$ROOT" cat-file -t HEAD >/dev/null');
+
  const privRoot=join(base,'privileged');
  if(withPrivileged){
    mkdirSync(join(privRoot,'releases',old,'node_modules'),{recursive:true});
