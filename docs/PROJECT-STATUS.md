@@ -1,10 +1,10 @@
 # Linux Panel 当前状态
 
-## 当前项目与路由布局修正（2026-10-17）
+## 当前项目状态（2026-10-17）
 
-- **最后已观察的服务器部署**：Linux Panel v0.5.0，main `f0ef4cf42ba61fc2b7a6b363986f8e65ed9931d0`（[PR #155](https://github.com/Ran-ying/linux-panel/pull/155)）；独立确认普通 Web UID 下 Git 工作区干净、Panel/privileged/V2Ray/update.path 活跃、HTTP 200，受限 root Broker 最后事务 success。证据及交接见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
-- 本次布局修正开发中（须独立核验 CI、合并、生产部署）：V2Ray 路由规则底部保留 **「选择条件 + 添加条件」**，排在含 IP 的可选条件之后；两项控件统一 38px 高。类型、入站标签、目标出站标签三个基本字段采用一致的 38px 控件高度及顶端对齐，防止多行入站标签将其它项挤到底部。规则标题继续按 `entry.tag || entry.outboundTag || entry.protocol || '未命名'` 取值，即没有自定义 tag 时显示 `outboundTag`（如 `out_direct`），此次不变更其语义。
-- 本次只调整 Web 展示、浏览器验收与文档，**不会改变真实 V2Ray 配置、网络服务或 root Handler**；不将合并/排队请求误当作部署成功。手机真机视觉观察尚须独立确认。
+- 最近实机验收部署：main `9fe23b4435b8d611db291905e2714995ff4800ba`（[PR #156](https://github.com/Ran-ying/linux-panel/pull/156)），Panel、privileged、V2Ray 与更新 watcher active、HTTP 200、Git clean；完整证据持续写入 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 本 PR（待 CI/合并/实机部署核验）：路由标题「移除」左侧增加「重命名」，独立弹窗只编辑 rule.tag。没有 tag 时输入框必须为空；确认才产生本地候选 JSON 更改，清空删除 tag 并恢复 outboundTag 标题回退；取消不写。路由可视化所有有原始 JSON 键的中文字段、可选条件下拉选项均后缀相应 key。补充浏览器与单元测试验证独立字段、旧版路由对象和其他配置无损。请勿把 PR 合并视作生产部署成功。
+- 本次仅 Vue 前端 / 测试 / 文档变动，无 V2Ray 配置或 root Handler 变动；不得在生产实机修改正在运行的 V2Ray 用户配置进行测试。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 
