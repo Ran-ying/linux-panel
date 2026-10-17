@@ -8,20 +8,6 @@ import {CERTBOT_CONTRACTS} from '../../platform/privileged/certbot-contracts.js'
 export async function setup({actions,moduleId}){
   const operations=createNginxOperations({requireRoot:false});
   actions.register(moduleId,renewalReconfigure);
-  // Certbot renewal management belongs to the Nginx module, not an extra
-  // sidebar module. The existing guarded root operations remain unchanged.
-  for(const [name,contract] of Object.entries(CERTBOT_CONTRACTS)){
-    const write=name==='renew';
-    actions.register(moduleId,{
-      ...contract,id:'nginx.certbot'+(write?'Renew':'List'),
-      kind:write?'write':'read',
-      permission:write?'nginx:write':'nginx:read',
-      executionPolicy:write?'privileged':undefined,
-      exposure:{web:true,mcp:false},privileged:{channels:['web']},
-      explain:'展示 Certbot 已登记自动续期证书，按现有定时器自动续期；单证书续期检查必须经 Web 确认。',
-      execute:async()=>{throw Object.assign(new Error('需要已安装的 Certbot root Handler'),{statusCode:503});}
-    });
-  }
   actions.register(moduleId,{
     ...NGINX_UNIT_CONTRACT,id:'nginx.repairExecutor',kind:'write',
     permission:'nginx:write',executionPolicy:'privileged',
@@ -53,4 +39,19 @@ export async function setup({actions,moduleId}){
       exposure:{web:true,mcp:false},privileged:{channels:['web']},
       execute:async()=>{throw Object.assign(new Error('需要最新版 Nginx root 执行器'),{statusCode:503});}});
   }
+  // Certbot renewal management belongs to the Nginx module, not an extra
+  // sidebar module. The existing guarded root operations remain unchanged.
+  for(const [name,contract] of Object.entries(CERTBOT_CONTRACTS)){
+    const write=name==='renew';
+    actions.register(moduleId,{
+      ...contract,id:'nginx.certbot'+(write?'Renew':'List'),
+      kind:write?'write':'read',
+      permission:write?'nginx:write':'nginx:read',
+      executionPolicy:write?'privileged':undefined,
+      exposure:{web:true,mcp:false},privileged:{channels:['web']},
+      explain:'展示 Certbot 已登记自动续期证书，按现有定时器自动续期；单证书续期检查必须经 Web 确认。',
+      execute:async()=>{throw Object.assign(new Error('需要已安装的 Certbot root Handler'),{statusCode:503});}
+    });
+  }
+
 }
