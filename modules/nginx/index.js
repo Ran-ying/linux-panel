@@ -34,8 +34,9 @@ export async function setup({actions,moduleId}){
   }
   for(const [name,contract] of Object.entries(NGINX_TLS_CONTRACTS)){
     actions.register(moduleId,{...contract,id:'nginx.'+name,
-      kind:name==='siteTlsKey'?'write':'read',permission:'nginx:read',
-      executionPolicy:name==='siteTlsKey'?'privileged':undefined,
+      kind:['siteTlsKey','saveTls'].includes(name)?'write':'read',
+      permission:name==='saveTls'?'nginx:write':'nginx:read',
+      executionPolicy:['siteTlsKey','saveTls'].includes(name)?'privileged':undefined,
       exposure:{web:true,mcp:false},privileged:{channels:['web']},
       execute:async()=>{throw Object.assign(new Error('需要最新版 Nginx root 执行器'),{statusCode:503});}});
   }
