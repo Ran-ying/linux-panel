@@ -896,6 +896,8 @@ try {
           ['刷新状态与配置'],'the refresh button belongs to the config path row');
         assert.equal(await panel.locator('.v2ray-service-toolbar,.v2ray-tabbar,.v2ray-rows,.v2ray-section-picker').count(),0,
           'no duplicate service toolbar, capability overview or old tab/selector UI');
+        const nav=panel.getByRole('navigation',{name:'V2Ray 配置目录'});
+        await nav.waitFor();
         const geometry=await panel.evaluate(node=>{
           const summary=node.querySelector('.v2ray-summary');
           const path=node.querySelector('.v2ray-config-line');
@@ -926,8 +928,6 @@ try {
           'refresh aligns with the far right edge of the config path row');
         if(width===1280)assert.ok(geometry.cards.every(r=>r.top===geometry.cards[0].top),
           'desktop shows four status cards in one row');
-        const nav=panel.getByRole('navigation',{name:'V2Ray 配置目录'});
-        await nav.waitFor();
         assert.ok(geometry.nav.right<=geometry.editor.left+1,
           'JSON editor must be to the right of the vertical section list');
         assert.equal(await panel.getByRole('tab').count(),0,'remove capability overview and all editing tabs');
