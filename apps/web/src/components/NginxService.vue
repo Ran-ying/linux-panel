@@ -54,6 +54,7 @@ function check(){return work(async()=>{
 
 <template>
   <section class="nginx-service" aria-label="Nginx 状态管理面板">
+    <h3 class="nginx-service-title">Nginx 状态管理</h3>
     <div class="nginx-service-cards">
       <div class="nginx-service-card">
         <span class="muted small">Nginx 内核</span>
@@ -64,8 +65,8 @@ function check(){return work(async()=>{
         <strong>{{ state.active?'运行中':state.state==='inactive'?'已停止':state.state }}</strong>
         <span class="muted small">{{ state.subState }}</span>
         <div class="nginx-service-buttons">
-          <button type="button" :disabled="busy||state.active" @click="ask('start')">启动</button>
-          <button type="button" :disabled="busy||!state.active" @click="ask('stop')">停止</button>
+          <button type="button" :disabled="busy"
+            @click="ask(state.active?'stop':'start')">{{ state.active?'停止':'启动' }}</button>
           <button type="button" :disabled="busy||!state.active" @click="ask('restart')">重启</button>
           <button type="button" :disabled="busy||!state.active" @click="ask('reload')">重载</button>
         </div>
@@ -115,14 +116,15 @@ function check(){return work(async()=>{
 </template>
 
 <style scoped>
-.nginx-service{display:grid;gap:12px}
+.nginx-service{display:grid;gap:12px;min-width:0}
+.nginx-service-title{margin:0;font-size:1.15rem;font-weight:600}
 .nginx-service-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .nginx-service-card{border:1px solid var(--border-panel);border-radius:12px;
   padding:14px;background:var(--panel-bg);display:flex;flex-direction:column;gap:6px;min-width:0}
 .nginx-service-card strong{overflow-wrap:anywhere}
 .nginx-service-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:10px}
 .nginx-service-buttons button,.nginx-service-toolbar button,.nginx-control-actions button{
-  font:inherit;font-size:.85rem;min-height:34px;padding:5px 10px}
+  font:inherit;min-height:2.35rem;padding:.35rem .8rem}
 .nginx-service-toolbar{display:flex;justify-content:flex-end}
 .nginx-service pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:16rem;overflow-y:auto}
 .nginx-control-dialog{background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border-panel);

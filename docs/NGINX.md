@@ -21,12 +21,12 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
 \`\`\`
 会重启 root executor 和 Linux Panel Web，不会更改 Nginx 配置本身。普通 Git/MCP 更新**不会**自动替换 root-owned 处理器。没有安装 handler 时，Web 写入会返回 503 或不支持的 Action 错误，不会降级至普通 Shell。
 
-## 三个独立可见 Action
+## 状态管理与网站内 SSL 证书管理
 
-Nginx 网站模块按固定顺序显示 **Nginx 状态管理 → Nginx 网站管理 → SSL 证书管理**。辅助 Action（`nginx.service`、`nginx.renew`、`nginx.check`、`nginx.read`、`nginx.apply`）在主区块内调用，不额外生成重复的可见卡片。
+Nginx 网站模块只有两个独立区块：**Nginx 状态管理 → Nginx 网站管理**；SSL 证书管理不再是独立 Action 卡片，而是打开具体网站详情后显示在该网站的右侧详情（手机端在列表下方）。辅助 Action（`nginx.service`、`nginx.certificates`、`nginx.renew`、`nginx.check`、`nginx.read`、`nginx.apply`）在对应区块内调用。
 
-- **状态管理**展示内核版本、systemd 服务状态/子状态、开机自启及配置语法结果。提供刷新、检查配置和启动、停止、重启、重载、启停自启（变更均先二次确认）；启动、重启、重载前先运行固定 `nginx -t`，不允许自定义 systemd unit 或 Shell 参数。
-- **SSL 证书管理**只扫描 Certbot/Let's Encrypt 约定的 `/etc/letsencrypt/live/<cert-name>/cert.pem`，要求真实证书链的目标在 `/etc/letsencrypt/archive/` 内；以 Node.js X509Certificate 解码公有证书，显示名称、SAN 域名、颁发者、签发/过期时间、距离到期天数及公有证书路径。**不会读取、返回或记录 privkey.pem。** 本模块不会声称包含所有系统自定义证书。
+- **状态管理**外层不再用圆角矩形容器（flat），内部状态卡片保留；按钮统一使用网站管理的高度、内边距与字体。启动/停止合并为同一按钮：运行中「停止」，停止时「启动」；其它重启、重载、启停自启仍单独存在，变更先二次确认。显示内核版本、systemd 服务状态/子状态、开机自启及配置语法结果，提供刷新、检查配置；启动、重启、重载前先运行固定 `nginx -t`，不允许自定义 systemd unit 或 Shell 参数。
+- **每个网站详情内 SSL 证书管理**仅在网站详情展开后读取受管证书，按该站点的 `server_name` 与证书 DNS SAN 做大小写无关的精确匹配及标准单层通配符匹配。未匹配时显示无匹配证书，不显示别的站点的续期按钮。**域名匹配仅用于关联展示，不能证明 Nginx 当前引用了该证书**；不因打开网站写文件或自动申请/续期。证书本身只扫描 Certbot/Let's Encrypt 约定的 `/etc/letsencrypt/live/<cert-name>/cert.pem`，要求真实证书链的目标在 `/etc/letsencrypt/archive/` 内；以 Node.js X509Certificate 解码公有证书，显示名称、SAN 域名、颁发者、签发/过期时间、距离到期天数及公有证书路径。**不会读取、返回或记录 privkey.pem。** 本模块不会声称包含所有系统自定义证书。
 - 每条受管证书有「检查并续期」，二次确认后使用固定 `/usr/bin/certbot renew --non-interactive --cert-name <已列出的安全名称>`，不强制提前续期、不接收任意域名/目录/脚本；成功后若 Nginx 运行，则先检查 Nginx 语法，成功再重载；若 Nginx 停止，不自动启动。既有 Certbot renewal 配置自身的验证方式、hooks 和域名解析必须事先正确。本阶段**不支持创建/撤销证书**，因为签发需要单独选择 HTTP-01/DNS-01 与对应服务商凭据；不会替用户猜测。
 - 生产部署验收只读取状态，不执行停止、重启、申请或续期，也不更改已部署的 Nginx 配置。
 
