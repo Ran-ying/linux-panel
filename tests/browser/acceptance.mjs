@@ -1387,6 +1387,29 @@ try {
           'visual editor updates must not discard unrelated full-config settings');
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).isDisabled(),true,
           'the full raw configuration must remain a JSON-only editor');
+        // Presence-based navigation: a present null legacy field must stay listed
+        // as raw JSON, while truly absent legacy keys vanish from the sidebar.
+        const noLegacyConfig=JSON.parse(await editor.inputValue());
+        noLegacyConfig.inboundDetour=null;
+        await editor.fill(JSON.stringify(noLegacyConfig,null,2));
+        await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）',exact:true}).click();
+        assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).isDisabled(),true,
+          'legacy null is not an editable array');
+        assert.equal((await part.inputValue()).trim(),'null',
+          'present null legacy field must not silently display a new []');
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        const removedLegacy=JSON.parse(await editor.inputValue());
+        delete removedLegacy.inboundDetour;
+        delete removedLegacy.outboundDetour;
+        await editor.fill(JSON.stringify(removedLegacy,null,2));
+        assert.equal(await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）'}).count(),0,
+          'missing inboundDetour must not get a sidebar item');
+        assert.equal(await nav.getByRole('button',{name:'旧版出站扩展（outboundDetour）'}).count(),0,
+          'missing outboundDetour must not get a sidebar item');
+        assert.equal(await nav.getByRole('button',{name:'入站连接（inbounds）'}).count(),1);
+        assert.equal(await nav.getByRole('button',{name:'出站连接（outbounds）'}).count(),1);
+        assert.ok(!Object.hasOwn(JSON.parse(await editor.inputValue()),'inboundDetour'));
+        assert.ok(!Object.hasOwn(JSON.parse(await editor.inputValue()),'outboundDetour'));
         assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1,
           'visual edits must remain local unless the operator clicks Save');
         await serviceCard.getByRole('button',{name:'停止',exact:true}).click();
