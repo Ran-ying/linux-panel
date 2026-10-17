@@ -1234,7 +1234,7 @@ try {
         const outboundSelect=routeEntry.getByRole('combobox',{name:'目标出站标签'});
         await outboundSelect.selectOption('direct');
         assert.deepEqual(await outboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value)),
-          ['','direct'],'route destinations must come from the current outbounds');
+          ['','direct','legacy-out'],'route destinations must include ordinary and legacy outbound tags');
         await routeEntry.getByRole('button',{name:'添加入站标签'}).click();
         const inboundSelect=routeEntry.getByRole('combobox',{name:'入站标签 1'});
         await inboundSelect.selectOption('json-changed');
