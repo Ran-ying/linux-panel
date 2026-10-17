@@ -956,11 +956,11 @@ try {
         assert.ok(geometry.nav.right<=geometry.editor.left+1,
           'JSON editor must be to the right of the vertical section list');
         assert.equal(await panel.getByRole('tab').count(),0,'remove capability overview and all editing tabs');
-        const first=nav.getByRole('button').first();
+        const first=nav.locator('.v2ray-config-item').first();
         assert.equal((await first.innerText()).trim(),'完整内容（JSON 根对象）',
           'full configuration is the first entry in the left vertical list');
         assert.equal(await first.getAttribute('aria-pressed'),'true');
-        const navLabels=(await nav.getByRole('button').allTextContents()).map(v=>v.trim());
+        const navLabels=(await nav.locator('.v2ray-config-item').allTextContents()).map(v=>v.trim());
         const expectedSectionKeys=['inbounds','outbounds','routing','dns','inboundDetour','outboundDetour'];
         assert.equal(navLabels.length,expectedSectionKeys.length+1);
         for(let k=0;k<expectedSectionKeys.length;k++){
