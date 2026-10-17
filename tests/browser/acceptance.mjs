@@ -91,7 +91,7 @@ try {
       const target=nginxSites.find(site=>site.name===input.name);
       if(id==='nginx.siteTls'){
         nginxCertificateReads++;
-        data={name:input.name,pairs:[{
+        data={name:input.name,pairs:input.name==='unrelated-site'?[]:[{
           certificatePath:'/etc/letsencrypt/live/fixture.test/fullchain.pem',
           privateKeyPath:'/etc/letsencrypt/live/fixture.test/privkey.pem',
           publicPem:publicFixture,certificatePem:'-----BEGIN CERTIFICATE-----\nCERTIFICATE FIXTURE\n-----END CERTIFICATE-----\n',
@@ -1025,7 +1025,7 @@ try {
         await editor.getByRole('button',{name:'保存配置'}).click();
         await manager.getByRole('button',{name:'查看网站 unrelated-site'}).click();
         const unmatched=manager.getByRole('region',{name:'SSL 证书管理：unrelated-site'});
-        await unmatched.getByText('0 张域名匹配的证书').waitFor();
+        await unmatched.getByText('当前站点文件未直接声明 SSL 证书路径。').waitFor();
         assert.equal(await unmatched.getByRole('button',{name:/续期证书/}).count(),0);
         assert.equal(await manager.locator('.config-detail-panel > .config-detail-card').count(),3,
           'unmatched sites still show information, configuration and SSL panels');
