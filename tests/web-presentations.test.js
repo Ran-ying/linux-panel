@@ -80,8 +80,11 @@ test('each module owns its Web render configuration separately from Action metad
   assert.equal(configured.get('files.list').operations.accounts,'files.accounts');
   assert.equal(configured.get('files.accounts').embedded,true);
   assert.equal(registry.get('files.accounts').exposure.mcp,false);
-  assert.equal(configured.get('certbot.list').renderer,'certbot-manager');
-  assert.equal(configured.get('certbot.list').operations.renew,'certbot.renew');
+  assert.equal(configured.get('nginx.sites').operations.certbotList,'nginx.certbotList');
+  assert.equal(configured.get('nginx.sites').operations.certbotRenew,'nginx.certbotRenew');
+  assert.equal(configured.get('nginx.certbotList').embedded,true);
+  assert.equal(configured.get('nginx.certbotRenew').embedded,true);
+  assert.equal(registry.get('nginx.certbotRenew').exposure.mcp,false);
   assert.equal(registry.get('nginx.siteTlsKey').exposure.mcp,false);
   assert.ok(mcpActions.every(a => !Object.hasOwn(a, 'presentation')));
 });

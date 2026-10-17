@@ -89,7 +89,14 @@ try {
       const input=route.request().postDataJSON()?.input??{};
       let data,status=200;
       const target=nginxSites.find(site=>site.name===input.name);
-      if(id==='nginx.siteTls'){
+      if(id==='nginx.certbotList'){
+        data={installed:true,timerActive:true,timerEnabled:true,count:1,certificates:[{
+          name:'fixture.test',domains:['fixture.test'],authenticator:'nginx',
+          validTo:'2026-12-01T00:00:00.000Z',daysRemaining:45,status:'valid'}],warnings:[]};
+      }else if(id==='nginx.certbotRenew'){
+        nginxRenewActions.push(input.name);
+        data={ok:true,status:'Certbot 已检查续期',output:'',reloaded:true};
+      }else if(id==='nginx.siteTls'){
         nginxCertificateReads++;
         data={name:input.name,pairs:input.name==='unrelated-site'?[]:[{
           certificatePath:'/etc/letsencrypt/live/fixture.test/fullchain.pem',
@@ -158,19 +165,6 @@ try {
       await route.fulfill({status,contentType:'application/json',
         body:JSON.stringify(status===200?{action:id,result:data}:data)});
     });
-    await page.route('**/api/actions/certbot.*/execute',async route=>{
-      const id=new URL(route.request().url()).pathname.split('/')[3];
-      const input=route.request().postDataJSON()?.input??{};
-      const result=id==='certbot.list'
-        ?{installed:true,timerActive:true,timerEnabled:true,count:1,certificates:[{
-          name:'fixture.test',domains:['fixture.test'],authenticator:'nginx',
-          validTo:'2026-12-01T00:00:00.000Z',daysRemaining:45,status:'valid'}],warnings:[]}
-        :{ok:true,status:'Certbot 已检查续期',output:'',reloaded:true};
-      if(id==='certbot.renew')nginxRenewActions.push(input.name);
-      await route.fulfill({status:200,contentType:'application/json',
-        body:JSON.stringify({action:id,result})});
-    });
-
     // Synthetic V2Ray server: browser coverage without changing the CI host.
     let v2rayInstalled=true,v2rayRunning=true,v2rayEnabled=true,v2rayRevision=0;
     let v2rayFailStatusOnce=false;
@@ -248,6 +242,7 @@ try {
     const names=await page.locator('.module-nav button,.platform-nav button').allTextContents();
     assert.deepEqual(names.slice(0,4).map(name=>name.trim()),['系统概览','服务浏览','终端','文件管理']);
     assert.ok(!names.some(name=>name.trim()==='磁盘使用情况'),'disk usage must not have a separate sidebar item');
+    assert.ok(!names.some(name=>name.trim()==='Certbot 证书管理'),'Certbot now lives inside Nginx Website module');
     assert.equal(names.filter(name=>name.trim()==='定时任务').length,1,'there is exactly one scheduled-tasks navigation module');
     assert.ok(!names.some(name=>name.trim()==='系统现有定时任务'||name.trim()==='Linux Panel 托管的定时任务'),
       'two scheduler sections must not appear as separate sidebar modules');
@@ -342,8 +337,17 @@ try {
           b.fontSize===referenceControls.primary.fontSize),
           name+': all command buttons must share the compact 32px pill appearance');
       }
-      if(name.trim()==='Certbot 证书管理' && [390,1280].includes(width)){
-        const certbot=page.locator('.certbot-manager');
+      if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
+        const area=page.getByRole('region',{name:'Certbot 证书管理'});
+        await area.waitFor();
+        const certbot=area.locator('.certbot-manager');
+        assert.equal(await area.locator('.certbot-record').count(),1);
+        const borderCheck=await area.locator('.certbot-record').evaluate(node=>{
+          const css=getComputedStyle(node);
+          return {border:css.borderLeftWidth,radius:css.borderTopLeftRadius};
+        });
+        assert.equal(borderCheck.border,'0px','certificate rows have no nested card frames');
+        assert.equal(borderCheck.radius,'0px');
         await certbot.getByText('1 份续期配置',{exact:false}).waitFor();
         await certbot.getByText('验证方式 nginx').waitFor();
         const button=certbot.getByRole('button',{name:'续期证书 fixture.test'});

@@ -46,7 +46,9 @@ export function createPrivilegedHandlers({privileged=true}={}){
   for(const [name,contract] of Object.entries(NGINX_TLS_CONTRACTS))
     handlers.set('nginx.'+name,{channels:['web'],validate:ajv.compile(contract.inputSchema),execute:tls[name]});
   const certbot=createCertbotOperations();
-  for(const [name,contract] of Object.entries(CERTBOT_CONTRACTS))
-    handlers.set('certbot.'+name,{channels:['web'],validate:ajv.compile(contract.inputSchema),execute:certbot[name]});
+  for(const [name,contract] of Object.entries(CERTBOT_CONTRACTS)){
+    const action=name==='renew'?'nginx.certbotRenew':'nginx.certbotList';
+    handlers.set(action,{channels:['web'],validate:ajv.compile(contract.inputSchema),execute:certbot[name]});
+  }
   return handlers;
 }

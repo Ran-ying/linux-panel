@@ -1,6 +1,7 @@
 <script setup>
-import {ref,computed,watch,onUnmounted} from 'vue';
+import {ref,computed,watch,onMounted,onUnmounted} from 'vue';
 import NginxCertificates from './NginxCertificates.vue';
+import CertbotManager from './CertbotManager.vue';
 import {updateNginxSiteDomain,validNginxDomain} from '../nginx-site-domains.js';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
@@ -11,6 +12,21 @@ const emit=defineEmits(['unauthorized','listing-change']);
 const listing=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref('');
 const modal=ref(null),confirmModal=ref(null),draft=ref(null),pending=ref(null),checkResult=ref(null);
 const selectedFile=ref(null);
+const certbotData=ref(null),certbotLoading=ref(true),certbotError=ref('');
+let certbotGeneration=0;
+async function loadCertbot(){
+  const generation=++certbotGeneration;
+  certbotLoading.value=true;certbotError.value='';
+  try{
+    const data=await request(props.operations.certbotList);
+    if(generation===certbotGeneration)certbotData.value=data;
+  }catch(e){
+    if(generation===certbotGeneration)certbotError.value=e.message||'读取自动续期证书失败';
+  }finally{
+    if(generation===certbotGeneration)certbotLoading.value=false;
+  }
+}
+
 const addingDomain=ref(false),domainInput=ref(''),domainError=ref('');
 const domainConfirm=ref(null),pendingDomain=ref(null);
 const selectedSite=computed(()=>(listing.value.sites??[]).find(site=>site.file===selectedFile.value)??null);
@@ -95,7 +111,8 @@ watch(()=>selectedSite.value?selectedSite.value.name+'|'+selectedSite.value.revi
     if(generation===configPreviewGeneration)configPreviewLoading.value=false;
   }
 },{immediate:true});
-onUnmounted(()=>{configPreviewGeneration++;clearTimeout(noticeTimer);});
+onMounted(()=>{void loadCertbot();});
+onUnmounted(()=>{configPreviewGeneration++;certbotGeneration++;clearTimeout(noticeTimer);});
 
 async function request(action,input={}){
   const response=await fetch('/api/actions/'+encodeURIComponent(action)+'/execute',{
@@ -346,6 +363,18 @@ function check(){
         </section>
       </section>
     </div>
+    <section class="config-certbot-area" aria-label="Certbot 证书管理">
+      <h3 class="config-certbot-heading">证书管理</h3>
+      <p v-if="certbotLoading" class="muted small" role="status">正在读取 Certbot 自动续期证书…</p>
+      <div v-else-if="certbotError" class="config-certbot-load-error">
+        <p role="alert" class="error">{{ certbotError }}</p>
+        <button type="button" @click="loadCertbot">重试</button>
+      </div>
+      <CertbotManager v-else-if="certbotData"
+        :initial-data="certbotData" :list-action="operations.certbotList"
+        :operations="{renew:operations.certbotRenew}"
+        :csrf="csrf" @unauthorized="emit('unauthorized')" />
+    </section>
     <details v-if="listing.warnings?.length" class="config-warnings">
       <summary>读取提示（{{ listing.warnings.length }}）</summary>
       <p v-for="(warning,i) in listing.warnings" :key="i" class="muted small">{{ warning }}</p>
@@ -409,6 +438,14 @@ function check(){
 .config-toolbar{margin:0;justify-content:flex-end}
 .config-actions button,.config-dialog-actions button{font:inherit;min-height:2.35rem;padding:.35rem .8rem}
 .config-summary{margin:.1rem 0 .45rem}
+/* One standalone border for the whole Certbot manager, no nested certificate cards. */
+.config-certbot-area{display:grid;gap:12px;min-width:0;margin-top:16px;
+  border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);
+  padding:var(--ui-card-padding);background:var(--panel-bg);box-shadow:none}
+.config-certbot-heading{margin:0;font-size:1rem;font-weight:var(--ui-label-font-weight)}
+.config-certbot-load-error{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.config-certbot-load-error p{margin:0}
+
 .config-browser{display:grid;grid-template-columns:minmax(0,17rem);align-items:start;gap:1rem;min-width:0}
 .config-browser.has-selection{grid-template-columns:minmax(0,17rem) minmax(0,1fr)}
 .config-list-panel{border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);min-width:0;

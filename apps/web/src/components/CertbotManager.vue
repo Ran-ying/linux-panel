@@ -86,7 +86,9 @@ const date=value=>value?new Date(value).toLocaleDateString('zh-CN'):'未知';
 .certbot-manager-heading,.certbot-record-title{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .certbot-manager-heading p,.certbot-record p{margin:3px 0 0}
 .certbot-records{display:grid;gap:12px}
-.certbot-record{display:grid;gap:8px;border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);padding:var(--ui-card-padding);min-width:0}
+.certbot-record{display:grid;gap:8px;border:0;border-radius:0;padding:10px 0;min-width:0;
+  background:transparent;box-shadow:none}
+.certbot-record+.certbot-record{border-top:1px solid var(--border-rule)}
 .certbot-record-detail{display:flex;gap:8px 18px;flex-wrap:wrap;font-size:.9rem}
 .certbot-confirm{background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);padding:var(--ui-dialog-padding);box-shadow:var(--ui-dialog-shadow);width:min(94vw,36rem)}
 .certbot-confirm::backdrop{background:var(--ui-dialog-backdrop)}
