@@ -1,6 +1,7 @@
 # Linux Panel 当前状态
 
 ## 当前项目状态（2026-10-17）
+- 新增：删除 Nginx 网站成功后自动清理仅由该网站引用的已注册 Certbot 证书及自动续期配置；根据真实 SSL 文件引用和现存 Nginx 站点双重验证，不按网站名猜测，不提供单独选项；共享/歧义/失败则保留并显示原因，证书删除发生在 Nginx 成功校验/重载之后。详见 [NGINX.md](NGINX.md)。
 - 新调整：Certbot 证书管理与 Nginx 网站管理为 **同级 Action**；网站详情 SSL 为 Nginx 证书路径+CERTIFICATE 可编辑文本框与私钥路径+PRIVATE KEY 可编辑文本框，左右 50/50 零间距，各自保存；私钥仅登录 Web 正常自动加载，受控 root 写入须匹配校验、CAS、Nginx -t 与失败回滚。见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。
 - Certbot 集成调整：证书管理由独立侧边栏模块迁移到「Nginx 网站」中网站列表下方，保留受控到期续期检查与 timer 状态；统一外框，证书条目只用分隔线；网站详情仍显示 Nginx 实际引用的公钥/私钥 50/50 双栏。新 Actions `nginx.certbotList`、`nginx.certbotRenew`。详见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。
 - SSL 单边框修复：发现 .nginx-certificates 根层原为 section，受全局 aside,section 默认圆角边框影响，与 .config-ssl-section 形成双框。将内层替换为 role=region 的 div，并显式清零内层边框、圆角、背景、阴影、padding；测试验证唯一外框及内层计算样式（手机/桌面）。最终 CI、PR、部署及线上状态以 Issue #54 当次记录为准。

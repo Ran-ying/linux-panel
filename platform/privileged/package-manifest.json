@@ -20,7 +20,8 @@
     "nginx-tls-contracts.js",
     "nginx-tls-operations.js",
     "certbot-contracts.js",
-    "certbot-operations.js"
+    "certbot-operations.js",
+    "nginx-certbot-cleanup.js"
   ],
   "dependencies": [
     "ajv",

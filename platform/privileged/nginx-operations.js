@@ -3,6 +3,7 @@ import {createHash,randomUUID,X509Certificate} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {join,resolve,sep,dirname} from 'node:path';
+import {createNginxCertbotCleanup} from './nginx-certbot-cleanup.js';
 
 const exec=promisify(execFile);
 const MAX_FILES=200, MAX_BYTES=65536;
@@ -41,12 +42,16 @@ export function parseNginxDirectives(content){
 export function createNginxOperations({
   root='/etc/nginx',requireRoot=true,
   nginx='/usr/sbin/nginx',systemctl='/bin/systemctl',runner=exec,
-  certificateRoot='/etc/letsencrypt/live',certbot='/usr/bin/certbot'
+  certificateRoot='/etc/letsencrypt/live',certbot='/usr/bin/certbot',
+  renewalRoot=resolve(certificateRoot,'../renewal')
 }={}){
   if(requireRoot && (root!=='/etc/nginx'||nginx!=='/usr/sbin/nginx'||
     systemctl!=='/bin/systemctl'||certificateRoot!=='/etc/letsencrypt/live'||
-    certbot!=='/usr/bin/certbot'))throw Error('Cannot redirect privileged Nginx paths');
+    certbot!=='/usr/bin/certbot'||renewalRoot!=='/etc/letsencrypt/renewal'))
+    throw Error('Cannot redirect privileged Nginx paths');
   const base=resolve(root),available=join(base,'sites-available'),enabled=join(base,'sites-enabled');
+  const cleanup=createNginxCertbotCleanup({nginxRoot:root,certificateRoot,
+    renewalRoot,nginx,certbot,runner,requireRoot});
   const guard=()=>{
     if(requireRoot&&process.getuid?.()!==0)throw fail('Nginx 操作需要独立 root 执行器',503);
   };
@@ -261,7 +266,22 @@ export function createNginxOperations({
           }
         }
         const current=operation==='remove'?null:await existing(name);
-        return {ok:true,status:activeChanged?'修改成功，配置检查与重载完成':'修改成功；未启用站点不参与完整配置检查',
+        let status=activeChanged?'修改成功，配置检查与重载完成':'修改成功；未启用站点不参与完整配置检查';
+        if(operation==='remove'){
+          // This is deliberately AFTER successful nginx -t / reload. Certbot
+          // deletion is irreversible, so NEVER put it inside the site rollback
+          // transaction. Fail closed on unknown/shared references.
+          let result;
+          try{result=await cleanup.cleanup(before.content);}
+          catch{result={deleted:[],retained:[],uncertain:true};}
+          if(result.deleted.length)
+            status+='；已自动删除 '+result.deleted.length+' 份不再使用的 Certbot 证书及续期配置';
+          if(result.uncertain)
+            status+='；无法确定是否存在其他引用或清理失败，相关证书已保留';
+          else if(result.retained.length)
+            status+='；共享证书已保留';
+        }
+        return {ok:true,status,
           revision:current?.revision??'',validated:activeChanged,reloaded:activeChanged,output:tested.output};
       }catch(error){
         if(changed){
