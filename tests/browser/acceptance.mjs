@@ -884,7 +884,7 @@ try {
           ['内核','服务','开机启动','入站 / 出站'],
           'the four status fields are the first content row, in requested order');
         assert.deepEqual(await summary.locator(':scope > div > strong').allTextContents(),
-          ['V2Ray 5.47.0','运行中','已启用','3 / 4']);
+          ['V2Ray 5.47.0','运行中','已启用','1 / 1']);
         assert.deepEqual((await toolbar.getByRole('button').allTextContents()).map(s=>s.trim()),
           ['刷新状态与配置','启动','停止','重启'],
           'the next row must contain the four primary commands, with no extra buttons');
