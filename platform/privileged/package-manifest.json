@@ -15,7 +15,8 @@
     "v2ray-contracts.js",
     "v2ray-operations.js",
     "service-log-contracts.js",
-    "service-log-operations.js"
+    "service-log-operations.js",
+    "nginx-renewal-reconfigure.js"
   ],
   "dependencies": [
     "ajv",
