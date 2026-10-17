@@ -1,6 +1,7 @@
 # Linux Panel 当前状态
 
 ## 当前项目状态（2026-10-17）
+- 新调整：Certbot 证书管理与 Nginx 网站管理为 **同级 Action**；网站详情 SSL 为 Nginx 证书路径+CERTIFICATE 可编辑文本框与私钥路径+PRIVATE KEY 可编辑文本框，左右 50/50 零间距，各自保存；私钥仅登录 Web 正常自动加载，受控 root 写入须匹配校验、CAS、Nginx -t 与失败回滚。见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。
 - Certbot 集成调整：证书管理由独立侧边栏模块迁移到「Nginx 网站」中网站列表下方，保留受控到期续期检查与 timer 状态；统一外框，证书条目只用分隔线；网站详情仍显示 Nginx 实际引用的公钥/私钥 50/50 双栏。新 Actions `nginx.certbotList`、`nginx.certbotRenew`。详见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。
 - SSL 单边框修复：发现 .nginx-certificates 根层原为 section，受全局 aside,section 默认圆角边框影响，与 .config-ssl-section 形成双框。将内层替换为 role=region 的 div，并显式清零内层边框、圆角、背景、阴影、padding；测试验证唯一外框及内层计算样式（手机/桌面）。最终 CI、PR、部署及线上状态以 Issue #54 当次记录为准。
 - 待 CI/部署：新增 Nginx 续期方式修复 `nginx.reconfigureRenewal`，仅对存量 standalone Certbot 证书调用受控 root `certbot reconfigure --nginx`，包含 staging 验证、备份、保存结果校验；仅暴露给认证 MCP，既有 root Actions 不放宽。见 [CERTBOT-RECONFIGURE.md](CERTBOT-RECONFIGURE.md)。
