@@ -341,7 +341,7 @@ function check(){
         <section v-if="operations.certificates && operations.renew"
           class="config-detail-card config-ssl-section" aria-label="网站 SSL 证书管理">
           <NginxCertificates :key="selectedSite.file"
-            :site-name="selectedSite.name" :site-domains="domains(selectedSite)"
+            :site-name="selectedSite.name"
             :operations="operations" :csrf="csrf" @unauthorized="emit('unauthorized')" />
         </section>
       </section>
