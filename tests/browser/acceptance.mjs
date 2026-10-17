@@ -970,6 +970,60 @@ try {
         await nav.getByRole('button',{name:'完整内容'}).click();
         assert.equal(Object.hasOwn(JSON.parse(await editor.inputValue()),'api'),false,
           'visiting an absent section without editing must never add an empty key');
+        const header=panel.locator('.v2ray-editor-header');
+        const viewToggle=header.locator('.v2ray-view-toggle');
+        assert.deepEqual((await viewToggle.getByRole('button').allTextContents()).map(s=>s.trim()),
+          ['可视化','JSON'],'two editor mode controls appear beside the top action toolbar');
+        const headerPosition=await panel.evaluate(node=>{
+          const h=node.querySelector('.v2ray-editor-header').getBoundingClientRect();
+          const editor=node.querySelector('.v2ray-editor-content textarea').getBoundingClientRect();
+          return {actionsBottom:h.bottom,editorTop:editor.top};
+        });
+        assert.ok(headerPosition.actionsBottom<=headerPosition.editorTop,
+          'validate, save and discard buttons must appear above the editor');
+        await nav.getByRole('button',{name:'入站连接',exact:true}).click();
+        await panel.locator('.v2ray-visual-editor').waitFor();
+        assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
+        const inboundVisual=panel.locator('.v2ray-visual-editor');
+        assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),1);
+        await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).fill('local-visual');
+        await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).press('Tab');
+        await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
+        let visualJson=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
+        await visualJson.waitFor();
+        assert.equal(JSON.parse(await visualJson.inputValue())[0].tag,'local-visual',
+          'visual change remains after switching to JSON');
+        await visualJson.fill(JSON.stringify([{tag:'json-changed',protocol:'socks',port:10080}],null,2));
+        await viewToggle.getByRole('button',{name:'可视化'}).click();
+        assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).inputValue(),'json-changed',
+          'JSON edits must carry into the visual form');
+        await nav.getByRole('button',{name:'出站连接',exact:true}).click();
+        assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),2,
+          'visual outbound editor must include legacy outboundDetour entries');
+        const legacyHeading=inboundVisual.locator('.v2ray-visual-group-heading').filter({hasText:'旧版出站扩展'});
+        await legacyHeading.getByRole('button',{name:'新增连接'}).click();
+        await inboundVisual.getByText('旧版出站扩展（1）').waitFor();
+        await inboundVisual.getByRole('button',{name:'移除旧版出站扩展1'}).click();
+        await inboundVisual.getByText('旧版出站扩展（0）').waitFor();
+        await nav.getByRole('button',{name:'路由规则',exact:true}).click();
+        assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
+        await inboundVisual.getByRole('button',{name:'新增规则'}).click();
+        await inboundVisual.getByRole('textbox',{name:'目标出站标签'}).fill('direct');
+        await inboundVisual.getByRole('textbox',{name:'目标出站标签'}).press('Tab');
+        await inboundVisual.getByRole('textbox',{name:'域名条件'}).fill('domain:one.test\ndomain:two.test');
+        await inboundVisual.getByRole('textbox',{name:'域名条件'}).press('Tab');
+        await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
+        visualJson=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
+        const routingCandidate=JSON.parse(await visualJson.inputValue());
+        assert.deepEqual(routingCandidate.rules[0].domain,['domain:one.test','domain:two.test'],
+          'visual routing must produce a real JSON rules array');
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        assert.equal(JSON.parse(await editor.inputValue()).customUnknown.value,true,
+          'visual editor updates must not discard unrelated full-config settings');
+        assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).isDisabled(),true,
+          'the full raw configuration must remain a JSON-only editor');
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1,
+          'visual edits must remain local unless the operator clicks Save');
         await serviceCard.getByRole('button',{name:'停止',exact:true}).click();
         const confirm=panel.getByRole('dialog',{name:'确认 V2Ray 服务操作'});
         await confirm.waitFor();
