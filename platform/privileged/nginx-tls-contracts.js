@@ -2,7 +2,7 @@ const str=(maxLength=1024)=>({type:'string',maxLength});
 const site={type:'string',minLength:1,maxLength:100,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$'};
 const obj=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
 const pair=obj({certificatePath:str(512),privateKeyPath:str(512),
-  publicPem:str(65536),privateKeyConfigured:{type:'boolean'},
+  publicPem:str(65536),certificatePem:str(65536),privateKeyConfigured:{type:'boolean'},
   status:str(240)});
 export const NGINX_TLS_CONTRACTS={
   siteTls:{
