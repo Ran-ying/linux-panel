@@ -32,7 +32,8 @@ test('TLS viewer uses only Nginx declared references and requires explicit key c
   assert.equal(result.pairs.length,1);
   assert.equal(result.pairs[0].certificatePath,f.cert);
   assert.equal(result.pairs[0].privateKeyPath,f.key);
-  assert.match(result.pairs[0].publicPem,/BEGIN CERTIFICATE/);
+  assert.match(result.pairs[0].publicPem,/BEGIN PUBLIC KEY/);
+  assert.match(result.pairs[0].certificatePem,/BEGIN CERTIFICATE/);
   assert.ok(!JSON.stringify(result).includes('BEGIN PRIVATE KEY'),'public inventory must not contain private PEM');
   const revealed=await ops.siteTlsKey({name:'fixture.test',index:0});
   assert.match(revealed.privatePem,/BEGIN PRIVATE KEY/);
