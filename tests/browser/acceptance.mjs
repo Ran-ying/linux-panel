@@ -952,9 +952,17 @@ try {
           'JSON editor must be to the right of the vertical section list');
         assert.equal(await panel.getByRole('tab').count(),0,'remove capability overview and all editing tabs');
         const first=nav.getByRole('button').first();
-        assert.equal((await first.innerText()).trim(),'完整内容',
+        assert.equal((await first.innerText()).trim(),'完整内容（JSON 根对象）',
           'full configuration is the first entry in the left vertical list');
         assert.equal(await first.getAttribute('aria-pressed'),'true');
+        const navLabels=(await nav.getByRole('button').allTextContents()).map(v=>v.trim());
+        const expectedSectionKeys=['inbounds','outbounds','routing','dns','transport','log','policy',
+          'api','stats','reverse','observatory','burstObservatory','metrics','inboundDetour','outboundDetour'];
+        assert.equal(navLabels.length,expectedSectionKeys.length+1);
+        for(let k=0;k<expectedSectionKeys.length;k++){
+          assert.ok(navLabels[k+1].endsWith('（'+expectedSectionKeys[k]+'）'),
+            'sidebar entry must annotate actual config section key: '+expectedSectionKeys[k]);
+        }
         assert.equal(await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).count(),0,
           'installation stays hidden when V2Ray is present');
         const editor=panel.getByRole('textbox',{name:'完整 V2Ray JSON 配置'});
@@ -971,14 +979,14 @@ try {
         await panel.getByText('保存成功',{exact:true}).waitFor();
         assert.equal(JSON.parse(v2rayConfig).customUnknown.value,true);
         assert.equal(JSON.parse(v2rayConfig).log.loglevel,'info');
-        await nav.getByRole('button',{name:'DNS',exact:true}).click();
+        await nav.getByRole('button',{name:'DNS（dns）',exact:true}).click();
         const part=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
         assert.ok((await part.inputValue()).includes('1.1.1.1'));
         // Invalid section content must block navigation; none may be silently discarded.
         await part.fill('{invalid');
         await nav.getByRole('button',{name:'完整内容'}).click();
         assert.equal(await part.count(),1,'invalid JSON must keep the current section visible');
-        assert.equal(await nav.getByRole('button',{name:'DNS',exact:true}).getAttribute('aria-pressed'),'true');
+        assert.equal(await nav.getByRole('button',{name:'DNS（dns）',exact:true}).getAttribute('aria-pressed'),'true');
         const dns={servers:['1.1.1.1','8.8.8.8']};
         await part.fill(JSON.stringify(dns,null,2));
         await nav.getByRole('button',{name:'完整内容'}).click();
@@ -986,7 +994,7 @@ try {
           'section edits must carry into the full JSON without saving to the server');
         assert.equal(JSON.parse(await editor.inputValue()).customUnknown.value,true,
           'switching editors must preserve unknown configuration fields');
-        await nav.getByRole('button',{name:'API',exact:true}).click();
+        await nav.getByRole('button',{name:'API（api）',exact:true}).click();
         await nav.getByRole('button',{name:'完整内容'}).click();
         assert.equal(Object.hasOwn(JSON.parse(await editor.inputValue()),'api'),false,
           'visiting an absent section without editing must never add an empty key');
@@ -1001,18 +1009,33 @@ try {
         });
         assert.ok(headerPosition.actionsBottom<=headerPosition.editorTop,
           'validate, save and discard buttons must appear above the editor');
-        await nav.getByRole('button',{name:'入站连接',exact:true}).click();
+        await nav.getByRole('button',{name:'入站连接（inbounds）',exact:true}).click();
         await panel.locator('.v2ray-visual-editor').waitFor();
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         const inboundVisual=panel.locator('.v2ray-visual-editor');
         assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
           'null legacy inboundDetour is skipped rather than breaking visual editing');
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),1);
+        const allInputLabels=await inboundVisual.locator('.v2ray-visual-fields > label').allTextContents();
+        for(const original of ['tag','protocol','listen','port','streamSettings.network',
+          'streamSettings.security','id','email','alterId']){
+          assert.ok(allInputLabels.some(t=>t.includes('（'+original+'）')),
+            'inbound and nested field labels must annotate raw JSON key '+original);
+        }
+        assert.ok((await inboundVisual.locator('.v2ray-visual-entry-heading strong').allTextContents())
+          .some(t=>t.includes('settings.clients')),
+          'nested clients heading must identify their JSON path');
+        const visualFont=await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).evaluate(input=>({
+          title:getComputedStyle(input.closest('label')).fontWeight,
+          value:getComputedStyle(input).fontWeight
+        }));
+        assert.equal(visualFont.title,'600','all visual section titles are bold');
+        assert.equal(visualFont.value,'400','all visual section input values use regular type');
         const choices={
-          protocol:inboundVisual.getByRole('combobox',{name:'协议',exact:true}),
-          listen:inboundVisual.getByRole('combobox',{name:'监听地址',exact:true}),
-          network:inboundVisual.getByRole('combobox',{name:'传输网络',exact:true}),
-          security:inboundVisual.getByRole('combobox',{name:'传输安全',exact:true})
+          protocol:inboundVisual.getByRole('combobox',{name:'协议（protocol）',exact:true}),
+          listen:inboundVisual.getByRole('combobox',{name:'监听地址（listen）',exact:true}),
+          network:inboundVisual.getByRole('combobox',{name:'传输网络（streamSettings.network）',exact:true}),
+          security:inboundVisual.getByRole('combobox',{name:'传输安全（streamSettings.security）',exact:true})
         };
         assert.equal(await choices.protocol.inputValue(),'socks');
         assert.equal(await choices.listen.inputValue(),'192.0.2.55',
@@ -1020,6 +1043,12 @@ try {
         assert.equal(await choices.listen.locator('option[value="192.0.2.55"]').count(),1);
         assert.equal(await choices.network.inputValue(),'ws');
         assert.equal(await choices.security.inputValue(),'tls');
+        const dropdownFont=await choices.security.evaluate(select=>({
+          title:getComputedStyle(select.closest('label')).fontWeight,
+          value:getComputedStyle(select).fontWeight
+        }));
+        assert.equal(dropdownFont.title,'600');
+        assert.equal(dropdownFont.value,'400','select values must never inherit bold label weight');
         const clientId=inboundVisual.getByRole('textbox',{name:'客户端 1 · ID'});
         assert.equal(await clientId.getAttribute('type'),'text',
           'the client identifier must no longer be a password input');
@@ -1047,14 +1076,16 @@ try {
         await viewToggle.getByRole('button',{name:'可视化'}).click();
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).inputValue(),'json-changed',
           'JSON edits must carry into the visual form');
-        await nav.getByRole('button',{name:'出站连接',exact:true}).click();
+        await nav.getByRole('button',{name:'出站连接（outbounds）',exact:true}).click();
         assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),2,
           'visual outbound editor must include legacy outboundDetour entries');
         const legacyHeading=inboundVisual.locator('.v2ray-visual-group-heading').filter({hasText:'旧版出站扩展'});
+        assert.ok((await legacyHeading.innerText()).includes('（outboundDetour）'),
+          'secondary visual groups annotate their originating JSON array');
         await legacyHeading.getByRole('button',{name:'新增连接'}).click();
-        await inboundVisual.getByText('旧版出站扩展（1）').waitFor();
+        await inboundVisual.getByText('旧版出站扩展（outboundDetour） · 1').waitFor();
         await inboundVisual.getByRole('button',{name:'移除旧版出站扩展1'}).click();
-        await inboundVisual.getByText('旧版出站扩展（0）').waitFor();
+        await inboundVisual.getByText('旧版出站扩展（outboundDetour） · 0').waitFor();
         // Force a tall editor in the disposable browser fixture to prove both controls
         // are sticky during document scrolling, rather than merely styled as sticky.
         await panel.locator('.v2ray-editor-content').evaluate(node=>{node.style.minHeight='2100px';});
@@ -1095,7 +1126,7 @@ try {
         }
         await panel.locator('.v2ray-editor-content').evaluate(node=>{node.style.minHeight='';});
         await page.evaluate(()=>scrollTo(0,0));
-        await nav.getByRole('button',{name:'路由规则',exact:true}).click();
+        await nav.getByRole('button',{name:'路由规则（routing）',exact:true}).click();
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         await inboundVisual.getByRole('button',{name:'新增规则'}).click();
         const routeEntry=inboundVisual.locator('.v2ray-visual-entry').first();
@@ -1163,6 +1194,22 @@ try {
         assert.deepEqual(optionsBefore,
           ['','balancerTag','port','network','source','domain','protocol','ip'],
           'Add condition must offer all supported optional fields');
+        const routeTypography=await routeFields.evaluate(grid=>{
+          const titleNodes=[grid.querySelector(':scope > label:first-child > span'),
+            grid.querySelector(':scope > .v2ray-routing-tags > span:first-child'),
+            [...grid.children].find(el=>el.classList.contains('v2ray-route-base-field')&&
+              el.textContent.includes('outboundTag'))?.querySelector('span')];
+          const valueNodes=[grid.querySelector(':scope > label:first-child input'),
+            grid.querySelector(':scope > .v2ray-routing-tags select'),
+            [...grid.children].find(el=>el.classList.contains('v2ray-route-base-field')&&
+              el.textContent.includes('outboundTag'))?.querySelector('select')];
+          return {titles:titleNodes.map(el=>getComputedStyle(el).fontWeight),
+            values:valueNodes.map(el=>getComputedStyle(el).fontWeight)};
+        });
+        assert.deepEqual(routeTypography.titles,['600','600','600'],
+          'type, inbound and outbound labels must all have matching bold weight');
+        assert.deepEqual(routeTypography.values,['400','400','400'],
+          'type, inbound and outbound field values must all use regular weight');
         const outboundSelect=routeEntry.getByRole('combobox',{name:'目标出站标签'});
         await outboundSelect.selectOption('direct');
         assert.deepEqual(await outboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value)),
