@@ -2,6 +2,7 @@
 import {ref,computed,watch,onUnmounted} from 'vue';
 import NginxCertificates from './NginxCertificates.vue';
 import {updateNginxSiteDomain,validNginxDomain} from '../nginx-site-domains.js';
+import {buildNginxSiteConfig,defaultSiteFilename} from '../nginx-site-create.js';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true},
@@ -11,6 +12,9 @@ const emit=defineEmits(['unauthorized','listing-change']);
 const listing=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref('');
 const modal=ref(null),confirmModal=ref(null),draft=ref(null),pending=ref(null),checkResult=ref(null);
 const selectedFile=ref(null);
+const createAddresses=ref([{address:'0.0.0.0',interface:'所有 IPv4 接口'},
+  {address:'127.0.0.1',interface:'本机回环'}]);
+const createAddressError=ref(''),createAddressBusy=ref(false);
 
 const addingDomain=ref(false),domainInput=ref(''),domainError=ref('');
 const domainConfirm=ref(null),pendingDomain=ref(null);
@@ -123,11 +127,41 @@ async function work(fn){
   catch(cause){error.value=cause.message||'操作失败';}
   finally{busy.value=false;}
 }
+async function loadCreateAddresses(){
+  if(!props.operations.addresses)return;
+  createAddressBusy.value=true;createAddressError.value='';
+  try{
+    const result=await request(props.operations.addresses,{});
+    const valid=(result.addresses||[]).filter(item=>item&&typeof item.address==='string');
+    if(valid.length)createAddresses.value=valid;
+  }catch(cause){
+    createAddressError.value='读取服务器网卡地址失败，仅显示通配和回环地址：'+cause.message;
+  }finally{createAddressBusy.value=false;}
+}
 function openNew(){
   error.value='';
-  draft.value={name:'',content:'server {\n    listen 80;\n    server_name example.com;\n    root /var/www/html;\n}\n',revision:'',operation:'create'};
+  draft.value={
+    name:'',content:'server {\n    listen 80;\n    server_name example.com;\n}\n',
+    mode:'visual',rawTouched:false,revision:'',operation:'create',
+    visual:{hosts:'',bindAddress:'0.0.0.0',port:80,kind:'proxy',
+      proxyTarget:'http://127.0.0.1:3000',root:'/var/www/html'}
+  };
+  createAddresses.value=[{address:'0.0.0.0',interface:'所有 IPv4 接口'},
+    {address:'127.0.0.1',interface:'本机回环'}];
   modal.value?.showModal();
+  void loadCreateAddresses();
 }
+function switchCreateMode(mode){
+  if(!draft.value||!['visual','nginx'].includes(mode)||draft.value.mode===mode)return;
+  if(mode==='nginx'&&!draft.value.rawTouched){
+    try{draft.value.content=buildNginxSiteConfig(draft.value.visual,{
+      availableAddresses:createAddresses.value.map(x=>x.address)
+    });}catch{ /* Advanced users can write a config without filling visual fields. */ }
+  }
+  draft.value.mode=mode;
+  error.value='';
+}
+function rawChanged(){if(draft.value)draft.value.rawTouched=true;}
 function openInlineEdit(site){
   if(inlineDraft.value||busy.value||addingDomain.value||pendingDomain.value)return;
   return work(async()=>{
@@ -188,7 +222,14 @@ async function submit(input,onSuccess){
 }
 function save(){
   return work(async()=>{
-    await submit({name:draft.value.name,content:draft.value.content,revision:draft.value.revision,
+    if(!draft.value)return;
+    const visual=draft.value.mode==='visual';
+    const content=visual?buildNginxSiteConfig(draft.value.visual,{
+      availableAddresses:createAddresses.value.map(x=>x.address)
+    }):draft.value.content;
+    const name=draft.value.name.trim()||(visual?defaultSiteFilename(draft.value.visual.hosts):'');
+    if(!name)throw Error('请输入配置文件名');
+    await submit({name,content,revision:draft.value.revision,
       operation:draft.value.operation},()=>{
       modal.value?.close();draft.value=null;
     });
@@ -354,17 +395,65 @@ function check(){
 
     <dialog ref="modal" class="config-dialog" aria-labelledby="config-form-heading" @close="draft=null">
       <form v-if="draft" class="config-form" @submit.prevent="save">
-        <h3 id="config-form-heading">{{ draft.operation==='create'?'新建网站配置':'编辑网站配置' }}</h3>
+        <h3 id="config-form-heading">新建网站</h3>
+        <div class="config-creation-modes" role="group" aria-label="新建网站方式">
+          <button type="button" :aria-pressed="draft.mode==='visual'"
+            :disabled="busy" @click="switchCreateMode('visual')">可视化</button>
+          <button type="button" :aria-pressed="draft.mode==='nginx'"
+            :disabled="busy" @click="switchCreateMode('nginx')">Nginx 配置</button>
+        </div>
         <label>配置文件名
-          <input v-model="draft.name" aria-label="配置文件名" required maxlength="100"
-            pattern="[A-Za-z0-9][A-Za-z0-9._-]*" :readonly="draft.operation!=='create'"
-            :disabled="busy" spellcheck="false" />
+          <input v-model="draft.name" aria-label="配置文件名" maxlength="100"
+            pattern="[A-Za-z0-9][A-Za-z0-9._-]*"
+            :required="draft.mode==='nginx'" :disabled="busy" spellcheck="false"
+            :placeholder="draft.mode==='visual'?'留空则使用首个域名或 IP':'例如 example.com'" />
         </label>
-        <label>Nginx 配置内容
-          <textarea v-model="draft.content" aria-label="Nginx 配置内容" required rows="13"
-            maxlength="65536" spellcheck="false" :disabled="busy" />
-        </label>
-        <p class="muted small">新建文件默认不启用。编辑启用中的站点会先执行 nginx -t，再尝试重载，失败时恢复原配置。</p>
+        <template v-if="draft.mode==='visual'">
+          <div class="config-create-visual">
+            <label class="config-create-full">监听域名 / 公网 IP
+              <input v-model="draft.visual.hosts" aria-label="监听域名或公网 IP"
+                required maxlength="1024" :disabled="busy" spellcheck="false"
+                placeholder="example.com 或 195.80.51.188" />
+            </label>
+            <label>监听 IP
+              <select v-model="draft.visual.bindAddress" aria-label="监听 IP" :disabled="busy||createAddressBusy">
+                <option v-for="entry in createAddresses" :key="entry.address" :value="entry.address">
+                  {{ entry.address }}（{{ entry.interface }}）
+                </option>
+              </select>
+            </label>
+            <label>监听端口
+              <input v-model.number="draft.visual.port" aria-label="监听端口"
+                type="number" min="1" max="65535" step="1" required :disabled="busy" />
+            </label>
+            <label class="config-create-full">网站类型
+              <select v-model="draft.visual.kind" aria-label="网站类型" :disabled="busy">
+                <option value="proxy">反向代理</option>
+                <option value="static">静态网站</option>
+              </select>
+            </label>
+            <label v-if="draft.visual.kind==='proxy'" class="config-create-full">反向代理目标地址
+              <input v-model="draft.visual.proxyTarget" aria-label="反向代理目标地址"
+                required maxlength="500" spellcheck="false" :disabled="busy"
+                placeholder="http://127.0.0.1:3000" />
+            </label>
+            <label v-else class="config-create-full">静态网站目录（root）
+              <input v-model="draft.visual.root" aria-label="静态网站目录"
+                required maxlength="512" spellcheck="false" :disabled="busy"
+                placeholder="/var/www/html" />
+            </label>
+          </div>
+          <p v-if="createAddressError" class="muted small" role="alert">{{ createAddressError }}</p>
+          <p class="muted small">监听域名用于匹配访问请求；监听 IP 是本机绑定地址，0.0.0.0 代表所有 IPv4 接口。反代不需要 root；静态网站使用 root 读取文件。</p>
+        </template>
+        <template v-else>
+          <label>Nginx 配置内容
+            <textarea v-model="draft.content" aria-label="Nginx 配置内容" @input="rawChanged"
+              required rows="13" maxlength="65536" spellcheck="false" :disabled="busy" />
+          </label>
+          <p class="muted small">Nginx 配置模式可自由编写指令。切回可视化不会自动解析手写配置；手动修改的配置草稿会独立保留。</p>
+        </template>
+        <p class="muted small">新建网站默认不启用。创建后可在网站列表启用；监听 443 不会自动签发或配置 HTTPS 证书。</p>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <div class="config-dialog-actions">
           <button type="button" :disabled="busy" @click="closeEditor">取消</button>
@@ -491,6 +580,16 @@ function check(){
 .config-dialog::backdrop{background:var(--ui-dialog-backdrop)}
 .config-form{display:grid;gap:1rem}
 .config-form h3{margin:0}
+.config-creation-modes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.config-creation-modes button[aria-pressed="true"]{background:var(--selected-bg);
+  border-color:var(--focus-ring);font-weight:600}
+.config-create-visual{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-width:0}
+.config-create-full{grid-column:1/-1}
+.config-create-visual input,.config-create-visual select{box-sizing:border-box;
+  min-width:0;width:100%;font:inherit;font-weight:var(--ui-value-font-weight)}
+.config-form p{margin:0}
+@media(max-width:560px){.config-create-visual{grid-template-columns:minmax(0,1fr)}}
+
 .config-form label{display:grid;gap:.4rem;font-weight:var(--ui-label-font-weight)}
 .config-form label input,.config-form textarea{width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:var(--ui-value-font-weight)}
 .config-form textarea{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
