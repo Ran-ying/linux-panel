@@ -393,7 +393,7 @@ function check(){
       <div v-if="pending" class="config-form">
         <h3 id="config-confirm-heading">{{ pending.operation==='remove'?'删除网站配置':pending.operation==='enable'?'启用网站':'停用网站' }}</h3>
         <p>确定对 <strong>{{ pending.site.name }}</strong> 执行此操作？</p>
-        <p class="muted small">启停或删除启用站点将尝试重载 Nginx。检查或重载失败时恢复配置。删除配置无法通过面板撤销。</p>
+        <p class="muted small">启停或删除启用站点将尝试重载 Nginx。检查或重载失败时恢复配置。删除网站成功后，若它独占已登记的 Certbot 证书，系统将自动删除该证书及续期配置；共享或引用关系无法确认的证书会保留。删除操作无法通过面板撤销。</p>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <div class="config-dialog-actions">
           <button type="button" :disabled="busy" @click="closeConfirm">取消</button>
