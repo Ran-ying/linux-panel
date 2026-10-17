@@ -327,11 +327,18 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
           <nav class="v2ray-config-nav" aria-label="V2Ray 配置目录">
             <button type="button" class="v2ray-field-add-button"
               :disabled="busy||!missingFields.length" @click="openAddField">添加字段</button>
-            <button v-for="entry in editorEntries" :key="entry.key" type="button"
-              class="v2ray-config-item"
-              :class="{selected:section===entry.key,'v2ray-config-full':entry.key==='full'}"
-              :aria-pressed="section===entry.key" :disabled="busy"
-              @click="selectSection(entry.key)">{{ entry.label }}</button>
+            <div class="v2ray-config-full-card">
+              <button type="button" class="v2ray-config-item v2ray-config-full"
+                :class="{selected:section==='full'}" :aria-pressed="section==='full'"
+                :disabled="busy" @click="selectSection('full')">{{ editorEntries[0].label }}</button>
+            </div>
+            <div v-if="editorEntries.length>1" class="v2ray-config-fields-card"
+              role="group" aria-label="已配置字段">
+              <button v-for="entry in editorEntries.slice(1)" :key="entry.key" type="button"
+                class="v2ray-config-item" :class="{selected:section===entry.key}"
+                :aria-pressed="section===entry.key" :disabled="busy"
+                @click="selectSection(entry.key)">{{ entry.label }}</button>
+            </div>
           </nav>
           <div class="v2ray-editor-content">
             <div class="v2ray-editor-header">
@@ -643,16 +650,24 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-editor-layout{--v2ray-sticky-top:var(--sidebar-space,16px);
   display:grid;grid-template-columns:minmax(145px,200px) minmax(0,1fr);
   gap:16px;align-items:start;min-width:0}
-.v2ray-config-nav{display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
+/* The navigation has no shared background or scrollbar. Only the lower
+   configured-fields card scrolls; Add field and Full remain stationary. */
+.v2ray-config-nav{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-width:0;
   position:sticky;top:var(--v2ray-sticky-top);align-self:start;z-index:4;
   max-height:calc(100dvh - var(--v2ray-sticky-top) - 14px);
-  overflow-y:auto;overscroll-behavior:contain;background:var(--page-bg)}
+  overflow:hidden;background:transparent}
+.v2ray-config-full-card,.v2ray-config-fields-card{
+  box-sizing:border-box;min-width:0;padding:6px;border:1px solid var(--border-panel);
+  border-radius:12px;background:var(--panel-bg)
+}
+.v2ray-config-full-card{flex:none}
+.v2ray-config-fields-card{flex:1 1 auto;min-height:0;overflow-y:auto;
+  overscroll-behavior:contain;scrollbar-gutter:stable}
 .v2ray-config-nav .v2ray-config-item{box-sizing:border-box;display:block;width:100%;flex:none;
   padding:9px 11px;border:0;border-radius:8px;text-align:left;white-space:normal;
   background:transparent;color:var(--text-primary);font:inherit;font-size:.86rem}
-.v2ray-config-nav .v2ray-config-full{margin-bottom:12px}
 .v2ray-config-nav .v2ray-field-add-button{display:block;width:100%;flex:none;
-  margin:0 0 10px;border-radius:8px;padding:8px 11px;min-height:38px;text-align:center}
+  margin:0;border-radius:8px;padding:8px 11px;min-height:38px;text-align:center}
 .v2ray-config-nav .v2ray-config-item.selected{background:var(--accent-bg);color:var(--button-primary-text)}
 .v2ray-config-nav .v2ray-config-item:hover:not(:disabled):not(.selected){background:var(--button-bg)}
 .v2ray-editor-content{min-width:0}

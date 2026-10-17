@@ -971,15 +971,59 @@ try {
         assert.equal(await addFieldButton.count(),1);
         const sidebarGeometry=await nav.evaluate(root=>{
           const add=root.querySelector('.v2ray-field-add-button').getBoundingClientRect();
-          const full=root.querySelector('.v2ray-config-full').getBoundingClientRect();
-          const firstConfig=root.querySelector('.v2ray-config-full + .v2ray-config-item').getBoundingClientRect();
+          const fullCard=root.querySelector('.v2ray-config-full-card');
+          const fieldsCard=root.querySelector('.v2ray-config-fields-card');
+          const full=fullCard.getBoundingClientRect(),fields=fieldsCard.getBoundingClientRect();
+          const shape=node=>{
+            const css=getComputedStyle(node);
+            return {bg:css.backgroundColor,border:css.borderTopWidth,
+              radius:parseFloat(css.borderTopLeftRadius),overflowY:css.overflowY};
+          };
           return {addBelow:add.bottom,fullAbove:full.top,fullBelow:full.bottom,
-            configAbove:firstConfig.top,fullMargin:getComputedStyle(root.querySelector('.v2ray-config-full')).marginBottom};
+            configAbove:fields.top,nav:shape(root),fullCard:shape(fullCard),fieldsCard:shape(fieldsCard)};
         });
         assert.ok(sidebarGeometry.addBelow<=sidebarGeometry.fullAbove,
           'standalone Add field button must be above the Full config entry');
         assert.ok(sidebarGeometry.configAbove-sidebarGeometry.fullBelow>=10,
-          'Full config needs a visual gap before field entries');
+          'Full config needs a visual gap before the fields container');
+        assert.equal(sidebarGeometry.nav.bg,'rgba(0, 0, 0, 0)',
+          'the navigation itself must have no shared gray background');
+        for(const key of ['fullCard','fieldsCard']){
+          assert.equal(sidebarGeometry[key].border,'1px',
+            key+' must use its own visible rounded container border');
+          assert.ok(sidebarGeometry[key].radius>=10,
+            key+' must have rounded rectangle corners');
+          assert.notEqual(sidebarGeometry[key].bg,'rgba(0, 0, 0, 0)',
+            key+' must own its background independently of the nav');
+        }
+        assert.equal(sidebarGeometry.fieldsCard.overflowY,'auto',
+          'only the configured-fields container should scroll');
+        assert.notEqual(sidebarGeometry.fullCard.overflowY,'auto',
+          'Full config card must not become an independently scrolling pane');
+        const scrollProof=await nav.evaluate(root=>{
+          const list=root.querySelector('.v2ray-config-fields-card');
+          const full=root.querySelector('.v2ray-config-full-card');
+          const add=root.querySelector('.v2ray-field-add-button');
+          const baseline={fullTop:full.getBoundingClientRect().top,
+            addTop:add.getBoundingClientRect().top,navTop:root.getBoundingClientRect().top};
+          root.style.maxHeight='178px';
+          list.scrollTop=120;
+          const result={listScrollTop:list.scrollTop,listCanScroll:list.scrollHeight>list.clientHeight,
+            navScrollTop:root.scrollTop,fullTop:full.getBoundingClientRect().top,
+            addTop:add.getBoundingClientRect().top,navTop:root.getBoundingClientRect().top,
+            baseline};
+          list.scrollTop=0;
+          root.style.maxHeight='';
+          return result;
+        });
+        assert.ok(scrollProof.listCanScroll && scrollProof.listScrollTop>=30,
+          'the configured-fields card must scroll independently when space is constrained');
+        assert.equal(scrollProof.navScrollTop,0,
+          'the complete sidebar must not scroll as one unit');
+        assert.equal(scrollProof.fullTop,scrollProof.baseline.fullTop,
+          'Full config card stays in place while fields scroll');
+        assert.equal(scrollProof.addTop,scrollProof.baseline.addTop,
+          'Add field stays in place while fields scroll');
         assert.equal(await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).count(),0,
           'installation stays hidden when V2Ray is present');
         const editor=panel.getByRole('textbox',{name:'完整 V2Ray JSON 配置'});
