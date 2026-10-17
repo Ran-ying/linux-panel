@@ -44,9 +44,11 @@
   --button-text: #172536;
   --button-primary-text: #ffffff;
   --shadow-color: rgba(23,37,54,.07);
+  --select-chevron-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%234e6072' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --select-chevron-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%23b1bfd1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --page-bg: #0d1420;
   --text-primary: #e9eef6;
   --text-dim: #8ea4bb;
@@ -656,19 +658,6 @@ table{min-width:500px}
   font:inherit;font-size:1rem;border:1px solid var(--input-border);
   border-radius:8px;background:var(--input-bg);color:var(--text-primary);
 }
-/* Apply the same inset arrow to every native select in the dialog. */
-.file-dialog-body label:has(> select){position:relative}
-.file-dialog-body label:has(> select)::after{
-  content:"";position:absolute;pointer-events:none;
-  right:20px;bottom:17px;width:8px;height:8px;
-  border-right:2px solid var(--text-secondary);
-  border-bottom:2px solid var(--text-secondary);
-  transform:rotate(45deg);
-}
-.file-dialog-body select{
-  appearance:none;-webkit-appearance:none;
-  padding-right:44px;
-}
 .file-dialog-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}
 .file-browser .file-primary{background:var(--accent-bg);border-color:var(--accent-bg);color:var(--button-primary-text)}
 .file-browser .file-danger{border-color:var(--warning-border);background:var(--warning-bg);color:var(--warning-text)}
@@ -765,4 +754,17 @@ table{min-width:500px}
 .file-table button.file-permissions-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 @media(max-width:730px){
   .module-header-actions{margin-left:0}
+}
+
+/* One native-single-select chevron across all panel modules/dialogs. Never add
+   a second pseudo-element arrow. Preserve select colors, height, focus and
+   enabled/disabled behavior from individual components and both themes. */
+:root select:not([multiple]):not([size]){
+  -webkit-appearance:none;
+  appearance:none;
+  padding-right:50px;
+  background-image:var(--select-chevron-image);
+  background-repeat:no-repeat;
+  background-position:right 26px center;
+  background-size:12px 8px;
 }
