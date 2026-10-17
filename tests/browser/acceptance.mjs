@@ -732,6 +732,21 @@ try {
           'cert information must not have another rounded frame inside the SSL card');
         assert.equal(nestedCertAppearance.radius,'0px');
         assert.equal(nestedCertAppearance.background,'rgba(0, 0, 0, 0)');
+        const sslOuterCard=detailCards.nth(2);
+        const domainChips=sslOuterCard.locator('.nginx-cert-domains span');
+        assert.ok(await domainChips.count()>0,'fixture has matching certificate domains');
+        const certDomainStyles=await domainChips.evaluateAll(nodes=>nodes.map(node=>{
+          const style=getComputedStyle(node);
+          return {border:style.borderTopWidth,radius:style.borderTopLeftRadius,
+            background:style.backgroundColor,shadow:style.boxShadow};
+        }));
+        for(const style of certDomainStyles){
+          assert.equal(style.border,'0px','certificate domain has no nested border');
+          assert.equal(style.radius,'0px','certificate domain has no rounded chip frame');
+          assert.equal(style.background,'rgba(0, 0, 0, 0)',
+            'certificate domain stays on outer SSL card without another background');
+          assert.equal(style.shadow,'none');
+        }
         assert.equal(nginxCertificateReads,1,'only selected website loads certificate inventory');
         assert.equal(await certPanel.getByRole('button',{name:'续期证书 unrelated.test'}).count(),0,
           'certificates for other domains must not be offered to this site');
