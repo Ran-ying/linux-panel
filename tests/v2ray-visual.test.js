@@ -97,3 +97,23 @@ test('a newly added routing rule initializes only type, inboundTag and outboundT
   assert.equal(a.vendorPrivateConfig.password,'preserve');
   assert.deepEqual(base.routing.rules,[],'adding in visual editor must not mutate source');
 });
+
+test('route rename edits only tag and preserves outboundTag fallback and legacy routing container',()=>{
+  const original={routing:{settings:{rules:[{
+    type:'field',outboundTag:'out_direct',inboundTag:['in-main'],ip:['geoip:private'],
+    extension:{keep:true}
+  }],unknown:'keep'}},extra:{key:'unchanged'}};
+  const renamed=patchVisual(original,'routing',{action:'set',path:[0,'tag'],value:'自定义路由'});
+  assert.equal(renamed.routing.settings.rules[0].tag,'自定义路由');
+  assert.equal(renamed.routing.settings.rules[0].outboundTag,'out_direct');
+  assert.deepEqual(renamed.routing.settings.rules[0].inboundTag,['in-main']);
+  assert.deepEqual(renamed.routing.settings.rules[0].ip,['geoip:private']);
+  assert.deepEqual(renamed.routing.settings.rules[0].extension,{keep:true});
+  assert.equal(renamed.routing.settings.unknown,'keep');
+  assert.deepEqual(renamed.extra,original.extra);
+  assert.equal(Object.hasOwn(original.routing.settings.rules[0],'tag'),false);
+  const cleared=patchVisual(renamed,'routing',{action:'set',path:[0,'tag'],value:''});
+  assert.equal(Object.hasOwn(cleared.routing.settings.rules[0],'tag'),false);
+  assert.equal(cleared.routing.settings.rules[0].outboundTag,'out_direct');
+  assert.deepEqual(cleared,original);
+});
