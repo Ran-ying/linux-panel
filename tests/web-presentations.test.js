@@ -51,11 +51,15 @@ test('each module owns its Web render configuration separately from Action metad
   assert.deepEqual(nginxActions.slice(1,4),['nginx.status','nginx.sites','nginx.certificates'],
     'Nginx visible Actions register in status → sites → SSL order after embedded repair');
   assert.deepEqual(presentations.filter(p=>p.actionId.startsWith('nginx.')&&!p.embedded)
-    .map(p=>p.actionId),['nginx.status','nginx.sites','nginx.certificates']);
+    .map(p=>p.actionId),['nginx.status','nginx.sites'],
+    'SSL helper must only appear inside the selected website, not as another Action card');
   assert.equal(configured.get('nginx.status').renderer,'nginx-service');
+  assert.equal(configured.get('nginx.status').chrome,'flat');
   assert.equal(configured.get('nginx.status').operations.service,'nginx.service');
-  assert.equal(configured.get('nginx.certificates').renderer,'nginx-certificates');
-  assert.equal(configured.get('nginx.certificates').operations.renew,'nginx.renew');
+  assert.equal(configured.get('nginx.certificates').renderer,'metrics');
+  assert.equal(configured.get('nginx.certificates').embedded,true);
+  assert.equal(configured.get('nginx.sites').operations.certificates,'nginx.certificates');
+  assert.equal(configured.get('nginx.sites').operations.renew,'nginx.renew');
   assert.equal(configured.get('nginx.service').embedded,true);
   assert.equal(configured.get('nginx.renew').embedded,true);
   assert.equal(registry.get('nginx.certificates').exposure.mcp,false);
