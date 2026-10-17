@@ -154,7 +154,8 @@ function showSection(key){
   section.value=key;
   if(key==='full'){sectionText.value='';sectionOriginal.value='';return;}
   const defaultValue=['inbounds','outbounds','inboundDetour','outboundDetour'].includes(key)?[]:{};
-  sectionText.value=JSON.stringify(obj[key]??defaultValue,null,2);
+  // A present null legacy field must remain "null", never an invented [].
+  sectionText.value=JSON.stringify(obj[key]===undefined?defaultValue:obj[key],null,2);
   sectionOriginal.value=sectionText.value;
 }
 function commitSection(){
