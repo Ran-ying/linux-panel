@@ -82,3 +82,10 @@ systemd 单元名或内容，只有固定确认短语与 `status`/`stage`/`resta
 
 
 关于独立 Certbot Action、Nginx TLS 双栏、私钥按需查看的边界参见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。
+
+
+### 删除网站时自动清理 Certbot 证书
+
+删除 Nginx 网站不再单纯移除配置文件。已有的 `nginx.apply` 的 `operation=remove` 保持原来的站点版本确认、Nginx 配置检查和必要时的重载；成功后对该网站中**直接引用**的 Certbot `live/<cert-name>/cert.pem` 或 `fullchain.pem` 查找真实的续期档案，并检查 Nginx `nginx -T` 的生效配置和 `sites-available` 中仍存在的网站。若证书确实未被其他 Nginx 网站使用，使用固定参数的 `certbot delete --cert-name <name> --non-interactive --quiet` 同时清理证书及自动续期档案，**不显示额外删除选项**。
+
+证书共享、来源不属于注册的 Certbot 续期档案、其他网站引入了无法确定的配置、扫描失败、Certbot 删除失败时，均**保留证书**并在返回的结果消息中提示。证书删除是不可撤销步骤，故只有网站删除、`nginx -t` 和必要时重载成功后才执行；不会在 Nginx 失败回滚期间触发。域名从网站 `server_name` 单独移除以及网站停用 **不触发**证书清理。若 Certbot 删除失败，网站删除仍算成功，但结果显示证书已保留、需要检查。参考 `tests/nginx-certbot-cleanup.test.js`。
