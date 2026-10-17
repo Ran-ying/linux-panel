@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,writeFileSync,statSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,statSync,rmSync,chmodSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 
+const worker=readFileSync(new URL('../scripts/update-worker.sh',import.meta.url),'utf8');
 const installer=readFileSync(new URL('../scripts/install-update-broker.sh',import.meta.url),'utf8');
 const aclHelper=new URL('../scripts/configure-git-web-acl.py',import.meta.url).pathname;
 const restrictedGit=new URL('./helpers/restrict-sgid-exec.py',import.meta.url).pathname;
@@ -23,6 +24,47 @@ test('fresh installer uses local umask + inherited ACL and NEVER numeric Git sha
  assert.match(helper,/system\.posix_acl_access/);
  assert.match(helper,/ACL_MASK, group_bits/);
  assert.doesNotMatch(helper,/chmod\s.*g\+w/);
+});
+
+test('new Git loose objects are repaired for group read without group write',t=>{
+ if(process.platform!=='linux')return t.skip('POSIX ACLs require Linux');
+ const embedded=worker.match(/<<'PY_GIT_OBJECT_ACL'\n([\s\S]+?)\nPY_GIT_OBJECT_ACL/);
+ assert.ok(embedded,'Immutable worker must own the repair code');
+ assert.match(worker,/ensure_git_objects_web_readable \|\| \{ record failed;exit 2; \}/);
+ assert.match(worker,/ensure_tracked_web_read_access && ensure_git_objects_web_readable/);
+ const root=mkdtempSync(join(tmpdir(),'lp-objects-acl-'));
+ try{
+  cmd('git',['init','-q',root]);
+  cmd('git',['-C',root,'config','user.name','Fixture']);
+  cmd('git',['-C',root,'config','user.email','fixture@example.invalid']);
+  writeFileSync(join(root,'probe.txt'),'object permission probe\n');
+  cmd('git',['-C',root,'add','probe.txt']);
+  cmd('git',['-C',root,'commit','-qm','probe']);
+  const sha=cmd('git',['-C',root,'rev-parse','HEAD']);
+  const loose=join(root,'.git','objects',sha.slice(0,2),sha.slice(2));
+  chmodSync(loose,0o400);
+  assert.equal(statSync(loose).mode&0o070,0,'Fixture must start with group-inaccessible object');
+  const user=cmd('id',['-un']),group=cmd('id',['-gn']);
+  const repair=spawnSync('python3',['-I','-',root,user,group],{
+   input:embedded[1],encoding:'utf8',timeout:15000
+  });
+  assert.equal(repair.status,0,repair.stderr);
+  assert.ok(statSync(loose).mode&0o040,'Git commit object should be group readable');
+  assert.equal(statSync(loose).mode&0o020,0,'Web group must not be able to write object');
+  assert.equal(statSync(loose).mode&0o007,0,'No public object access');
+  assert.equal(cmd('git',['-C',root,'cat-file','-t','HEAD']),'commit');
+  assert.equal(cmd('git',['-C',root,'status','--porcelain']),'');
+  // Symlinks must be rejected rather than followed to adjust outside files.
+  const external=join(root,'outside.txt');
+  writeFileSync(external,'untouched\n');
+  chmodSync(external,0o600);
+  symlinkSync(external,join(root,'.git','objects','malicious-link'));
+  const refused=spawnSync('python3',['-I','-',root,user,group],{
+   input:embedded[1],encoding:'utf8',timeout:15000
+  });
+  assert.notEqual(refused.status,0,'Symlink entry must fail closed');
+  assert.equal(statSync(external).mode&0o777,0o600,'Symlink target must not be modified');
+ }finally{rmSync(root,{recursive:true,force:true});}
 });
 
 test('Git fetch under RestrictSUIDSGID succeeds after ACL repair, repeated refs stay Web-readable',t=>{
