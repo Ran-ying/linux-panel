@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files', 'scheduled-tasks', 'managed-configs', 'v2ray-manager', 'nginx-service', 'nginx-certificates']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files', 'scheduled-tasks', 'managed-configs', 'v2ray-manager', 'nginx-service']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer', 'number']);
 
 function validateView(view,schema,actionId,depth=0) {
@@ -39,10 +39,6 @@ function validateView(view,schema,actionId,depth=0) {
         if(schema.installed?.type!=='boolean'||schema.active?.type!=='boolean'||
           schema.enabled?.type!=='boolean'||schema.configOk?.type!=='boolean')
           throw new Error('Invalid Nginx service status renderer schema');
-      } else if (view.renderer === 'nginx-certificates') {
-        if(schema.installed?.type!=='boolean'||schema.certificates?.type!=='array'||
-          schema.certificates.items?.properties?.daysRemaining?.type!=='integer')
-          throw new Error('Invalid Nginx certificate renderer schema');
       } else if (view.renderer === 'v2ray-manager') {
         if(schema.installed?.type!=='boolean'||schema.version?.type!=='string'||schema.service?.type!=='string')
           throw new Error('Invalid V2Ray status renderer schema');
@@ -153,7 +149,8 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
         }
       }
       if(item.renderer==='managed-configs'){
-        for(const [name,kind] of [['read','read'],['apply','write'],['check','read']]){
+        for(const [name,kind] of [['read','read'],['apply','write'],['check','read'],
+          ['certificates','read'],['renew','write']]){
           const id=item.operations?.[name],target=visible.get(id);
           if(typeof id!=='string'||!id.startsWith(module.id+'.')||!target||target.kind!==kind)
             throw new Error('Managed config operation must refer to exposed module Action');
@@ -162,9 +159,8 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
           Object.values(item.labels).some(value=>typeof value!=='string'||value.length>80)))
           throw new Error('Invalid managed config labels');
       }
-      if(['nginx-service','nginx-certificates'].includes(item.renderer)){
-        const required=item.renderer==='nginx-service'
-          ?[['service','write'],['check','read']]:[['renew','write']];
+      if(item.renderer==='nginx-service'){
+        const required=[['service','write'],['check','read']];
         for(const [name,kind] of required){
           const id=item.operations?.[name],target=visible.get(id);
           if(typeof id!=='string'||!id.startsWith(module.id+'.')||!target||target.kind!==kind)
