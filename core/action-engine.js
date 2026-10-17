@@ -1,4 +1,4 @@
-import {isUserShellAction,isUserFileAction} from './action-policy.js';
+import {isUserShellAction,isUserFileAction,isTelegramInteractionAction} from './action-policy.js';
 import Ajv from 'ajv';
 
 /**
@@ -33,7 +33,7 @@ export class ActionEngine {
         action.executionPolicy==='broker-enqueue' &&
         context.directUpdateAuthorized===true;
       const privileged=action.executionPolicy==='privileged' && action.privileged?.channels?.includes(channel);
-      if(!trustedCaller || (!isProposal && !isExactBrokerEnqueue && !isUserShellAction(action) && !(channel==='web' && isUserFileAction(action)) && !privileged))
+      if(!trustedCaller || (!isProposal && !isExactBrokerEnqueue && !isUserShellAction(action) && !isTelegramInteractionAction(action) && !(channel==='web' && isUserFileAction(action)) && !privileged))
         throw Object.assign(new Error('Write action requires explicit trusted execution policy'), { statusCode: 403 });
     }
     let validate = this.inputValidators.get(action);
