@@ -5,10 +5,12 @@ import {realpathSync} from 'node:fs';
 import {createPrivilegedHandlers} from './handlers.js';
 const failure=(message,statusCode=400)=>Object.assign(new Error(message),{statusCode});
 export async function dispatchPrivileged(request,handlers){
-  if(!request || request.version!==1 || request.channel!=='web' || typeof request.action!=='string' ||
+  if(!request || request.version!==1 || !['web','mcp'].includes(request.channel) || typeof request.action!=='string' ||
     Object.keys(request).some(key=>!['version','channel','action','input'].includes(key)))throw failure('无效的 root 请求',403);
   const handler=handlers.get(request.action);
   if(!handler)throw failure('root 操作未注册',404);
+  // Explicit per-handler MCP admission; all existing root actions stay Web-only.
+  if(!(handler.channels??['web']).includes(request.channel))throw failure('root Action 不允许此通道',403);
   if(!handler.validate(request.input))throw failure('root 操作参数无效');
   return handler.execute(request.input);
 }

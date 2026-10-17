@@ -70,6 +70,11 @@ function formatted(key, formatKind) {
       </div>
     </div>
 
+    <div v-else-if="presentation?.renderer === 'logs'" class="terminal-result">
+      <p class="muted small">{{ data.unit }} · {{ data.lines }} 行 <span v-if="data.truncated"> · 输出已截断</span></p>
+      <pre class="terminal-output" style="white-space:pre-wrap;overflow-wrap:anywhere">{{ data.output || '没有找到日志记录' }}</pre>
+    </div>
+
     <div v-else-if="presentation?.renderer === 'terminal'" class="terminal-result">
       <pre v-if="data.stdout" class="terminal-output">{{ data.stdout }}</pre>
       <pre v-if="data.stderr" class="terminal-output terminal-stderr">{{ data.stderr }}</pre>
