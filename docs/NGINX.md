@@ -36,8 +36,8 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
 Nginx 网站模块只有两个独立区块：**Nginx 状态管理 → Nginx 网站管理**；SSL 证书管理不再是独立 Action 卡片，而是打开具体网站详情后显示在该网站的右侧详情（手机端在列表下方）。辅助 Action（`nginx.service`、`nginx.certificates`、`nginx.renew`、`nginx.check`、`nginx.read`、`nginx.apply`）在对应区块内调用。
 
 - **状态管理**外层不再用圆角矩形容器（flat），内部状态卡片保留；**刷新状态**置于本区块标题右上角，与标题同一行（窄屏自动适配），移除底部刷新按钮；所有状态操作、刷新和确认弹窗按钮直接共用网站管理的全套 32px、.85rem、999px 胶囊按钮 CSS（尺寸、边框、圆角、背景、字体与禁用状态一致），不再覆盖为旧版矩形按钮。启动/停止合并为同一按钮：运行中「停止」，停止时「启动」；其它重启、重载、启停自启仍单独存在，变更先二次确认。显示内核版本、systemd 服务状态/子状态、开机自启及配置语法结果，提供刷新、检查配置；启动、重启、重载前先运行固定 `nginx -t`，不允许自定义 systemd unit 或 Shell 参数。
-- **每个网站详情内 SSL 证书管理**仅在网站详情展开后读取受管证书，按该站点的 `server_name` 与证书 DNS SAN 做大小写无关的精确匹配及标准单层通配符匹配。未匹配时显示无匹配证书，不显示别的站点的续期按钮。**域名匹配仅用于关联展示，不能证明 Nginx 当前引用了该证书**；不因打开网站写文件或自动申请/续期。证书本身只扫描 Certbot/Let's Encrypt 约定的 `/etc/letsencrypt/live/<cert-name>/cert.pem`，要求真实证书链的目标在 `/etc/letsencrypt/archive/` 内；以 Node.js X509Certificate 解码公有证书，显示名称、SAN 域名、颁发者、签发/过期时间、距离到期天数及公有证书路径。**不会读取、返回或记录 privkey.pem。** 本模块不会声称包含所有系统自定义证书。
-- 每条受管证书有「检查并续期」，二次确认后使用固定 `/usr/bin/certbot renew --non-interactive --cert-name <已列出的安全名称>`，不强制提前续期、不接收任意域名/目录/脚本；成功后若 Nginx 运行，则先检查 Nginx 语法，成功再重载；若 Nginx 停止，不自动启动。既有 Certbot renewal 配置自身的验证方式、hooks 和域名解析必须事先正确。本阶段**不支持创建/撤销证书**，因为签发需要单独选择 HTTP-01/DNS-01 与对应服务商凭据；不会替用户猜测。
+- **每个网站详情内 SSL 证书管理**仅在网站详情展开后读取受管证书，从网站 Nginx 站点文件实际声明的 `ssl_certificate` / `ssl_certificate_key` 路径读取证书与私钥引用，不通过 SAN 域名推测。未匹配时显示无匹配证书，不显示别的站点的续期按钮。**域名匹配仅用于关联展示，不能证明 Nginx 当前引用了该证书**；不因打开网站写文件或自动申请/续期。受管公有证书只读取实际声明且位于受支持证书根目录的 PEM 文件，要求真实证书链的目标在 `/etc/letsencrypt/archive/` 内；以 Node.js X509Certificate 解码公有证书，显示名称、SAN 域名、颁发者、签发/过期时间、距离到期天数及公有证书路径。**不会在列表中自动读取私钥；仅登录 Web 管理员明确点击后临时读取已引用的合法 PEM 私钥，不向 MCP 暴露，不写入日志。** 本模块不会声称包含所有系统自定义证书。
+- 独立 Certbot 证书管理模块每条已登记续期证书有「检查并续期」，二次确认后使用固定 `/usr/bin/certbot renew --non-interactive --cert-name <已列出的安全名称>`，不强制提前续期、不接收任意域名/目录/脚本；成功后若 Nginx 运行，则先检查 Nginx 语法，成功再重载；若 Nginx 停止，不自动启动。既有 Certbot renewal 配置自身的验证方式、hooks 和域名解析必须事先正确。本阶段**不支持创建/撤销证书**，因为签发需要单独选择 HTTP-01/DNS-01 与对应服务商凭据；不会替用户猜测。
 - 生产部署验收只读取状态，不执行停止、重启、申请或续期，也不更改已部署的 Nginx 配置。
 
 ## 功能
@@ -79,3 +79,6 @@ systemd 单元名或内容，只有固定确认短语与 `status`/`stage`/`resta
 停用站点会删除已认可的同名启用软链接，并在 nginx -t 通过后重载；已有连接一般不会立即断开。有效 Nginx 语法不保证上游后端、HTTPS、域名、面板管理入口能够工作。当前不提供 HTTP 健康检查、自定义路径证书自动发现、初次签发或撤销、access/error log 浏览、备份版本历史、reload 后端服务恢复，也不承诺对并行外部写入绝对事务隔离。
 
 测试必须在临时 Nginx 目录和命令替身完成，不能修改生产站点、重载生产 Nginx 或使用任意 root Shell。项目的 Nginx 配置可与面板共存，但不能由面板安装器接管。
+
+
+关于独立 Certbot Action、Nginx TLS 双栏、私钥按需查看的边界参见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。

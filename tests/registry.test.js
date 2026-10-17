@@ -36,11 +36,11 @@ test('generic module reordering preserves absent IDs without hardcoded module na
   await manager.loadAll(['files','missing-future-module','system','terminal','services']);
   manager.loaded.push({id:'panel',name:'Panel'});
   const before=manager.loaded.filter(module=>module.id!=='panel').map(module=>module.id);
-  assert.deepEqual(before,['files','system','terminal','services','cron','nginx','telegram','v2ray']);
-  const planned=manager.planOrder(['system','files','terminal','services','cron','nginx','telegram','v2ray']);
-  assert.deepEqual(planned,['system','missing-future-module','files','terminal','services','cron','nginx','telegram','v2ray']);
+  assert.deepEqual(before,['files','system','terminal','services','cron','nginx','telegram','v2ray','certbot']);
+  const planned=manager.planOrder(['system','files','terminal','services','cron','nginx','telegram','v2ray','certbot']);
+  assert.deepEqual(planned,['system','missing-future-module','files','terminal','services','cron','nginx','telegram','v2ray','certbot']);
   manager.applyOrder(planned);
-  assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','cron','nginx','telegram','v2ray','panel']);
+  assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','cron','nginx','telegram','v2ray','certbot','panel']);
   for(const bad of [['system','files','services'],['files','files','terminal','services','cron'],
     ['system','files','terminal','other','cron'],null,{}])
     assert.throws(()=>manager.planOrder(bad),{statusCode:400});
@@ -51,18 +51,18 @@ test('bundled modules load after dependencies and expose expected actions', asyn
   const manager = new ModuleManager(resolve('modules'), registry);
   const loaded = await manager.loadAll();
   const ids = loaded.map(m => m.id);
-  assert.deepEqual([...ids].sort(), ['cron','files', 'nginx', 'services', 'system', 'telegram','terminal','v2ray']);
-  assert.deepEqual(ids,['system','services','terminal','files','cron','nginx','telegram','v2ray']);
+  assert.deepEqual([...ids].sort(), ['certbot','cron','files', 'nginx', 'services', 'system', 'telegram','terminal','v2ray']);
+  assert.deepEqual(ids,['system','services','terminal','files','cron','nginx','telegram','v2ray','certbot']);
   assert.deepEqual(registry.list('web').map(a => a.id).sort(),
-    ['cron.list','cron.remove','cron.save','cron.systemSet','files.accounts','files.chmod','files.chown','files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','nginx.apply','nginx.certificates','nginx.check','nginx.read','nginx.renew','nginx.repairExecutor','nginx.service','nginx.sites','nginx.status','services.list','services.logs','system.info','system.resources','telegram.botInfo','telegram.buttons','telegram.messages','telegram.press','telegram.send','telegram.status','terminal.execute','v2ray.install','v2ray.read','v2ray.save','v2ray.service','v2ray.status','v2ray.test']);
+    ['certbot.list','certbot.renew','cron.list','cron.remove','cron.save','cron.systemSet','files.accounts','files.chmod','files.chown','files.create','files.delete','files.list','files.read','files.rename','files.upload','files.write','nginx.apply','nginx.certificates','nginx.check','nginx.read','nginx.renew','nginx.repairExecutor','nginx.service','nginx.siteTls','nginx.siteTlsKey','nginx.sites','nginx.status','services.list','services.logs','system.info','system.resources','telegram.botInfo','telegram.buttons','telegram.messages','telegram.press','telegram.send','telegram.status','terminal.execute','v2ray.install','v2ray.read','v2ray.save','v2ray.service','v2ray.status','v2ray.test']);
   for(const id of ['storage.usage','system.cpu','system.memory'])assert.equal(registry.get(id),undefined);
 });
 
 test('saved module order survives reload and new modules append despite earlier manifest ranks',async()=>{
   const manager=new ModuleManager(resolve('modules'),new ActionRegistry());
   await manager.loadAll(['terminal','files','temporarily-disabled']);
-  assert.deepEqual(manager.loaded.map(m=>m.id),['terminal','files','system','services','cron','nginx','telegram','v2ray']);
-  assert.deepEqual(manager.order,['terminal','files','temporarily-disabled','system','services','cron','nginx','telegram','v2ray']);
+  assert.deepEqual(manager.loaded.map(m=>m.id),['terminal','files','system','services','cron','nginx','telegram','v2ray','certbot']);
+  assert.deepEqual(manager.order,['terminal','files','temporarily-disabled','system','services','cron','nginx','telegram','v2ray','certbot']);
   const again=new ModuleManager(resolve('modules'),new ActionRegistry());
   await again.loadAll(manager.order);
   assert.deepEqual(again.loaded,manager.loaded);

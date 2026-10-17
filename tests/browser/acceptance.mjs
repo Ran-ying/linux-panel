@@ -76,7 +76,9 @@ try {
     let nginxSites=[],nginxVersions=0,nginxSyntaxGood=true;
     let nginxRunning=true,nginxAutostart=true;
     const nginxToggleActions=[],nginxServiceActions=[],nginxRenewActions=[];
-    let nginxCertificateReads=0;
+    let nginxCertificateReads=0,nginxPrivateReads=0;
+    const publicFixture='-----BEGIN PUBLIC KEY-----\nPUBLIC FIXTURE\n-----END PUBLIC KEY-----\n';
+    const privateFixture='-----BEGIN PRIVATE KEY-----\nPRIVATE FIXTURE\n-----END PRIVATE KEY-----\n';
     const certFixture={name:'fixture.test',domains:['fixture.test','www.fixture.test'],
       issuer:'CN=Fixture CA',validFrom:'2026-09-01T00:00:00.000Z',
       validTo:'2026-12-01T00:00:00.000Z',daysRemaining:45,status:'valid',
@@ -87,7 +89,18 @@ try {
       const input=route.request().postDataJSON()?.input??{};
       let data,status=200;
       const target=nginxSites.find(site=>site.name===input.name);
-      if(id==='nginx.status')data={installed:true,version:'nginx/1.24.0',
+      if(id==='nginx.siteTls'){
+        nginxCertificateReads++;
+        data={name:input.name,pairs:input.name==='unrelated-site'?[]:[{
+          certificatePath:'/etc/letsencrypt/live/fixture.test/fullchain.pem',
+          privateKeyPath:'/etc/letsencrypt/live/fixture.test/privkey.pem',
+          publicPem:publicFixture,certificatePem:'-----BEGIN CERTIFICATE-----\nCERTIFICATE FIXTURE\n-----END CERTIFICATE-----\n',
+          privateKeyConfigured:true,status:'已配置'
+        }],warnings:[]};
+      }else if(id==='nginx.siteTlsKey'){
+        nginxPrivateReads++;
+        data={name:input.name,index:input.index,privatePem:privateFixture};
+      }else if(id==='nginx.status')data={installed:true,version:'nginx/1.24.0',
         active:nginxRunning,enabled:nginxAutostart,state:nginxRunning?'active':'inactive',
         subState:nginxRunning?'running':'dead',configOk:nginxSyntaxGood};
       else if(id==='nginx.service'){
@@ -145,6 +158,19 @@ try {
       await route.fulfill({status,contentType:'application/json',
         body:JSON.stringify(status===200?{action:id,result:data}:data)});
     });
+    await page.route('**/api/actions/certbot.*/execute',async route=>{
+      const id=new URL(route.request().url()).pathname.split('/')[3];
+      const input=route.request().postDataJSON()?.input??{};
+      const result=id==='certbot.list'
+        ?{installed:true,timerActive:true,timerEnabled:true,count:1,certificates:[{
+          name:'fixture.test',domains:['fixture.test'],authenticator:'nginx',
+          validTo:'2026-12-01T00:00:00.000Z',daysRemaining:45,status:'valid'}],warnings:[]}
+        :{ok:true,status:'Certbot 已检查续期',output:'',reloaded:true};
+      if(id==='certbot.renew')nginxRenewActions.push(input.name);
+      await route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({action:id,result})});
+    });
+
     // Synthetic V2Ray server: browser coverage without changing the CI host.
     let v2rayInstalled=true,v2rayRunning=true,v2rayEnabled=true,v2rayRevision=0;
     let v2rayFailStatusOnce=false;
@@ -316,6 +342,23 @@ try {
           b.fontSize===referenceControls.primary.fontSize),
           name+': all command buttons must share the compact 32px pill appearance');
       }
+      if(name.trim()==='Certbot 证书管理' && [390,1280].includes(width)){
+        const certbot=page.locator('.certbot-manager');
+        await certbot.getByText('1 份续期配置',{exact:false}).waitFor();
+        await certbot.getByText('验证方式 nginx').waitFor();
+        const button=certbot.getByRole('button',{name:'续期证书 fixture.test'});
+        await button.click();
+        const dialog=page.getByRole('dialog',{name:'确认 Certbot 续期'});
+        await dialog.waitFor();
+        assert.deepEqual(nginxRenewActions,[],'confirmation required before Certbot renewal');
+        await dialog.getByRole('button',{name:'取消'}).click();
+        await dialog.waitFor({state:'hidden'});
+        await button.click();
+        await dialog.getByRole('button',{name:'确认续期'}).click();
+        await dialog.waitFor({state:'hidden'});
+        assert.deepEqual(nginxRenewActions,['fixture.test']);
+      }
+
       if(name.trim()==='定时任务' && [390,1280].includes(width)){
         const schedule=page.locator('.scheduled-tasks');
         await schedule.getByRole('heading',{name:'Linux Panel 托管的定时任务'}).waitFor();
@@ -779,70 +822,50 @@ try {
           'long Nginx configs need horizontal scrolling rather than viewport overflow');
         assert.notEqual(configPreviewStyle.background,'rgba(0, 0, 0, 0)');
         const certPanel=manager.getByRole('region',{name:'SSL 证书管理：fixture-site'});
-        await certPanel.getByText('1 张域名匹配的证书').waitFor();
+        await certPanel.getByText('公钥',{exact:true}).waitFor();
+        await certPanel.getByText('PUBLIC FIXTURE',{exact:false}).waitFor();
         const certShell=detailCards.nth(2);
-        assert.equal(await certShell.locator('.nginx-cert-card').count(),1);
-        const nestedCertAppearance=await certShell.locator('.nginx-cert-card').evaluate(node=>{
-          const css=getComputedStyle(node);
-          return {border:css.borderTopWidth,radius:css.borderTopLeftRadius,
-            background:css.backgroundColor};
-        });
-        assert.equal(nestedCertAppearance.border,'0px',
-          'cert information must not have another rounded frame inside the SSL card');
-        assert.equal(nestedCertAppearance.radius,'0px');
-        assert.equal(nestedCertAppearance.background,'rgba(0, 0, 0, 0)');
-        const sslOuterCard=detailCards.nth(2);
-        const actualOuterFrame=await sslOuterCard.evaluate(node=>{
+        const sslOuter=await certShell.evaluate(node=>{
           const css=getComputedStyle(node);
           return {border:css.borderTopWidth,radius:parseFloat(css.borderTopLeftRadius)};
         });
-        assert.equal(actualOuterFrame.border,'1px','only the outer SSL detail card has a border');
-        assert.ok(actualOuterFrame.radius>=12,'the outer SSL detail retains rounded corners');
-        const certRoot=sslOuterCard.locator('.nginx-certificates');
-        assert.equal(await certRoot.count(),1,'SSL content must have one inner layout wrapper');
-        const innerFrame=await certRoot.evaluate(node=>{
+        assert.equal(sslOuter.border,'1px');
+        assert.ok(sslOuter.radius>=12);
+        const inner=await certShell.locator('.nginx-certificates').evaluate(node=>{
           const css=getComputedStyle(node);
-          return {tag:node.tagName,role:node.getAttribute('role'),
-            border:css.borderTopWidth,radius:css.borderTopLeftRadius,
-            padding:css.paddingTop,background:css.backgroundColor,
-            shadow:css.boxShadow};
+          return {border:css.borderTopWidth,padding:css.padding,
+            background:css.backgroundColor,shadow:css.boxShadow};
         });
-        assert.equal(innerFrame.tag,'DIV','certificate layout must not inherit global section shell');
-        assert.equal(innerFrame.role,'region','keep accessible named certificate region');
-        assert.equal(innerFrame.border,'0px','certificate layout must not add a second border');
-        assert.equal(innerFrame.radius,'0px','certificate layout must not add nested rounding');
-        assert.equal(innerFrame.padding,'0px','certificate layout must not add nested padding');
-        assert.equal(innerFrame.background,'rgba(0, 0, 0, 0)','certificate layout must not add a second background');
-        assert.equal(innerFrame.shadow,'none','certificate layout must not add a nested shadow');
-        const domainChips=sslOuterCard.locator('.nginx-cert-domains span');
-        assert.ok(await domainChips.count()>0,'fixture has matching certificate domains');
-        const certDomainStyles=await domainChips.evaluateAll(nodes=>nodes.map(node=>{
-          const style=getComputedStyle(node);
-          return {border:style.borderTopWidth,radius:style.borderTopLeftRadius,
-            background:style.backgroundColor,shadow:style.boxShadow};
-        }));
-        for(const style of certDomainStyles){
-          assert.equal(style.border,'0px','certificate domain has no nested border');
-          assert.equal(style.radius,'0px','certificate domain has no rounded chip frame');
-          assert.equal(style.background,'rgba(0, 0, 0, 0)',
-            'certificate domain stays on outer SSL card without another background');
-          assert.equal(style.shadow,'none');
-        }
-        assert.equal(nginxCertificateReads,1,'only selected website loads certificate inventory');
-        assert.equal(await certPanel.getByRole('button',{name:'续期证书 unrelated.test'}).count(),0,
-          'certificates for other domains must not be offered to this site');
-        const renewButton=certPanel.getByRole('button',{name:'续期证书 fixture.test'});
-        await renewButton.click();
-        const renewalModal=page.getByRole('dialog',{name:'确认 SSL 证书续期'});
-        await renewalModal.waitFor();
-        assert.deepEqual(nginxRenewActions,[],'opening renewal dialog does not renew');
-        await renewalModal.getByRole('button',{name:'取消'}).click();
-        await renewalModal.waitFor({state:'hidden'});
-        assert.deepEqual(nginxRenewActions,[]);
-        await renewButton.click();
-        await renewalModal.getByRole('button',{name:'确认续期'}).click();
-        await renewalModal.waitFor({state:'hidden'});
-        assert.deepEqual(nginxRenewActions,['fixture.test']);
+        assert.equal(inner.border,'0px');
+        assert.equal(inner.padding,'0px');
+        assert.equal(inner.background,'rgba(0, 0, 0, 0)');
+        assert.equal(inner.shadow,'none');
+        const sides=certPanel.locator('.nginx-tls-column');
+        assert.equal(await sides.count(),2,'exactly two side-by-side TLS halves');
+        const grid=await certPanel.locator('.nginx-tls-columns').evaluate(node=>{
+          const css=getComputedStyle(node),a=node.children[0].getBoundingClientRect(),
+            b=node.children[1].getBoundingClientRect();
+          return {gap:css.columnGap,firstWidth:a.width,secondWidth:b.width,
+            firstRight:a.right,secondLeft:b.left,firstTop:a.top,secondTop:b.top};
+        });
+        assert.equal(grid.gap,'0px','no gap between public/private halves');
+        assert.ok(Math.abs(grid.firstWidth-grid.secondWidth)<=1);
+        assert.ok(Math.abs(grid.firstRight-grid.secondLeft)<=1);
+        assert.ok(Math.abs(grid.firstTop-grid.secondTop)<=1);
+        assert.equal(nginxPrivateReads,0,'private key must never be fetched on render');
+        assert.equal(await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).count(),0);
+        await certPanel.getByRole('button',{name:'显示私钥 1'}).click();
+        await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).waitFor();
+        assert.equal(nginxPrivateReads,1,'key loaded only after explicit click');
+        await certPanel.getByRole('button',{name:'隐藏私钥 1'}).click();
+        assert.equal(await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).count(),0);
+        await certPanel.getByRole('button',{name:'显示私钥 1'}).click();
+        await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).waitFor();
+        await certPanel.getByRole('button',{name:'刷新证书'}).click();
+        await certPanel.getByText('PUBLIC FIXTURE',{exact:false}).waitFor();
+        assert.equal(await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).count(),0,
+          'refresh immediately clears previously displayed key');
+        assert.equal(nginxCertificateReads,2);
         const addDomain=siteInfo.getByRole('button',{name:'添加域名'});
         await addDomain.click();
         const domainInput=siteInfo.getByRole('textbox',{name:'新域名'});
@@ -1002,7 +1025,7 @@ try {
         await editor.getByRole('button',{name:'保存配置'}).click();
         await manager.getByRole('button',{name:'查看网站 unrelated-site'}).click();
         const unmatched=manager.getByRole('region',{name:'SSL 证书管理：unrelated-site'});
-        await unmatched.getByText('0 张域名匹配的证书').waitFor();
+        await unmatched.getByText('当前站点文件未直接声明 SSL 证书路径。').waitFor();
         assert.equal(await unmatched.getByRole('button',{name:/续期证书/}).count(),0);
         assert.equal(await manager.locator('.config-detail-panel > .config-detail-card').count(),3,
           'unmatched sites still show information, configuration and SSL panels');

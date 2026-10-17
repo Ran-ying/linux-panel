@@ -11,6 +11,10 @@ import {V2RAY_CONTRACTS} from './v2ray-contracts.js';
 import {createV2RayOperations} from './v2ray-operations.js';
 import {SERVICE_LOGS_CONTRACT} from './service-log-contracts.js';
 import {createServiceLogOperations} from './service-log-operations.js';
+import {NGINX_TLS_CONTRACTS} from './nginx-tls-contracts.js';
+import {createNginxTlsOperations} from './nginx-tls-operations.js';
+import {CERTBOT_CONTRACTS} from './certbot-contracts.js';
+import {createCertbotOperations} from './certbot-operations.js';
 import {createNginxRenewalReconfigure,NGINX_RECONFIGURE_CONTRACT} from './nginx-renewal-reconfigure.js';
 // Add reviewed built-in handlers here, then explicitly reinstall the root package.
 // Never discover/import modules from the checkout or a Web-writable directory.
@@ -38,5 +42,11 @@ export function createPrivilegedHandlers({privileged=true}={}){
     channels:['mcp'],validate:ajv.compile(NGINX_RECONFIGURE_CONTRACT.inputSchema),
     execute:createNginxRenewalReconfigure().reconfigure
   });
+  const tls=createNginxTlsOperations();
+  for(const [name,contract] of Object.entries(NGINX_TLS_CONTRACTS))
+    handlers.set('nginx.'+name,{channels:['web'],validate:ajv.compile(contract.inputSchema),execute:tls[name]});
+  const certbot=createCertbotOperations();
+  for(const [name,contract] of Object.entries(CERTBOT_CONTRACTS))
+    handlers.set('certbot.'+name,{channels:['web'],validate:ajv.compile(contract.inputSchema),execute:certbot[name]});
   return handlers;
 }
