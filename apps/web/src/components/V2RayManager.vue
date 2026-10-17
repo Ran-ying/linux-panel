@@ -6,22 +6,18 @@ const props=defineProps({
 });
 const emit=defineEmits(['unauthorized','listing-change']);
 const data=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref(''),output=ref('');
-const draft=ref(''),revision=ref(''),original=ref(''),loaded=ref(false),tab=ref('overview');
-const section=ref('inbounds'),sectionText=ref(''),confirm=ref(null),confirmDialog=ref(null);
+const draft=ref(''),revision=ref(''),original=ref(''),loaded=ref(false);
+const section=ref('full'),sectionText=ref(''),sectionOriginal=ref('');
+const confirm=ref(null),confirmDialog=ref(null);
 const sections=['inbounds','outbounds','routing','dns','transport','log','policy','api','stats','reverse','observatory','burstObservatory','metrics','inboundDetour','outboundDetour'];
 const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规则',dns:'DNS',transport:'传输设置',
   log:'日志',policy:'流量策略',api:'API',stats:'统计',reverse:'反向代理',observatory:'观测',
   burstObservatory:'突发观测',metrics:'指标',inboundDetour:'旧版入站扩展',outboundDetour:'旧版出站扩展'};
-const enabledFeatures=computed(()=>data.value.features??[]);
 const parse=()=>{const obj=JSON.parse(draft.value);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw Error('配置必须是 JSON 对象');return obj;};
-const dirty=computed(()=>draft.value!==original.value);
-const summary=computed(()=>{
-  try{
-    const cfg=parse();return {inbounds:[...(cfg.inbounds||[]),...(cfg.inboundDetour||[])],
-      outbounds:[...(cfg.outbounds||[]),...(cfg.outboundDetour||[])],routing:cfg.routing?.rules?.length??0,
-      dns:cfg.dns?.servers?.length??0};
-  }catch{return null;}
-});
+const dirty=computed(()=>draft.value!==original.value||
+  (section.value!=='full'&&sectionText.value!==sectionOriginal.value));
+const editorEntries=[{key:'full',label:'完整内容'},...sections.map(key=>({key,label:names[key]}))];
+const editorLabel=computed(()=>section.value==='full'?'完整 V2Ray JSON 配置':names[section.value]+' · JSON');
 watch(()=>props.initialData,v=>{data.value=v;});
 async function call(action,input={}){
   const reply=await fetch('/api/actions/'+encodeURIComponent(action)+'/execute',{
@@ -46,22 +42,28 @@ async function refreshStatus(){
 function showSection(key){
   const obj=parse();
   section.value=key;
-  sectionText.value=JSON.stringify(obj[key]??(['inbounds','outbounds','inboundDetour','outboundDetour'].includes(key)?[]:{}),null,2);
+  if(key==='full'){sectionText.value='';sectionOriginal.value='';return;}
+  const defaultValue=['inbounds','outbounds','inboundDetour','outboundDetour'].includes(key)?[]:{};
+  sectionText.value=JSON.stringify(obj[key]??defaultValue,null,2);
+  sectionOriginal.value=sectionText.value;
 }
 function commitSection(){
+  if(section.value==='full'||sectionText.value===sectionOriginal.value)return;
   const obj=parse();
   let value;
   try{value=JSON.parse(sectionText.value);}catch{throw Error(names[section.value]+'不是合法 JSON');}
   obj[section.value]=value;
   draft.value=JSON.stringify(obj,null,2)+'\n';
+  sectionOriginal.value=sectionText.value;
 }
 function selectSection(key){
+  if(key===section.value)return;
   try{commitSection();showSection(key);error.value='';}catch(e){error.value=e.message;}
 }
 async function load(){
   const result=await call(props.operations.read);
   draft.value=result.content;original.value=result.content;revision.value=result.revision;
-  loaded.value=true;showSection('inbounds');
+  loaded.value=true;showSection('full');
 }
 function refreshAll(){return wrap(async()=>{
   await refreshStatus();
@@ -69,17 +71,8 @@ function refreshAll(){return wrap(async()=>{
   else loaded.value=false;
   notice.value='已读取当前配置';
 });}
-function chooseTab(value){
-  if(tab.value==='sections'&&value!=='sections'){
-    try{commitSection();error.value='';}catch(e){error.value=e.message;return;}
-  }
-  if(value==='sections'&&tab.value!=='sections'){
-    try{showSection(section.value);}catch(e){error.value=e.message;return;}
-  }
-  tab.value=value;
-}
 function validate(){return wrap(async()=>{
-  if(tab.value==='sections')commitSection();
+  commitSection();
   parse();
   const result=await call(props.operations.test,{content:draft.value});
   output.value=result.output;
@@ -87,7 +80,7 @@ function validate(){return wrap(async()=>{
   if(!result.ok)error.value=result.message;
 });}
 function save(){return wrap(async()=>{
-  if(tab.value==='sections')commitSection();
+  commitSection();
   parse();
   const result=await call(props.operations.save,{content:draft.value,revision:revision.value});
   output.value=result.output;notice.value=result.message;
@@ -120,25 +113,36 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 <template>
   <section class="v2ray-manager" aria-label="V2Ray 控制台">
     <div class="v2ray-summary" aria-label="V2Ray 状态摘要">
-      <div><span class="muted small">内核</span><strong>{{ data.installed ? (data.version||'已安装') : '未安装' }}</strong></div>
-      <div><span class="muted small">服务</span><strong>{{ data.installed ? (data.service==='running'?'运行中':'已停止') : '—' }}</strong></div>
-      <div><span class="muted small">开机启动</span><strong>{{ data.installed?(data.enabled?'已启用':'未启用'):'—' }}</strong></div>
-      <div><span class="muted small">入站 / 出站</span><strong>{{ data.inbounds }} / {{ data.outbounds }}</strong></div>
-    </div>
-    <div class="v2ray-toolbar v2ray-service-toolbar" aria-label="V2Ray 主要操作">
-      <button type="button" :disabled="busy" @click="refreshAll">刷新状态与配置</button>
-      <template v-if="data.installed">
-        <button type="button" :disabled="busy||data.service==='running'" @click="ask('start')">启动</button>
-        <button type="button" :disabled="busy||data.service!=='running'" @click="ask('stop')">停止</button>
-        <button type="button" :disabled="busy" @click="ask('restart')">重启</button>
-      </template>
+      <div class="v2ray-status-card">
+        <span class="muted small">内核</span>
+        <strong>{{ data.installed ? (data.version||'已安装') : '未安装' }}</strong>
+      </div>
+      <div class="v2ray-status-card">
+        <span class="muted small">服务</span>
+        <strong>{{ data.installed ? (data.service==='running'?'运行中':'已停止') : '—' }}</strong>
+        <div v-if="data.installed" class="v2ray-card-actions" aria-label="V2Ray 服务控制">
+          <button type="button" :disabled="busy||data.service==='running'" @click="ask('start')">启动</button>
+          <button type="button" :disabled="busy||data.service!=='running'" @click="ask('stop')">停止</button>
+          <button type="button" :disabled="busy" @click="ask('restart')">重启</button>
+        </div>
+      </div>
+      <div class="v2ray-status-card">
+        <span class="muted small">开机启动</span>
+        <strong>{{ data.installed?(data.enabled?'已启用':'未启用'):'—' }}</strong>
+        <div v-if="data.installed" class="v2ray-card-actions">
+          <button type="button" :disabled="busy" @click="ask(data.enabled?'disable':'enable')">
+            {{ data.enabled?'关闭开机自启':'启用开机自启' }}
+          </button>
+        </div>
+      </div>
+      <div class="v2ray-status-card">
+        <span class="muted small">入站 / 出站</span>
+        <strong>{{ data.inbounds }} / {{ data.outbounds }}</strong>
+      </div>
     </div>
     <div class="v2ray-config-line">
       <p class="muted small v2ray-config-path">配置文件：<code>{{ data.configPath }}</code></p>
-      <button v-if="data.installed" type="button" :disabled="busy"
-        @click="ask(data.enabled?'disable':'enable')">
-        {{ data.enabled?'关闭开机自启':'启用开机自启' }}
-      </button>
+      <button type="button" :disabled="busy" @click="refreshAll">刷新状态与配置</button>
     </div>
     <p v-if="busy" class="muted small" role="status">正在处理…</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -150,44 +154,28 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
     </div>
     <template v-else>
       <div v-if="loaded" class="v2ray-editor">
-        <div class="v2ray-tabbar" role="tablist" aria-label="V2Ray 管理视图">
-          <button type="button" role="tab" :aria-selected="tab==='overview'" @click="chooseTab('overview')">能力概览</button>
-          <button type="button" role="tab" :aria-selected="tab==='sections'" @click="chooseTab('sections')">分项编辑</button>
-          <button type="button" role="tab" :aria-selected="tab==='raw'" @click="chooseTab('raw')">完整 JSON</button>
-        </div>
-        <template v-if="tab==='overview'">
-          <p class="muted small">已加载的配置字段：{{ enabledFeatures.join(' · ')||'无' }}。以下为配置摘要，不展示认证信息。</p>
-          <div class="v2ray-rows">
-            <div><strong>入站</strong>
-              <p v-for="(item,i) in summary?.inbounds??[]" :key="i">{{ item.tag||'未命名' }} · {{ item.protocol||'—' }} · {{ item.port??'—' }}</p>
+        <div class="v2ray-editor-layout">
+          <nav class="v2ray-config-nav" aria-label="V2Ray 配置目录">
+            <button v-for="entry in editorEntries" :key="entry.key" type="button"
+              class="v2ray-config-item" :class="{selected:section===entry.key}"
+              :aria-pressed="section===entry.key" :disabled="busy"
+              @click="selectSection(entry.key)">{{ entry.label }}</button>
+          </nav>
+          <div class="v2ray-editor-content">
+            <label class="v2ray-editor-label">
+              {{ editorLabel }}
+              <textarea v-if="section==='full'" v-model="draft" rows="22" spellcheck="false"
+                :disabled="busy" aria-label="完整 V2Ray JSON 配置" />
+              <textarea v-else v-model="sectionText" rows="22" spellcheck="false"
+                :disabled="busy" aria-label="当前配置部分 JSON" />
+            </label>
+            <div class="v2ray-toolbar v2ray-editor-actions">
+              <button type="button" :disabled="busy||!loaded" @click="validate">校验配置</button>
+              <button type="button" class="primary" :disabled="busy||!loaded||!dirty" @click="save">保存并应用</button>
+              <button type="button" :disabled="busy" @click="refreshAll">放弃修改并重新读取</button>
+              <span v-if="dirty" class="muted small">存在尚未保存的更改</span>
             </div>
-            <div><strong>出站</strong>
-              <p v-for="(item,i) in summary?.outbounds??[]" :key="i">{{ item.tag||'未命名' }} · {{ item.protocol||'—' }}</p>
-            </div>
-            <div><strong>路由 / DNS</strong><p>路由规则：{{ summary?.routing??'—' }}；DNS 服务器：{{ summary?.dns??'—' }}</p></div>
           </div>
-          <p class="muted small">所有 V2Ray 5.x 配置字段，包括 API、统计、TLS、传输、路由和旧版字段，都可以在“分项编辑”或“完整 JSON”中编辑；不会自动转换或删除未知字段。</p>
-        </template>
-        <template v-if="tab==='sections'">
-          <div class="v2ray-section-picker">
-            <label for="v2ray-section">配置部分</label>
-            <select id="v2ray-section" :value="section" :disabled="busy" @change="selectSection($event.target.value)">
-              <option v-for="key in sections" :key="key" :value="key">{{ names[key] }}（{{ key }}）</option>
-            </select>
-          </div>
-          <label class="v2ray-editor-label">{{ names[section] }} · JSON
-            <textarea v-model="sectionText" rows="16" spellcheck="false" :disabled="busy" aria-label="当前配置部分 JSON" />
-          </label>
-          <p class="muted small">切换分类时保留当前部分的编辑。旧字段和未知字段均原样保留。</p>
-        </template>
-        <label v-if="tab==='raw'" class="v2ray-editor-label">完整 V2Ray JSON 配置
-          <textarea v-model="draft" rows="22" spellcheck="false" :disabled="busy" aria-label="完整 V2Ray JSON 配置" />
-        </label>
-        <div class="v2ray-toolbar">
-          <button type="button" :disabled="busy||!loaded" @click="validate">校验配置</button>
-          <button type="button" class="primary" :disabled="busy||!loaded||(!dirty&&tab!=='sections')" @click="save">保存并应用</button>
-          <button type="button" :disabled="busy" @click="refreshAll">放弃修改并重新读取</button>
-          <span v-if="dirty" class="muted small">存在尚未保存的更改</span>
         </div>
       </div>
       <p v-else-if="data.configExists" class="muted small">配置尚未读取；可点击“刷新状态与配置”。</p>
@@ -216,27 +204,30 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   color:var(--button-text);font:inherit;font-size:.85rem;cursor:pointer}
 .v2ray-manager button.primary{background:var(--accent-bg);color:var(--button-primary-text);border-color:var(--accent-bg)}
 .v2ray-manager button:disabled{opacity:.5;cursor:not-allowed}
-/* Use four standalone framed status cards and a frameless ActionCard shell.
-   Keep all subsequent controls and editor outside those card borders. */
+/* Four standalone framed status cards; service and autostart controls belong to their cards. */
 .v2ray-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 18px}
-.v2ray-summary>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:14px;
+.v2ray-summary>.v2ray-status-card{display:flex;flex-direction:column;gap:5px;min-width:0;padding:14px;
   border:1px solid var(--border-panel);border-radius:14px;box-shadow:none;background:var(--panel-bg)}
-.v2ray-service-toolbar{margin:0 0 12px}
-.v2ray-config-line{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;
-  flex-wrap:wrap;margin:0 0 14px}
-.v2ray-config-line .v2ray-config-path{min-width:0;flex:1 1 auto;margin:0}
-.v2ray-config-line button{flex:none}
 .v2ray-summary strong{overflow-wrap:anywhere}
+.v2ray-card-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:12px}
+.v2ray-card-actions button{flex:none;min-width:0;padding:4px 8px}
+.v2ray-config-line{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;
+  flex-wrap:wrap;margin:0 0 16px}
+.v2ray-config-line .v2ray-config-path{min-width:0;flex:1 1 auto;margin:0}
+.v2ray-config-line button{flex:none;margin-left:auto}
 .v2ray-manager code{overflow-wrap:anywhere}
 .v2ray-empty{display:grid;gap:10px}
-.v2ray-rows{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));margin:1rem 0}
-.v2ray-rows>div{padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;min-width:0}
-.v2ray-rows p{margin:6px 0;overflow-wrap:anywhere}
-.v2ray-tabbar{display:flex;gap:8px;flex-wrap:wrap;margin:1rem 0}
-.v2ray-tabbar button[aria-selected="true"]{background:var(--accent-bg);border-color:var(--accent-bg);color:var(--button-primary-text)}
-.v2ray-section-picker{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}
-.v2ray-section-picker select{min-width:180px;max-width:100%;padding:7px;border-radius:8px;
-  border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary)}
+.v2ray-editor-layout{display:grid;grid-template-columns:minmax(145px,200px) minmax(0,1fr);
+  gap:16px;align-items:start;min-width:0}
+.v2ray-config-nav{display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
+  max-height:min(75vh,38rem);overflow-y:auto;overscroll-behavior:contain}
+.v2ray-config-nav .v2ray-config-item{box-sizing:border-box;display:block;width:100%;flex:none;
+  padding:9px 11px;border:0;border-radius:8px;text-align:left;white-space:normal;
+  background:transparent;color:var(--text-primary);font:inherit;font-size:.86rem}
+.v2ray-config-nav .v2ray-config-item.selected{background:var(--accent-bg);color:var(--button-primary-text)}
+.v2ray-config-nav .v2ray-config-item:hover:not(:disabled):not(.selected){background:var(--button-bg)}
+.v2ray-editor-content{min-width:0}
+.v2ray-editor-actions{margin:12px 0 0}
 .v2ray-editor-label{display:grid;gap:8px;font-weight:600}
 .v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;
@@ -250,7 +241,10 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-dialog-content{display:grid;gap:12px}
 .v2ray-dialog-content h3{margin:0}
 @media(max-width:730px){
-  .v2ray-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
-  .v2ray-dialog{padding:14px}.v2ray-tabbar button{flex:1}
+  .v2ray-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .v2ray-editor-layout{grid-template-columns:minmax(105px,128px) minmax(0,1fr);gap:10px}
+  .v2ray-config-nav .v2ray-config-item{padding:8px 7px;font-size:.8rem}
+  .v2ray-editor-label textarea{padding:8px}
+  .v2ray-dialog{padding:14px}
 }
 </style>
