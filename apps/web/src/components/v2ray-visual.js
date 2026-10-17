@@ -43,13 +43,13 @@ export function formatList(value){
 // Only explicitly supported routing conditions belong in the Add condition menu.
 // Unknown properties remain in the draft untouched and editable in JSON mode.
 export const ROUTING_OPTIONAL_CONDITIONS=Object.freeze([
-  {key:'balancerTag',label:'平衡器标签'},
-  {key:'port',label:'端口条件'},
-  {key:'network',label:'网络条件'},
-  {key:'source',label:'来源 IP'},
-  {key:'domain',label:'域名条件'},
-  {key:'protocol',label:'协议条件'},
-  {key:'ip',label:'IP 条件'}
+  {key:'balancerTag',label:'平衡器标签（balancerTag）'},
+  {key:'port',label:'端口条件（port）'},
+  {key:'network',label:'网络条件（network）'},
+  {key:'source',label:'来源 IP（source）'},
+  {key:'domain',label:'域名条件（domain）'},
+  {key:'protocol',label:'协议条件（protocol）'},
+  {key:'ip',label:'IP 条件（ip）'}
 ].map(option=>Object.freeze(option)));
 const routeKeys=new Set(ROUTING_OPTIONAL_CONDITIONS.map(option=>option.key));
 function hasNonBlankValue(value){
