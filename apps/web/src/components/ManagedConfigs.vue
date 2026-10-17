@@ -11,6 +11,10 @@ const listing=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref(''
 const modal=ref(null),confirmModal=ref(null),draft=ref(null),pending=ref(null),checkResult=ref(null);
 const selectedFile=ref(null);
 const selectedSite=computed(()=>(listing.value.sites??[]).find(site=>site.file===selectedFile.value)??null);
+// This is a read-only preview of the selected site's real Nginx file. It does
+// not enter the edit draft or mutate the on-disk configuration.
+const configPreview=ref(null),configPreviewLoading=ref(false),configPreviewError=ref('');
+let configPreviewGeneration=0;
 const domains=site=>site.serverNames?.trim()
   ?site.serverNames.split(',').map(domain=>domain.trim()).filter(Boolean)
   :['—'];
@@ -20,7 +24,22 @@ function selectSite(site){
 }
 let noticeTimer;
 watch(()=>props.initialData,v=>{listing.value=v;});
-onUnmounted(()=>clearTimeout(noticeTimer));
+watch(()=>selectedSite.value?selectedSite.value.name+'|'+selectedSite.value.revision:null,async()=>{
+  const site=selectedSite.value,generation=++configPreviewGeneration;
+  configPreview.value=null;configPreviewError.value='';configPreviewLoading.value=!!site;
+  if(!site)return;
+  try{
+    const file=await request(props.operations.read,{name:site.name});
+    if(generation!==configPreviewGeneration)return;
+    configPreview.value=file.content;
+  }catch(cause){
+    if(generation===configPreviewGeneration)
+      configPreviewError.value=cause.message||'无法读取 Nginx 配置';
+  }finally{
+    if(generation===configPreviewGeneration)configPreviewLoading.value=false;
+  }
+},{immediate:true});
+onUnmounted(()=>{configPreviewGeneration++;clearTimeout(noticeTimer);});
 
 async function request(action,input={}){
   const response=await fetch('/api/actions/'+encodeURIComponent(action)+'/execute',{
@@ -150,32 +169,43 @@ function check(){
         <p v-else class="muted config-empty">没有找到站点配置文件</p>
       </section>
       <section v-if="selectedSite" class="config-detail-panel" :aria-label="'网站详情：'+selectedSite.name">
-        <div class="config-detail-heading">
-          <h3>{{ selectedSite.name }}</h3>
-          <button type="button" :disabled="busy" @click="selectedFile=null">收起</button>
-        </div>
-        <div class="config-detail-section">
-          <span class="muted small">域名</span>
-          <span v-for="(domain,index) in domains(selectedSite)" :key="index"
-            class="config-domain">{{ domain }}</span>
-        </div>
-        <div class="config-detail-section">
-          <span class="muted small">状态</span>
-          <span>{{ selectedSite.enabled==='启用链接'?'已启用'
-            :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
-        </div>
-        <div v-if="selectedSite.editable" class="config-actions">
-          <button type="button" :disabled="busy" :aria-label="'编辑 '+selectedSite.name"
-            @click="openEdit(selectedSite)">编辑</button>
-          <button type="button" :disabled="busy" :aria-label="'删除 '+selectedSite.name"
-            @click="ask(selectedSite,'remove')">删除</button>
-        </div>
-        <p v-else class="muted small">此配置仅支持查看，不能直接编辑或删除。</p>
-        <div v-if="operations.certificates && operations.renew" class="config-ssl-section">
+        <section class="config-detail-card config-site-info-card" aria-label="网站基本信息">
+          <div class="config-detail-heading">
+            <h3>{{ selectedSite.name }}</h3>
+            <button type="button" :disabled="busy" @click="selectedFile=null">收起</button>
+          </div>
+          <div class="config-detail-section">
+            <span class="muted small">域名</span>
+            <span v-for="(domain,index) in domains(selectedSite)" :key="index"
+              class="config-domain">{{ domain }}</span>
+          </div>
+          <div class="config-detail-section">
+            <span class="muted small">状态</span>
+            <span>{{ selectedSite.enabled==='启用链接'?'已启用'
+              :selectedSite.enabled==='启用目录'?'已启用'
+              :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
+          </div>
+          <div v-if="selectedSite.editable" class="config-actions">
+            <button type="button" :disabled="busy" :aria-label="'编辑 '+selectedSite.name"
+              @click="openEdit(selectedSite)">编辑</button>
+            <button type="button" :disabled="busy" :aria-label="'删除 '+selectedSite.name"
+              @click="ask(selectedSite,'remove')">删除</button>
+          </div>
+          <p v-else class="muted small">此配置仅支持查看，不能直接编辑或删除。</p>
+        </section>
+        <section class="config-detail-card config-nginx-card" aria-label="Nginx 配置">
+          <h4>Nginx 配置</h4>
+          <p v-if="configPreviewLoading" class="muted small" role="status">正在读取配置…</p>
+          <p v-else-if="configPreviewError" class="error" role="alert">{{ configPreviewError }}</p>
+          <pre v-else-if="configPreview!==null" class="config-nginx-preview"><code>{{ configPreview }}</code></pre>
+          <p v-else class="muted small">尚未读取到配置内容</p>
+        </section>
+        <section v-if="operations.certificates && operations.renew"
+          class="config-detail-card config-ssl-section" aria-label="网站 SSL 证书管理">
           <NginxCertificates :key="selectedSite.file"
             :site-name="selectedSite.name" :site-domains="domains(selectedSite)"
             :operations="operations" :csrf="csrf" @unauthorized="emit('unauthorized')" />
-        </div>
+        </section>
       </section>
     </div>
     <details v-if="listing.warnings?.length" class="config-warnings">
@@ -229,8 +259,8 @@ function check(){
 .config-browser.has-selection{grid-template-columns:minmax(0,17rem) minmax(0,1fr)}
 .config-list-panel{border:1px solid var(--border-panel);border-radius:12px;min-width:0;
   overflow:hidden;background:var(--panel-bg);box-shadow:none;padding:0}
-.config-detail-panel{border:0;border-left:1px solid var(--border-panel);border-radius:0;
-  min-width:0;overflow:visible;background:transparent;box-shadow:none;padding-left:1rem}
+.config-detail-panel{border:0;border-radius:0;min-width:0;overflow:visible;
+  background:transparent;box-shadow:none;padding:0}
 .config-site-list{list-style:none;margin:0;padding:0}
 .config-site-row{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--border,#8885)}
 .config-site-row:last-child{border-bottom:none}
@@ -247,14 +277,22 @@ function check(){
   cursor:pointer;accent-color:var(--accent,#538ad7)}
 .config-status-checkbox:disabled{cursor:not-allowed;opacity:.65}
 .config-empty{padding:1rem;margin:0}
-.config-detail-panel{padding-top:.1rem;padding-right:0;padding-bottom:0;display:grid;gap:1.1rem}
+.config-detail-panel{display:grid;gap:12px;align-content:start}
+.config-detail-card{display:grid;gap:12px;min-width:0;padding:14px;
+  border:1px solid var(--border-panel);border-radius:12px;background:var(--panel-bg)}
+.config-nginx-card h4{margin:0;font-size:1rem;font-weight:600}
+.config-nginx-preview{margin:0;min-width:0;max-height:22rem;overflow:auto;
+  padding:12px;border:1px solid var(--border-rule);border-radius:8px;
+  background:var(--input-bg);color:var(--text-primary);font:inherit;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:.82rem;line-height:1.55;white-space:pre;tab-size:2}
 .config-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:.7rem}
 .config-detail-heading h3{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
 .config-detail-heading button{font:inherit;min-height:2.2rem;padding:.25rem .7rem}
 .config-detail-section{gap:.35rem}
 .config-detail-section .config-domain{font-size:1rem}
 .config-actions{gap:.5rem}
-.config-ssl-section{border-top:1px solid var(--border-panel);padding-top:1rem;min-width:0}
+
 .config-actions button{white-space:nowrap}
 .config-check{padding:.7rem 0}
 .config-check pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:18rem;overflow:auto}
@@ -272,6 +310,6 @@ function check(){
 @media(max-width:900px){
   .config-browser.has-selection{grid-template-columns:minmax(0,1fr)}
   .config-browser{grid-template-columns:minmax(0,1fr)}
-  .config-detail-panel{border-left:0;border-top:1px solid var(--border-panel);padding:1rem 0 0}
+  .config-detail-panel{border:0;padding:0}
 }
 </style>
