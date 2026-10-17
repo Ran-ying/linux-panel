@@ -42,7 +42,7 @@ test('each module owns its Web render configuration separately from Action metad
     assert.ok(action.outputSchema);
   }
   const mcpActions = registry.list('mcp');
-  assert.equal(mcpActions.length, actions.length-24);
+  assert.equal(mcpActions.length, actions.length-23);
   assert.equal(configured.get('system.info').refreshIntervalMs,0);
   assert.ok(configured.get('services.list').clientFilters);
   assert.equal(configured.get('v2ray.status').renderer,'v2ray-manager');
