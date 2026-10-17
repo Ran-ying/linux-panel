@@ -1081,6 +1081,7 @@ try {
         await headerButtons.getByRole('button',{name:'新建网站'}).click();
         await editor.getByRole('button',{name:'可视化'}).waitFor();
         const visual=editor.locator('.config-create-visual');
+        await visual.getByRole('combobox',{name:'监听 IP'}).locator('option[value="192.0.2.41"]').waitFor();
         const choices=await visual.getByRole('combobox',{name:'监听 IP'}).locator('option')
           .evaluateAll(nodes=>nodes.map(node=>node.value));
         assert.ok(choices.includes('0.0.0.0')&&choices.includes('127.0.0.1'));
