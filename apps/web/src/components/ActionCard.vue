@@ -194,6 +194,10 @@ onUnmounted(()=>{
           <option value="">全部</option>
           <option v-for="option in response?.content.result?.[field.optionsKey] ?? []" :key="option" :value="option">{{ option }}</option>
         </select>
+        <input v-else-if="field.type==='number'" :id="'field-'+action.id+'-'+field.key"
+          v-model.number="formInput[field.key]" type="number" :min="action.inputSchema.properties[field.key].minimum"
+          :max="action.inputSchema.properties[field.key].maximum"
+          :disabled="busy" :required="action.inputSchema.required?.includes(field.key)" />
         <input v-else-if="field.type==='text'" :id="'field-'+action.id+'-'+field.key" v-model="formInput[field.key]"
           type="text" :placeholder="field.placeholder" :maxlength="action.inputSchema.properties[field.key].maxLength"
           :required="action.inputSchema.required?.includes(field.key)" :disabled="busy" @keydown.enter.prevent="presentation.clientFilters ? null : run('execute')" />
