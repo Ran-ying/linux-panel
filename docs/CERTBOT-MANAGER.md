@@ -1,9 +1,10 @@
 # Certbot 证书管理与 Nginx TLS 引用
 
-Linux Panel 新增独立 **Certbot 证书管理** 模块：
-- `certbot.list`：读取 `/etc/letsencrypt/renewal/*.conf` 中实际登记的自动续期证书，配合已解析的公开证书有效期与验证方式，并显示系统 `certbot.timer` 的启用和运行状态。
-- `certbot.renew`：管理员在 Web 二次确认后，仅针对登记的证书执行原有受控 Certbot 检查续期，不强制提前签发。成功时按既有 Nginx 校验/重载规则处理。
-- 模块不接管系统计划任务，不自动删除证书、不提供新证书签发功能。
+Linux Panel 将 **Certbot 证书管理** 集成在 **Nginx 网站** 模块的网站列表下方，作为一个独立区域；不再占用侧边栏模块：
+- `nginx.certbotList`：读取 `/etc/letsencrypt/renewal/*.conf` 中实际登记的自动续期证书，配合已解析的公开证书有效期与验证方式，并显示系统 `certbot.timer` 的启用和运行状态。
+- `nginx.certbotRenew`：管理员在 Web 二次确认后，仅针对登记的证书执行原有受控 Certbot 检查续期，不强制提前签发。成功时按既有 Nginx 校验/重载规则处理。
+- 该区域不接管系统计划任务，不自动删除证书、不提供新证书签发功能。
+- Certbot 管理区仅有一个外层圆角卡片；各证书记录使用分隔线，不嵌套圆角边框。网站详情自己的 TLS 证书与私钥显示仍保留，二者不是同一数据源。
 
 原网站内 **SSL 证书管理** 不再按 SAN 域名猜测关联 Certbot 证书。现在：
 - `nginx.siteTls` 只查看所选网站 `/etc/nginx/sites-available/<name>` 文件中直接声明的 `ssl_certificate` / `ssl_certificate_key`，对齐为一组或多组实际引用。
