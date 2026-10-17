@@ -11,6 +11,7 @@ import {V2RAY_CONTRACTS} from './v2ray-contracts.js';
 import {createV2RayOperations} from './v2ray-operations.js';
 import {SERVICE_LOGS_CONTRACT} from './service-log-contracts.js';
 import {createServiceLogOperations} from './service-log-operations.js';
+import {createNginxRenewalReconfigure,NGINX_RECONFIGURE_CONTRACT} from './nginx-renewal-reconfigure.js';
 // Add reviewed built-in handlers here, then explicitly reinstall the root package.
 // Never discover/import modules from the checkout or a Web-writable directory.
 export function createPrivilegedHandlers({privileged=true}={}){
@@ -33,5 +34,9 @@ export function createPrivilegedHandlers({privileged=true}={}){
     handlers.set('v2ray.'+name,{validate:ajv.compile(contract.inputSchema),execute:v2ray[name]});
   const journal=createServiceLogOperations();
   handlers.set('services.logs',{channels:['web','mcp'],validate:ajv.compile(SERVICE_LOGS_CONTRACT.inputSchema),execute:journal.logs});
+  handlers.set('nginx.reconfigureRenewal',{
+    channels:['mcp'],validate:ajv.compile(NGINX_RECONFIGURE_CONTRACT.inputSchema),
+    execute:createNginxRenewalReconfigure().reconfigure
+  });
   return handlers;
 }
