@@ -24,16 +24,17 @@ fi
 git -C "$SRC" fetch -q origin "$PIN"
 git -C "$SRC" checkout -q --detach "$PIN"
 [[ "$(git -C "$SRC" rev-parse HEAD)" == "$PIN" ]] || exit 1
-chown -R root:root "$SRC"
-chmod -R go-w "$SRC"
-
+# Build the upstream Python wheel as its restricted service user, never root.
+# Setuptools may write egg-info to the source tree during the build.
 if [[ ! -x "$SRC/.venv/bin/python" ]]; then
+  chown -R telegrammcp:telegrammcp "$SRC"
   install -d -m 0755 -o telegrammcp -g telegrammcp "$SRC/.venv"
   runuser -u telegrammcp -- python3 -m venv "$SRC/.venv"
   runuser -u telegrammcp -- "$SRC/.venv/bin/python" -m pip install --disable-pip-version-check --no-cache-dir "$SRC"
-  chown -R root:root "$SRC/.venv"
-  chmod -R go-w "$SRC/.venv"
 fi
+# After the build, freeze both source and venv against runtime modifications.
+chown -R root:root "$SRC"
+chmod -R go-w "$SRC"
 
 if [[ ! -e "$CONF" ]]; then
   cat > "$CONF" <<'ENV'
@@ -43,7 +44,7 @@ TELEGRAM_API_HASH=
 TELEGRAM_SESSION_STRING=
 TELEGRAM_ALLOWED_CHAT_IDS=@replace_with_bot_username
 TELEGRAM_EXPOSED_TOOLS=read-only+send_message,press_inline_button
-TELEGRAM_TRANSCRIBE=off
+TELEGRAM_TRANSCRIBE_ENGINE=off
 TELEGRAM_DEVICE_MODEL=LinuxPanel-Telegram-MCP
 MCP_TRANSPORT=http
 MCP_HOST=127.0.0.1
