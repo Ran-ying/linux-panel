@@ -74,7 +74,7 @@ test('Certbot inventories only renewal profiles, never reads private key',async 
 });
 test('private TLS read and Certbot renewal remain Web-only in registry and root IPC',async()=>{
   const handlers=createPrivilegedHandlers({privileged:false});
-  for(const id of ['nginx.siteTls','nginx.siteTlsKey','nginx.certbotList','nginx.certbotRenew']){
+  for(const id of ['nginx.siteTls','nginx.siteTlsKey','nginx.saveTls','nginx.certbotList','nginx.certbotRenew']){
     await assert.rejects(dispatchPrivileged({version:1,channel:'mcp',action:id,input:{}},handlers),{statusCode:403});
   }
   const registry=new ActionRegistry();
@@ -87,4 +87,59 @@ test('private TLS read and Certbot renewal remain Web-only in registry and root 
   await assert.rejects(engine.run('nginx.siteTlsKey',request,'web',{}),{statusCode:403});
   await assert.rejects(engine.run('nginx.siteTlsKey',request,'mcp',
     {authenticated:true,channel:'mcp',userId:'owner'}),{statusCode:404});
+});
+
+
+test('PEM save uses CAS, paired validation and does not modify files before Nginx verification',async t=>{
+  const f=await fixture(t);
+  const seen=[];
+  let nginxPass=true,reloadPass=true;
+  const ops=createNginxTlsOperations({root:f.root,requireRoot:false,roots:[f.ssl],
+    run:async(binary,args)=>{
+      seen.push(binary+' '+args.join(' '));
+      if(binary==='/usr/sbin/nginx'&&!nginxPass)throw new Error('private diagnostic');
+      if(binary==='/bin/systemctl'&&args[0]==='reload'&&!reloadPass)throw new Error('private diagnostic');
+      return {stdout:'active\n'};
+    }});
+  const before=(await ops.siteTls({name:'fixture.test'})).pairs[0];
+  assert.match(before.revision,/^[a-f0-9]{64}$/);
+  const key=(await ops.siteTlsKey({name:'fixture.test',index:0})).privatePem;
+  const noop=await ops.saveTls({name:'fixture.test',index:0,revision:before.revision,
+    certificatePem:before.certificatePem,privatePem:key,updateCertificate:true,updatePrivateKey:false});
+  assert.equal(noop.ok,true);assert.equal(noop.reloaded,false);
+  assert.equal(seen.length,0);
+  await assert.rejects(ops.saveTls({name:'fixture.test',index:0,revision:'f'.repeat(64),
+    certificatePem:before.certificatePem,privatePem:key,updateCertificate:true,updatePrivateKey:false}),{statusCode:409});
+  await assert.rejects(ops.saveTls({name:'fixture.test',index:0,revision:before.revision,
+    certificatePem:before.certificatePem,privatePem:'INVALID PRIVATE KEY',
+    updateCertificate:false,updatePrivateKey:true}),{statusCode:422});
+  assert.equal((await readFile(f.key,'utf8')),key,'invalid key never writes');
+  const cert2=join(f.ssl,'fresh-cert.pem'),key2=join(f.ssl,'fresh-key.pem');
+  execFileSync('openssl',['req','-newkey','rsa:2048','-x509','-nodes','-days','2',
+    '-subj','/CN=fixture.test','-keyout',key2,'-out',cert2],{stdio:'ignore'});
+  const certText=await readFile(cert2,'utf8'),keyText=await readFile(key2,'utf8');
+  nginxPass=false;
+  await assert.rejects(ops.saveTls({name:'fixture.test',index:0,revision:before.revision,
+    certificatePem:certText,privatePem:keyText,updateCertificate:true,updatePrivateKey:true}),
+    {statusCode:422});
+  assert.equal(await readFile(f.cert,'utf8'),before.certificatePem,'failed Nginx test rolls back cert');
+  assert.equal(await readFile(f.key,'utf8'),key,'failed Nginx test rolls back key');
+  nginxPass=true;
+  const result=await ops.saveTls({name:'fixture.test',index:0,revision:before.revision,
+    certificatePem:certText,privatePem:keyText,updateCertificate:true,updatePrivateKey:true});
+  assert.equal(result.ok,true);assert.equal(result.reloaded,true);
+  assert.notEqual(result.revision,before.revision);
+  assert.equal(await readFile(f.cert,'utf8'),certText);
+  assert.equal(await readFile(f.key,'utf8'),keyText);
+  await assert.rejects(ops.saveTls({name:'fixture.test',index:0,revision:before.revision,
+    certificatePem:certText,privatePem:keyText,updateCertificate:true,updatePrivateKey:true}),{statusCode:409});
+  assert.ok(seen.some(cmd=>cmd.startsWith('/usr/sbin/nginx -t')));
+  assert.ok(seen.some(cmd=>cmd.startsWith('/bin/systemctl reload nginx.service')));
+  // On a second rotation, reload failure must restore the previously saved pair.
+  const revised=(await ops.siteTls({name:'fixture.test'})).pairs[0];
+  reloadPass=false;
+  await assert.rejects(ops.saveTls({name:'fixture.test',index:0,revision:revised.revision,
+    certificatePem:before.certificatePem,privatePem:key,updateCertificate:true,updatePrivateKey:true}),{statusCode:422});
+  assert.equal(await readFile(f.cert,'utf8'),certText);
+  assert.equal(await readFile(f.key,'utf8'),keyText);
 });
