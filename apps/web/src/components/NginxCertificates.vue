@@ -63,9 +63,13 @@ async function togglePrivate(index){
     <div v-for="(pair,index) in data.pairs" :key="index" class="nginx-tls-pair">
       <div class="nginx-tls-columns">
         <div class="nginx-tls-column">
-          <div class="nginx-tls-column-heading"><strong>公钥 / 公有证书</strong></div>
+          <div class="nginx-tls-column-heading"><strong>公钥</strong></div>
           <p class="nginx-tls-path">{{ pair.certificatePath }}</p>
           <pre v-if="pair.publicPem" class="nginx-tls-pem">{{ pair.publicPem }}</pre>
+          <details v-if="pair.certificatePem" class="nginx-tls-certificate-details">
+            <summary>查看公有证书 PEM</summary>
+            <pre class="nginx-tls-pem">{{ pair.certificatePem }}</pre>
+          </details>
           <p v-else class="muted small">{{ pair.status }}</p>
         </div>
         <div class="nginx-tls-column nginx-tls-private">
