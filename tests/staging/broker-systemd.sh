@@ -268,6 +268,14 @@ queue 11111111111111111111111111111111 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 wait_result 11111111111111111111111111111111 failed
 [[ "$(head_now)" == "$OLD" ]] || fail 'Wrong SHA changed checkout'
 healthy || fail 'Wrong SHA broke panel'
+[[ "$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+  -C "$ROOT" cat-file -t "$acl_probe_sha")" == blob ]] ||
+  fail 'Post-fetch ACL repair did not make 0400 object readable'
+# Inject the same restrictive mode again so rollback separately proves repair.
+runuser -u linuxpanel-updater -- chmod 0400 "$acl_probe_path"
+! runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+  -C "$ROOT" cat-file -t "$acl_probe_sha" >/dev/null 2>&1 ||
+  fail 'Pre-rollback ACL fault injection unexpectedly readable'
 
 note 'Case 2: actual npm test failure causes real Git rollback and Web restart'
 touch /var/lib/linux-panel-updater/STAGE_FAIL_NPM_TEST_ONCE
