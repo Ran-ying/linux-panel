@@ -77,8 +77,11 @@ try {
     let nginxRunning=true,nginxAutostart=true;
     const nginxToggleActions=[],nginxServiceActions=[],nginxRenewActions=[];
     let nginxCertificateReads=0,nginxPrivateReads=0;
+    const tlsSaves=[];let tlsRevision='a'.repeat(64);
     const publicFixture='-----BEGIN PUBLIC KEY-----\nPUBLIC FIXTURE\n-----END PUBLIC KEY-----\n';
     const privateFixture='-----BEGIN PRIVATE KEY-----\nPRIVATE FIXTURE\n-----END PRIVATE KEY-----\n';
+    let currentCert='-----BEGIN CERTIFICATE-----\nCERTIFICATE FIXTURE\n-----END CERTIFICATE-----\n';
+    let currentKey=privateFixture;
     const certFixture={name:'fixture.test',domains:['fixture.test','www.fixture.test'],
       issuer:'CN=Fixture CA',validFrom:'2026-09-01T00:00:00.000Z',
       validTo:'2026-12-01T00:00:00.000Z',daysRemaining:45,status:'valid',
@@ -101,12 +104,18 @@ try {
         data={name:input.name,pairs:input.name==='unrelated-site'?[]:[{
           certificatePath:'/etc/letsencrypt/live/fixture.test/fullchain.pem',
           privateKeyPath:'/etc/letsencrypt/live/fixture.test/privkey.pem',
-          publicPem:publicFixture,certificatePem:'-----BEGIN CERTIFICATE-----\nCERTIFICATE FIXTURE\n-----END CERTIFICATE-----\n',
+          publicPem:publicFixture,certificatePem:currentCert,revision:tlsRevision,
           privateKeyConfigured:true,status:'已配置'
         }],warnings:[]};
       }else if(id==='nginx.siteTlsKey'){
         nginxPrivateReads++;
-        data={name:input.name,index:input.index,privatePem:privateFixture};
+        data={name:input.name,index:input.index,privatePem:currentKey};
+      }else if(id==='nginx.saveTls'){
+        tlsSaves.push(input);
+        if(input.updateCertificate)currentCert=input.certificatePem;
+        if(input.updatePrivateKey)currentKey=input.privatePem;
+        tlsRevision='b'.repeat(64);
+        data={name:input.name,index:input.index,ok:true,status:'证书已保存并重新加载',revision:tlsRevision,reloaded:true};
       }else if(id==='nginx.status')data={installed:true,version:'nginx/1.24.0',
         active:nginxRunning,enabled:nginxAutostart,state:nginxRunning?'active':'inactive',
         subState:nginxRunning?'running':'dead',configOk:nginxSyntaxGood};
@@ -338,9 +347,17 @@ try {
           name+': all command buttons must share the compact 32px pill appearance');
       }
       if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
-        const area=page.getByRole('region',{name:'Certbot 证书管理'});
-        await area.waitFor();
-        const certbot=area.locator('.certbot-manager');
+        const certbot=page.locator('.certbot-manager');
+        const certAction=page.locator('.action-card:has(.certbot-manager)');
+        const siteAction=page.locator('.action-card:has(.managed-configs)');
+        assert.equal(await siteAction.locator('.certbot-manager').count(),0,
+          'Certbot is a peer Action, not a child of Nginx website manager');
+        assert.equal(await certAction.count(),1);
+        const siblingPositions=await Promise.all([siteAction,certAction].map(el=>el.evaluate(node=>({
+          top:node.getBoundingClientRect().top,left:node.getBoundingClientRect().left}))));
+        assert.ok(siblingPositions[1].top>siblingPositions[0].top);
+        assert.ok(Math.abs(siblingPositions[1].left-siblingPositions[0].left)<2);
+        const area=certAction;
         assert.equal(await area.locator('.certbot-record').count(),1);
         const borderCheck=await area.locator('.certbot-record').evaluate(node=>{
           const css=getComputedStyle(node);
@@ -826,50 +843,65 @@ try {
           'long Nginx configs need horizontal scrolling rather than viewport overflow');
         assert.notEqual(configPreviewStyle.background,'rgba(0, 0, 0, 0)');
         const certPanel=manager.getByRole('region',{name:'SSL 证书管理：fixture-site'});
-        await certPanel.getByText('公钥',{exact:true}).waitFor();
-        await certPanel.getByText('PUBLIC FIXTURE',{exact:false}).waitFor();
+        const certEditor=certPanel.getByRole('textbox',{name:'CERTIFICATE 1'});
+        const keyEditor=certPanel.getByRole('textbox',{name:'PRIVATE KEY 1'});
+        await certEditor.waitFor();
+        await keyEditor.waitFor();
+        await page.waitForFunction(()=>document.querySelector('textarea[aria-label="PRIVATE KEY 1"]')?.value.includes('PRIVATE FIXTURE'));
+        assert.equal(await certEditor.inputValue(),currentCert,'show full CERTIFICATE, not PUBLIC KEY');
+        assert.equal(await keyEditor.inputValue(),currentKey,'normally display private key without Reveal click');
+        assert.equal(nginxPrivateReads,1,'automatically read private key for authenticated Web detail');
         const certShell=detailCards.nth(2);
         const sslOuter=await certShell.evaluate(node=>{
           const css=getComputedStyle(node);
           return {border:css.borderTopWidth,radius:parseFloat(css.borderTopLeftRadius)};
         });
-        assert.equal(sslOuter.border,'1px');
-        assert.ok(sslOuter.radius>=12);
+        assert.equal(sslOuter.border,'1px');assert.ok(sslOuter.radius>=12);
         const inner=await certShell.locator('.nginx-certificates').evaluate(node=>{
           const css=getComputedStyle(node);
           return {border:css.borderTopWidth,padding:css.padding,
             background:css.backgroundColor,shadow:css.boxShadow};
         });
-        assert.equal(inner.border,'0px');
-        assert.equal(inner.padding,'0px');
-        assert.equal(inner.background,'rgba(0, 0, 0, 0)');
-        assert.equal(inner.shadow,'none');
+        assert.equal(inner.border,'0px');assert.equal(inner.padding,'0px');
+        assert.equal(inner.background,'rgba(0, 0, 0, 0)');assert.equal(inner.shadow,'none');
         const sides=certPanel.locator('.nginx-tls-column');
-        assert.equal(await sides.count(),2,'exactly two side-by-side TLS halves');
+        assert.equal(await sides.count(),2);
         const grid=await certPanel.locator('.nginx-tls-columns').evaluate(node=>{
           const css=getComputedStyle(node),a=node.children[0].getBoundingClientRect(),
             b=node.children[1].getBoundingClientRect();
           return {gap:css.columnGap,firstWidth:a.width,secondWidth:b.width,
             firstRight:a.right,secondLeft:b.left,firstTop:a.top,secondTop:b.top};
         });
-        assert.equal(grid.gap,'0px','no gap between public/private halves');
+        assert.equal(grid.gap,'0px');
         assert.ok(Math.abs(grid.firstWidth-grid.secondWidth)<=1);
         assert.ok(Math.abs(grid.firstRight-grid.secondLeft)<=1);
         assert.ok(Math.abs(grid.firstTop-grid.secondTop)<=1);
-        assert.equal(nginxPrivateReads,0,'private key must never be fetched on render');
-        assert.equal(await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).count(),0);
-        await certPanel.getByRole('button',{name:'显示私钥 1'}).click();
-        await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).waitFor();
-        assert.equal(nginxPrivateReads,1,'key loaded only after explicit click');
-        await certPanel.getByRole('button',{name:'隐藏私钥 1'}).click();
-        assert.equal(await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).count(),0);
-        await certPanel.getByRole('button',{name:'显示私钥 1'}).click();
-        await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).waitFor();
+        assert.equal(await sides.nth(0).locator('.nginx-tls-path').innerText(),
+          '/etc/letsencrypt/live/fixture.test/fullchain.pem');
+        assert.equal(await sides.nth(1).locator('.nginx-tls-path').innerText(),
+          '/etc/letsencrypt/live/fixture.test/privkey.pem');
+        assert.equal(await certPanel.getByRole('button',{name:'保存',exact:true}).count(),2);
+        const draftCertificate=currentCert+'\n';
+        await certEditor.fill(draftCertificate);
+        assert.equal(tlsSaves.length,0,'typing must not write before Save');
+        await sides.nth(0).getByRole('button',{name:'保存'}).click();
+        await certPanel.getByText('证书已保存并重新加载').waitFor();
+        assert.equal(tlsSaves.length,1);
+        assert.equal(tlsSaves[0].updateCertificate,true);
+        assert.equal(tlsSaves[0].updatePrivateKey,false);
+        assert.equal(tlsSaves[0].revision,'a'.repeat(64));
+        assert.equal(await certEditor.inputValue(),draftCertificate);
+        const draftKey=currentKey+'\n';
+        await keyEditor.fill(draftKey);
+        await sides.nth(1).getByRole('button',{name:'保存'}).click();
+        await certPanel.getByText('证书已保存并重新加载').waitFor();
+        assert.equal(tlsSaves.length,2);
+        assert.equal(tlsSaves[1].updateCertificate,false);
+        assert.equal(tlsSaves[1].updatePrivateKey,true);
+        assert.equal(tlsSaves[1].revision,'b'.repeat(64));
         await certPanel.getByRole('button',{name:'刷新证书'}).click();
-        await certPanel.getByText('PUBLIC FIXTURE',{exact:false}).waitFor();
-        assert.equal(await certPanel.getByText('PRIVATE FIXTURE',{exact:false}).count(),0,
-          'refresh immediately clears previously displayed key');
-        assert.equal(nginxCertificateReads,2);
+        await page.waitForFunction(()=>document.querySelector('textarea[aria-label="PRIVATE KEY 1"]')?.value.includes('PRIVATE FIXTURE'));
+        assert.equal(await keyEditor.inputValue(),draftKey);
         const addDomain=siteInfo.getByRole('button',{name:'添加域名'});
         await addDomain.click();
         const domainInput=siteInfo.getByRole('textbox',{name:'新域名'});
