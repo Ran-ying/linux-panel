@@ -184,6 +184,20 @@ assert_web_git_acl "$TARGET"
 # for the actual Broker fast-forward without touching installed root artifacts.
 runuser -u linuxpanel-updater -- git -C "$ROOT" reset --hard "$OLD"
 assert_web_git_acl "$OLD"
+# Create an actual Git blob with the failure mode observed on the VPS:
+# an updater-owned object whose effective group mask is deliberately 0.
+# A ref-only assertion cannot distinguish this from a working object store.
+acl_probe_sha="$(printf 'stage-object-acl-%s\\n' "$TARGET" |
+  runuser -u linuxpanel-updater -- sh -c 'umask 077; git -C /opt/linux-panel hash-object -w --stdin')" ||
+  fail 'Could not create restrictive Git object fixture'
+acl_probe_path="$ROOT/.git/objects/${acl_probe_sha:0:2}/${acl_probe_sha:2}"
+[[ -f "$acl_probe_path" ]] || fail 'Expected a newly created loose Git blob'
+runuser -u linuxpanel-updater -- chmod 0400 "$acl_probe_path"
+if runuser -u linuxpanel -- git -c "safe.directory=$ROOT" -C "$ROOT" \
+    cat-file -t "$acl_probe_sha" >/dev/null 2>&1;then
+  fail 'ACL fault injection unexpectedly still readable as Web'
+fi
+note 'Injected real 0400 loose Git object, unreadable to Web'
 # Reproduce the exact live outage from 2026-10-15. A restrictive Git
 # checkout leaves the package manifest / API source unreadable by the Web UID.
 # The root Broker must repair this BEFORE it restarts the panel, on normal
@@ -265,6 +279,11 @@ wait_result 22222222222222222222222222222222 rolled_back
 wait_healthy || fail 'Rollback did not restore Web'
 assert_web_runtime  # Detect mode regressions after rollback npm ci.
 assert_web_git_acl "$OLD"  # Objects from the fetched target stay Web-readable.
+[[ "$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+  -C "$ROOT" cat-file -t "$acl_probe_sha")" == blob ]] ||
+  fail 'Updated Broker did not repair injected unreadable loose object'
+! runuser -u linuxpanel -- test -w "$acl_probe_path" ||
+  fail 'Git object ACL repair gave Web write access'
 [[ -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-22222222222222222222222222222222" ]] ||
  fail 'Per-request backup missing'
 
