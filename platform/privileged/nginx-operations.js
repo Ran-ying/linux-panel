@@ -320,7 +320,7 @@ export function createNginxOperations({
         const end=Date.parse(certificate.validTo),start=Date.parse(certificate.validFrom);
         if(!Number.isFinite(end)||!Number.isFinite(start))throw Error('证书日期不可解析');
         const daysRemaining=Math.ceil((end-today)/86400000);
-        const domains=[...new Set([...certificate.subjectAltName.matchAll(/DNS:([^,]+)/g)]
+        const domains=[...new Set([...(certificate.subjectAltName??'').matchAll(/DNS:([^,]+)/g)]
           .map(m=>m[1].trim()).filter(Boolean))].slice(0,32);
         certificates.push({name,domains,issuer:certificate.issuer.slice(0,500),
           validFrom:new Date(start).toISOString(),validTo:new Date(end).toISOString(),
