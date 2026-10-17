@@ -3,5 +3,6 @@
   "name": "Certbot 证书管理",
   "version": "0.1.0",
   "entry": "./index.js",
-  "dependencies": []
+  "dependencies": [],
+  "navigationOrder": 999999
 }
