@@ -1,5 +1,6 @@
 <script setup>
 import {ref,computed,watch,onUnmounted} from 'vue';
+import NginxCertificates from './NginxCertificates.vue';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true},
@@ -170,6 +171,11 @@ function check(){
             @click="ask(selectedSite,'remove')">删除</button>
         </div>
         <p v-else class="muted small">此配置仅支持查看，不能直接编辑或删除。</p>
+        <div v-if="operations.certificates && operations.renew" class="config-ssl-section">
+          <NginxCertificates :key="selectedSite.file"
+            :site-name="selectedSite.name" :site-domains="domains(selectedSite)"
+            :operations="operations" :csrf="csrf" @unauthorized="emit('unauthorized')" />
+        </div>
       </section>
     </div>
     <details v-if="listing.warnings?.length" class="config-warnings">
@@ -248,6 +254,7 @@ function check(){
 .config-detail-section{gap:.35rem}
 .config-detail-section .config-domain{font-size:1rem}
 .config-actions{gap:.5rem}
+.config-ssl-section{border-top:1px solid var(--border-panel);padding-top:1rem;min-width:0}
 .config-actions button{white-space:nowrap}
 .config-check{padding:.7rem 0}
 .config-check pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:18rem;overflow:auto}
