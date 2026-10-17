@@ -72,12 +72,13 @@ export function createNginxTlsOperations({root='/etc/nginx',requireRoot=true,roo
     const refs=await reference(name),pairs=[],warnings=[];
     for(const ref of refs){
       try{
-        const publicPem=await fileRead(ref.certificatePath);
+        const certificatePem=await fileRead(ref.certificatePath);
+        const publicPem=new X509Certificate(certificatePem).publicKey.export({format:'pem',type:'spki'});
         pairs.push({certificatePath:ref.certificatePath,privateKeyPath:ref.privateKeyPath,
-          publicPem,privateKeyConfigured:!!ref.privateKeyPath,status:'已配置'});
+          publicPem,certificatePem,privateKeyConfigured:!!ref.privateKeyPath,status:'已配置'});
       }catch(e){
         warnings.push('证书路径不能读取或解析：'+e.message.slice(0,150));
-        pairs.push({...ref,publicPem:'',privateKeyConfigured:!!ref.privateKeyPath,status:'无法读取或解析公有证书'});
+        pairs.push({...ref,publicPem:'',certificatePem:'',privateKeyConfigured:!!ref.privateKeyPath,status:'无法读取或解析公有证书'});
       }
     }
     if(!refs.length)warnings.push('此 Nginx 站点文件没有直接声明 ssl_certificate；可能通过 include 或上层配置继承。');
