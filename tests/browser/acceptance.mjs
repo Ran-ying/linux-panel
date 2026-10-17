@@ -207,9 +207,9 @@ try {
           }));
         for(const select of selects){
           assert.equal(select.appearance,'none',name+': native select appearance');
-          assert.match(select.right,/26px/,name+': chevron right inset');
+          assert.match(select.right,/14px/,name+': chevron right inset');
           assert.match(select.image,/data:image\/svg\+xml/,name+': chevron icon');
-          assert.equal(select.padding,'50px',name+': text clearing');
+          assert.equal(select.padding,'34px',name+': text clearing');
         }
       }
       if(name.trim()==='系统概览'){
@@ -817,9 +817,9 @@ try {
             image:css.backgroundImage,padding:css.paddingRight,pseudoContent:pseudo.content};
         });
         assert.equal(selectArrow.appearance,'none');
-        assert.match(selectArrow.position,/26px/,'chevron must sit 26px from the right edge');
+        assert.match(selectArrow.position,/14px/,'chevron right inset should match its vertical margin');
         assert.match(selectArrow.image,/data:image\/svg\+xml/);
-        assert.equal(selectArrow.padding,'50px','select text needs room before the arrow');
+        assert.equal(selectArrow.padding,'34px','select text needs room before the arrow');
         assert.ok(!selectArrow.pseudoContent||selectArrow.pseudoContent==='none',
           'file dialogs should not draw a duplicate select chevron');
         await permissions.getByRole('button',{name:'保存',exact:true}).click();
@@ -1112,9 +1112,32 @@ try {
             image:css.backgroundImage,padding:css.paddingRight};
         });
         assert.equal(routeChevron.appearance,'none');
-        assert.match(routeChevron.position,/26px/);
+        assert.match(routeChevron.position,/14px/);
         assert.match(routeChevron.image,/data:image\/svg\+xml/);
-        assert.equal(routeChevron.padding,'50px');
+        assert.equal(routeChevron.padding,'34px');
+        const ipField=inboundVisual.locator('.v2ray-routing-ip-field');
+        const ipGeometry=await ipField.evaluate(label=>{
+          const grid=label.parentElement;
+          const fieldRect=label.getBoundingClientRect();
+          const gridRect=grid.getBoundingClientRect();
+          const textbox=label.querySelector('textarea').getBoundingClientRect();
+          return {
+            isLast:grid.lastElementChild===label,
+            gridColumn:getComputedStyle(label).gridColumn,
+            left:fieldRect.left,right:fieldRect.right,
+            gridLeft:gridRect.left,gridRight:gridRect.right,
+            textareaWidth:textbox.width,fieldWidth:fieldRect.width
+          };
+        });
+        assert.equal(ipGeometry.isLast,true,'IP criteria must be the final routing form field');
+        assert.equal(ipGeometry.gridColumn,'1 / -1','IP criteria must span all grid columns');
+        assert.ok(Math.abs(ipGeometry.left-ipGeometry.gridLeft)<2 &&
+          Math.abs(ipGeometry.right-ipGeometry.gridRight)<2,
+          'IP criteria must fill the available routing editor width');
+        assert.ok(Math.abs(ipGeometry.textareaWidth-ipGeometry.fieldWidth)<2,
+          'IP condition textarea must occupy 100% of its field');
+        await ipField.locator('textarea').fill('geoip:private\\n10.0.0.0/8');
+        await ipField.locator('textarea').press('Tab');
         await inboundVisual.getByRole('textbox',{name:'域名条件'}).fill('domain:one.test\ndomain:two.test');
         await inboundVisual.getByRole('textbox',{name:'域名条件'}).press('Tab');
         await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
@@ -1122,6 +1145,8 @@ try {
         const routingCandidate=JSON.parse(await visualJson.inputValue());
         assert.deepEqual(routingCandidate.rules[0].domain,['domain:one.test','domain:two.test'],
           'visual routing must produce a real JSON rules array');
+        assert.deepEqual(routingCandidate.rules[0].ip,['geoip:private','10.0.0.0/8'],
+          'full-width IP criteria must still roundtrip as the original JSON array');
         assert.deepEqual(routingCandidate.rules[0].inboundTag,['json-changed']);
         assert.equal(routingCandidate.rules[0].outboundTag,'direct');
         // Preserve existing multi-tag conditions and orphaned/custom tag names.
