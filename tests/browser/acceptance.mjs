@@ -1194,6 +1194,14 @@ try {
         assert.deepEqual(optionsBefore,
           ['','balancerTag','port','network','source','domain','protocol','ip'],
           'Add condition must offer all supported optional fields');
+        const outboundSelect=routeEntry.getByRole('combobox',{name:'目标出站标签'});
+        await outboundSelect.selectOption('direct');
+        assert.deepEqual(await outboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value)),
+          ['','direct'],'route destinations must come from the current outbounds');
+        await routeEntry.getByRole('button',{name:'添加入站标签'}).click();
+        const inboundSelect=routeEntry.getByRole('combobox',{name:'入站标签 1'});
+        await inboundSelect.selectOption('json-changed');
+        assert.ok((await inboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value))).includes('json-changed'));
         const routeTypography=await routeFields.evaluate(grid=>{
           const titleNodes=[grid.querySelector(':scope > label:first-child > span'),
             grid.querySelector(':scope > .v2ray-routing-tags > span:first-child'),
@@ -1210,14 +1218,6 @@ try {
           'type, inbound and outbound labels must all have matching bold weight');
         assert.deepEqual(routeTypography.values,['400','400','400'],
           'type, inbound and outbound field values must all use regular weight');
-        const outboundSelect=routeEntry.getByRole('combobox',{name:'目标出站标签'});
-        await outboundSelect.selectOption('direct');
-        assert.deepEqual(await outboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value)),
-          ['','direct'],'route destinations must come from the current outbounds');
-        await routeEntry.getByRole('button',{name:'添加入站标签'}).click();
-        const inboundSelect=routeEntry.getByRole('combobox',{name:'入站标签 1'});
-        await inboundSelect.selectOption('json-changed');
-        assert.ok((await inboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value))).includes('json-changed'));
         const baseFieldGeometry=await routeFields.evaluate(grid=>{
           const type=grid.querySelector(':scope > label:first-child');
           const inbound=grid.querySelector(':scope > .v2ray-routing-tags');
