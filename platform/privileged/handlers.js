@@ -9,6 +9,8 @@ import {NGINX_UNIT_CONTRACT} from './nginx-unit-contracts.js';
 import {createNginxUnitOperations} from './nginx-unit-operations.js';
 import {V2RAY_CONTRACTS} from './v2ray-contracts.js';
 import {createV2RayOperations} from './v2ray-operations.js';
+import {SERVICE_LOGS_CONTRACT} from './service-log-contracts.js';
+import {createServiceLogOperations} from './service-log-operations.js';
 // Add reviewed built-in handlers here, then explicitly reinstall the root package.
 // Never discover/import modules from the checkout or a Web-writable directory.
 export function createPrivilegedHandlers({privileged=true}={}){
@@ -29,5 +31,7 @@ export function createPrivilegedHandlers({privileged=true}={}){
   const v2ray=createV2RayOperations({requireRoot:privileged});
   for(const [name,contract] of Object.entries(V2RAY_CONTRACTS))
     handlers.set('v2ray.'+name,{validate:ajv.compile(contract.inputSchema),execute:v2ray[name]});
+  const journal=createServiceLogOperations();
+  handlers.set('services.logs',{channels:['web','mcp'],validate:ajv.compile(SERVICE_LOGS_CONTRACT.inputSchema),execute:journal.logs});
   return handlers;
 }
