@@ -62,4 +62,15 @@ export default [
       }
     ]
   }
+  ,{
+    "actionId":"services.logs",
+    "renderer":"logs",
+    "loadOnEnter":false,
+    "inputsLabel":"日志查询",
+    "inputs":[
+      {"key":"unit","label":"systemd 服务","type":"text","placeholder":"例如 certbot.service"},
+      {"key":"lines","label":"最近行数","type":"number"}
+    ],
+    "refreshIntervalMs":0
+  }
 ];
