@@ -92,7 +92,12 @@ try {
       const input=route.request().postDataJSON()?.input??{};
       let data,status=200;
       const target=nginxSites.find(site=>site.name===input.name);
-      if(id==='nginx.certbotList'){
+      if(id==='nginx.listenAddresses'){
+        data={addresses:[{address:'0.0.0.0',interface:'所有 IPv4 接口'},
+          {address:'127.0.0.1',interface:'本机回环'},
+          {address:'192.0.2.41',interface:'eth0'},
+          {address:'10.77.0.1',interface:'wg0'}]};
+      }else if(id==='nginx.certbotList'){
         data={installed:true,timerActive:true,timerEnabled:true,count:1,certificates:[{
           name:'fixture.test',domains:['fixture.test'],authenticator:'nginx',
           validTo:'2026-12-01T00:00:00.000Z',daysRemaining:45,status:'valid'}],warnings:[]};
@@ -683,7 +688,8 @@ try {
         assert.equal(siteListStyle.border,'1px','the website list itself needs a border');
         assert.equal(siteListStyle.radius,'12px','the website list itself must be rounded');
         await headerButtons.getByRole('button',{name:'新建网站'}).click();
-        const editor=page.getByRole('dialog',{name:'新建网站配置'});
+        const editor=page.getByRole('dialog',{name:'新建网站'});
+        await editor.getByRole('button',{name:'Nginx 配置'}).click();
         await editor.getByRole('textbox',{name:'配置文件名'}).fill('fixture-site');
         await editor.getByRole('textbox',{name:'Nginx 配置内容'})
           .fill('server { listen 80; server_name fixture.test www.fixture.test; }');
@@ -1055,6 +1061,7 @@ try {
         assert.equal(await details.count(),0,'removing the selected site must close the details pane');
         assert.equal(await manager.locator('.nginx-certificates').count(),0);
         await headerButtons.getByRole('button',{name:'新建网站'}).click();
+        await editor.getByRole('button',{name:'Nginx 配置'}).click();
         await editor.getByRole('textbox',{name:'配置文件名'}).fill('unrelated-site');
         await editor.getByRole('textbox',{name:'Nginx 配置内容'})
           .fill('server { listen 80; server_name no-match.example.test; }');
@@ -1068,6 +1075,49 @@ try {
         await manager.getByRole('region',{name:'Nginx 配置'})
           .getByText('server { listen 80; server_name no-match.example.test; }').waitFor();
         await page.screenshot({path:join(output,'nginx-manager-'+width+'.png'),fullPage:true});
+
+        // Visual first-class workflow: reverse proxy, real server listen IP,
+        // raw config independence, and static document root condition.
+        await headerButtons.getByRole('button',{name:'新建网站'}).click();
+        await editor.getByRole('button',{name:'可视化'}).waitFor();
+        const visual=editor.locator('.config-create-visual');
+        const choices=await visual.getByRole('combobox',{name:'监听 IP'}).locator('option')
+          .evaluateAll(nodes=>nodes.map(node=>node.value));
+        assert.ok(choices.includes('0.0.0.0')&&choices.includes('127.0.0.1'));
+        assert.ok(choices.includes('192.0.2.41')&&choices.includes('10.77.0.1'));
+        assert.equal(choices.includes('198.51.100.56'),false,'unknown IP must not be offered');
+        await visual.getByRole('textbox',{name:'监听域名或公网 IP'}).fill('proxy.example.test, 198.51.100.42');
+        await visual.getByRole('combobox',{name:'监听 IP'}).selectOption('192.0.2.41');
+        await visual.getByRole('spinbutton',{name:'监听端口'}).fill('8081');
+        await visual.getByRole('combobox',{name:'网站类型'}).selectOption('proxy');
+        assert.equal(await visual.getByRole('textbox',{name:'静态网站目录'}).count(),0);
+        await visual.getByRole('textbox',{name:'反向代理目标地址'}).fill('http://127.0.0.1:3000');
+        await page.screenshot({path:join(output,'nginx-visual-proxy-'+width+'.png'),fullPage:true});
+        await editor.getByRole('button',{name:'保存配置'}).click();
+        const proxyWebsite=manager.getByRole('button',{name:'查看网站 proxy.example.test'});
+        await proxyWebsite.waitFor();
+        await proxyWebsite.click();
+        const proxyConfig=await manager.getByRole('region',{name:'Nginx 配置'})
+          .locator('.config-nginx-preview').innerText();
+        assert.match(proxyConfig,/listen 192\.0\.2\.41:8081;/);
+        assert.match(proxyConfig,/server_name proxy\.example\.test 198\.51\.100\.42;/);
+        assert.match(proxyConfig,/proxy_pass http:\/\/127\.0\.0\.1:3000;/);
+        assert.doesNotMatch(proxyConfig,/\broot\s+/);
+        assert.equal(await manager.getByRole('checkbox',{name:'启用状态：proxy.example.test'}).isChecked(),
+          false,'visual-created Nginx site must start disabled');
+        await headerButtons.getByRole('button',{name:'新建网站'}).click();
+        await visual.getByRole('textbox',{name:'监听域名或公网 IP'}).fill('static.example.test');
+        await visual.getByRole('combobox',{name:'网站类型'}).selectOption('static');
+        assert.equal(await visual.getByRole('textbox',{name:'反向代理目标地址'}).count(),0);
+        await visual.getByRole('textbox',{name:'静态网站目录'}).fill('/srv/www/htdocs');
+        await editor.getByRole('button',{name:'保存配置'}).click();
+        await manager.getByRole('button',{name:'查看网站 static.example.test'}).click();
+        const staticConfig=await manager.getByRole('region',{name:'Nginx 配置'})
+          .locator('.config-nginx-preview').innerText();
+        assert.match(staticConfig,/root \/srv\/www\/htdocs;/);
+        assert.doesNotMatch(staticConfig,/proxy_pass/);
+        assert.match(staticConfig,/listen 0\.0\.0\.0:80;/);
+
       }
       if(name.trim()==='系统概览'){
         await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor();
