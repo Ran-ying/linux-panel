@@ -1,7 +1,7 @@
 # Linux Panel 当前状态
 
 ## 当前项目状态（2026-10-17）
-- 研发中：新增独立 Certbot 自动续期证书管理 Action + Nginx 真实站点证书/私钥左右 50% 无间距双栏；私钥仅已认证 Web 明确请求后临时加载、不自动返回或对 MCP 暴露。详见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。
+- Certbot 集成调整：证书管理由独立侧边栏模块迁移到「Nginx 网站」中网站列表下方，保留受控到期续期检查与 timer 状态；统一外框，证书条目只用分隔线；网站详情仍显示 Nginx 实际引用的公钥/私钥 50/50 双栏。新 Actions `nginx.certbotList`、`nginx.certbotRenew`。详见 [CERTBOT-MANAGER.md](CERTBOT-MANAGER.md)。
 - SSL 单边框修复：发现 .nginx-certificates 根层原为 section，受全局 aside,section 默认圆角边框影响，与 .config-ssl-section 形成双框。将内层替换为 role=region 的 div，并显式清零内层边框、圆角、背景、阴影、padding；测试验证唯一外框及内层计算样式（手机/桌面）。最终 CI、PR、部署及线上状态以 Issue #54 当次记录为准。
 - 待 CI/部署：新增 Nginx 续期方式修复 `nginx.reconfigureRenewal`，仅对存量 standalone Certbot 证书调用受控 root `certbot reconfigure --nginx`，包含 staging 验证、备份、保存结果校验；仅暴露给认证 MCP，既有 root Actions 不放宽。见 [CERTBOT-RECONFIGURE.md](CERTBOT-RECONFIGURE.md)。
 - 新开发（CI/部署待验收）：`services.logs` 使用固定 root-owned journalctl Handler，为已认证 Web / 受信任 MCP 提供 1–200 行只读 systemd 服务日志；原有 root 写入 handler 仍 Web-only。日志可能含敏感内容，不应进入仓库或审计。参见 [SYSTEMD-LOGS.md](SYSTEMD-LOGS.md)。
