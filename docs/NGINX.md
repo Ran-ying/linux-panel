@@ -21,6 +21,16 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --enable
 \`\`\`
 会重启 root executor 和 Linux Panel Web，不会更改 Nginx 配置本身。普通 Git/MCP 更新**不会**自动替换 root-owned 处理器。没有安装 handler 时，Web 写入会返回 503 或不支持的 Action 错误，不会降级至普通 Shell。
 
+## 网站详情独立三区布局
+
+网站列表旁（手机端在列表下方）的详情区**不再使用共用背景或左侧分隔边框**，而是三个依次排列、有间距的独立圆角矩形：
+
+1. **网站基本信息**：标题使用实际配置名称（如 `ai.rany.ing`），展示各个 `server_name` 域名、已启用/已停用/待确认状态、编辑/删除（仅可编辑项目）和右上「收起」。
+2. **Nginx 配置**：在选择网站后通过现有只读 `nginx.read` Action 拉取该网站当前真实配置正文，代码块展示，长配置横/纵向滚动。读取失败给出错误，不生成虚拟配置；网站切换或 revision 变化时自动重新拉取，使用 generation token 防止旧站点的慢响应串入新站点。实际编辑继续使用已存在「编辑」弹窗和安全保存逻辑。
+3. **SSL 证书管理**：保留已存在的 Certbot 公有证书 SAN 域名关联、有效期和手动确认续期流程，单独置于自己的圆角矩形中。
+
+三个矩形各自带边框、背景、12px 圆角，桌面和移动端均垂直堆叠；没有更改 Nginx root 写入、服务控制或真实证书。
+
 ## 状态管理与网站内 SSL 证书管理
 
 Nginx 网站模块只有两个独立区块：**Nginx 状态管理 → Nginx 网站管理**；SSL 证书管理不再是独立 Action 卡片，而是打开具体网站详情后显示在该网站的右侧详情（手机端在列表下方）。辅助 Action（`nginx.service`、`nginx.certificates`、`nginx.renew`、`nginx.check`、`nginx.read`、`nginx.apply`）在对应区块内调用。
