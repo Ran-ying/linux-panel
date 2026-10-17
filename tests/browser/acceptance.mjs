@@ -77,7 +77,7 @@ try {
     let nginxRunning=true,nginxAutostart=true;
     const nginxToggleActions=[],nginxServiceActions=[],nginxRenewActions=[];
     let nginxCertificateReads=0,nginxPrivateReads=0;
-    const publicFixture='-----BEGIN CERTIFICATE-----\nPUBLIC FIXTURE\n-----END CERTIFICATE-----\n';
+    const publicFixture='-----BEGIN PUBLIC KEY-----\nPUBLIC FIXTURE\n-----END PUBLIC KEY-----\n';
     const privateFixture='-----BEGIN PRIVATE KEY-----\nPRIVATE FIXTURE\n-----END PRIVATE KEY-----\n';
     const certFixture={name:'fixture.test',domains:['fixture.test','www.fixture.test'],
       issuer:'CN=Fixture CA',validFrom:'2026-09-01T00:00:00.000Z',
@@ -94,7 +94,8 @@ try {
         data={name:input.name,pairs:[{
           certificatePath:'/etc/letsencrypt/live/fixture.test/fullchain.pem',
           privateKeyPath:'/etc/letsencrypt/live/fixture.test/privkey.pem',
-          publicPem:publicFixture,privateKeyConfigured:true,status:'已配置'
+          publicPem:publicFixture,certificatePem:'-----BEGIN CERTIFICATE-----\nCERTIFICATE FIXTURE\n-----END CERTIFICATE-----\n',
+          privateKeyConfigured:true,status:'已配置'
         }],warnings:[]};
       }else if(id==='nginx.siteTlsKey'){
         nginxPrivateReads++;
@@ -821,7 +822,7 @@ try {
           'long Nginx configs need horizontal scrolling rather than viewport overflow');
         assert.notEqual(configPreviewStyle.background,'rgba(0, 0, 0, 0)');
         const certPanel=manager.getByRole('region',{name:'SSL 证书管理：fixture-site'});
-        await certPanel.getByText('公钥 / 公有证书').waitFor();
+        await certPanel.getByText('公钥',{exact:true}).waitFor();
         await certPanel.getByText('PUBLIC FIXTURE',{exact:false}).waitFor();
         const certShell=detailCards.nth(2);
         const sslOuter=await certShell.evaluate(node=>{
