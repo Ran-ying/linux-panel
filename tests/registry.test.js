@@ -38,9 +38,9 @@ test('generic module reordering preserves absent IDs without hardcoded module na
   const before=manager.loaded.filter(module=>module.id!=='panel').map(module=>module.id);
   assert.deepEqual(before,['files','system','terminal','services','cron','nginx','telegram','v2ray','certbot']);
   const planned=manager.planOrder(['system','files','terminal','services','cron','nginx','telegram','v2ray','certbot']);
-  assert.deepEqual(planned,['system','missing-future-module','files','terminal','services','cron','nginx','telegram','v2ray']);
+  assert.deepEqual(planned,['system','missing-future-module','files','terminal','services','cron','nginx','telegram','v2ray','certbot']);
   manager.applyOrder(planned);
-  assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','cron','nginx','telegram','v2ray','panel']);
+  assert.deepEqual(manager.loaded.map(module=>module.id),['system','files','terminal','services','cron','nginx','telegram','v2ray','certbot','panel']);
   for(const bad of [['system','files','services'],['files','files','terminal','services','cron'],
     ['system','files','terminal','other','cron'],null,{}])
     assert.throws(()=>manager.planOrder(bad),{statusCode:400});
@@ -62,7 +62,7 @@ test('saved module order survives reload and new modules append despite earlier 
   const manager=new ModuleManager(resolve('modules'),new ActionRegistry());
   await manager.loadAll(['terminal','files','temporarily-disabled']);
   assert.deepEqual(manager.loaded.map(m=>m.id),['terminal','files','system','services','cron','nginx','telegram','v2ray','certbot']);
-  assert.deepEqual(manager.order,['terminal','files','temporarily-disabled','system','services','cron','nginx','telegram','v2ray']);
+  assert.deepEqual(manager.order,['terminal','files','temporarily-disabled','system','services','cron','nginx','telegram','v2ray','certbot']);
   const again=new ModuleManager(resolve('modules'),new ActionRegistry());
   await again.loadAll(manager.order);
   assert.deepEqual(again.loaded,manager.loaded);
