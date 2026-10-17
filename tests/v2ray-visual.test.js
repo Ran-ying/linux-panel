@@ -21,6 +21,8 @@ test('all V2Ray inbound/outbound including legacy and both routing layouts suppo
   assert.deepEqual(visualBasePath({routing:{rules:[]}},'routing'),['routing','rules']);
   assert.equal(supportsVisual(base,'full'),false);
   assert.equal(supportsVisual({...base,inbounds:{}},'inbounds'),false);
+  assert.equal(supportsVisual({...base,inboundDetour:null},'inboundDetour'),false,
+    'null legacy detour must stay untouched and not be treated as a list');
   assert.equal(formatList(['a','b']),'a\nb');
 });
 test('visual field edits keep unrelated secrets and unknown fields verbatim',()=>{
