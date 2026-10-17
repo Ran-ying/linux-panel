@@ -102,8 +102,8 @@ async function togglePrivate(index){
 .nginx-certs-toolbar h4{margin:0;font-size:1rem}
 .nginx-tls-pair+.nginx-tls-pair{border-top:1px solid var(--border-rule);padding-top:12px}
 .nginx-tls-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;min-width:0}
-.nginx-tls-column{min-width:0;overflow:hidden;border:0;border-radius:0;background:transparent;padding:0 8px 0 0}
-.nginx-tls-column.nginx-tls-private{border-left:1px solid var(--border-rule);padding:0 0 0 8px}
+.nginx-tls-column{min-width:0;overflow:hidden;border:0;border-radius:0;background:transparent;padding:0}
+.nginx-tls-column.nginx-tls-private{border-left:1px solid var(--border-rule);padding:0}
 .nginx-tls-column-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .nginx-tls-path{font-size:.76rem;overflow-wrap:anywhere;color:var(--text-muted);margin:4px 0 10px}
 .nginx-tls-pem{margin:0;max-width:100%;max-height:24rem;overflow:auto;white-space:pre;
