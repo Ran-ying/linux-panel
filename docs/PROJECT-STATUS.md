@@ -2,9 +2,9 @@
 
 ## 当前项目状态（2026-10-17）
 
-- **最后实机部署确认**：main `8648a66742197d9d2cbf059828585fd594f9a7ea`（[PR #157](https://github.com/Ran-ying/linux-panel/pull/157)），Broker durable success、Web/root 执行器/V2Ray/update.path active、HTTP 200、Git clean；事实与部署证据持续写入 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
-- 当前开发 PR（须单独 CI、合并、部署验收）：将 V2Ray 可视化全部字段**标题粗体 600，输入/下拉内容正常 400**。将原始 JSON key 标注扩展到左侧完整配置目录全部真实 section、右侧所有连接编辑器、嵌套客户端/服务器/用户标题及字段、路由选项、JSON 分项编辑标题。完整 JSON 根对象没有属性名，不虚构键。浏览器测试增加真实 computed-style 字重和导航及嵌套字段覆盖；不要把源码修改视作已在服务器生效。
-- 仅 Web/CSS、浏览器测试及文档，不改真实 V2Ray 配置、root Handler 或服务。
+- **最后实机部署确认**：main `9f131b7307f5a7643ddc1b5ff276b63f7f265308`（[PR #158](https://github.com/Ran-ying/linux-panel/pull/158)），Broker durable success、Web/privileged/V2Ray/update.path active、HTTP 200、Git clean。最新部署证据见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 当前开发 PR（合并及上线需单独核验）：入站连接（inbounds）与出站连接（outbounds）**各自只显示自己的列表**，不再在现代分类内嵌入历史 inboundDetour/outboundDetour。旧版入站/出站只有在候选 JSON **存在对应键**时才作为左侧独立项目显示，操作仅针对各自数据。缺失字段不创建旧入口；已有 `null` 保留在独立 JSON 编辑器为 `null`，避免伪装为 `[]`。浏览器回归包含现代/旧版数据彼此隔离、编辑往返、动态显示/隐藏旧版导航和空值兼容。
+- 此迭代只改 Web 与测试及文档，不修改服务器当前 V2Ray 配置或 root Handler。主分支合并不等于 VPS 部署，必须查询 Broker 最终成功并独立验证服务。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 
