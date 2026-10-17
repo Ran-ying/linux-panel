@@ -114,7 +114,7 @@ try {
     let v2rayInstalled=true,v2rayRunning=true,v2rayEnabled=true,v2rayRevision=0;
     let v2rayConfig=JSON.stringify({inbounds:[{tag:'socks',listen:'127.0.0.1',
       port:10080,protocol:'socks'}],outbounds:[{tag:'direct',protocol:'freedom'}],
-      dns:{servers:['1.1.1.1']},routing:{rules:[]},customUnknown:{value:true}},null,2);
+      dns:{servers:['1.1.1.1']},routing:{rules:[]},inboundDetour:null,customUnknown:{value:true}},null,2);
     const v2rayCalls=[];
     const v2rayDigest=()=>String(v2rayRevision).padStart(64,'b');
     await page.route('**/api/actions/v2ray.*/execute',async route=>{
@@ -985,6 +985,8 @@ try {
         await panel.locator('.v2ray-visual-editor').waitFor();
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         const inboundVisual=panel.locator('.v2ray-visual-editor');
+        assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
+          'null legacy inboundDetour is skipped rather than breaking visual editing');
         assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),1);
         await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).fill('local-visual');
         await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).press('Tab');
