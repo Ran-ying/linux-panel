@@ -878,66 +878,69 @@ try {
         await panel.waitFor();
         await panel.getByText('V2Ray 5.47.0').waitFor();
         const summary=panel.locator(':scope > .v2ray-summary');
-        const toolbar=panel.locator(':scope > .v2ray-service-toolbar');
+        const cards=summary.locator(':scope > .v2ray-status-card');
+        const serviceCard=cards.nth(1),autostartCard=cards.nth(2);
         const configLine=panel.locator(':scope > .v2ray-config-line');
-        assert.deepEqual(await summary.locator(':scope > div > span').allTextContents(),
-          ['内核','服务','开机启动','入站 / 出站'],
-          'the four status fields are the first content row, in requested order');
-        assert.deepEqual(await summary.locator(':scope > div > strong').allTextContents(),
+        assert.equal(await cards.count(),4);
+        assert.deepEqual(await cards.locator(':scope > span').allTextContents(),
+          ['内核','服务','开机启动','入站 / 出站']);
+        assert.deepEqual(await cards.locator(':scope > strong').allTextContents(),
           ['V2Ray 5.47.0','运行中','已启用','1 / 1']);
-        assert.deepEqual((await toolbar.getByRole('button').allTextContents()).map(s=>s.trim()),
-          ['刷新状态与配置','启动','停止','重启'],
-          'the next row must contain the four primary commands, with no extra buttons');
+        assert.deepEqual((await serviceCard.getByRole('button').allTextContents()).map(s=>s.trim()),
+          ['启动','停止','重启'],'service card owns its start/stop/restart actions');
+        assert.equal(await autostartCard.getByRole('button',{name:'关闭开机自启'}).count(),1,
+          'auto-start control belongs inside its own state card');
         assert.equal((await configLine.locator('.v2ray-config-path').innerText()).trim(),
           '配置文件：/usr/local/etc/v2ray/config.json');
-        assert.equal(await configLine.getByRole('button',{name:'关闭开机自启'}).count(),1,
-          'the auto-start action remains available but does not intrude into the primary toolbar');
+        assert.deepEqual((await configLine.getByRole('button').allTextContents()).map(s=>s.trim()),
+          ['刷新状态与配置'],'the refresh button belongs to the config path row');
+        assert.equal(await panel.locator('.v2ray-service-toolbar,.v2ray-tabbar,.v2ray-rows,.v2ray-section-picker').count(),0,
+          'no duplicate service toolbar, capability overview or old tab/selector UI');
         const geometry=await panel.evaluate(node=>{
-          const row=node.querySelector('.v2ray-summary');
-          const bar=node.querySelector('.v2ray-service-toolbar');
+          const summary=node.querySelector('.v2ray-summary');
           const path=node.querySelector('.v2ray-config-line');
-          const groups=[...node.querySelectorAll('.v2ray-summary > div, .v2ray-rows > div')];
+          const nav=node.querySelector('.v2ray-config-nav'),editor=node.querySelector('.v2ray-editor-content');
           const shape=n=>{
             const css=getComputedStyle(n),r=n.getBoundingClientRect();
-            return {top:r.top,bottom:r.bottom,left:r.left,border:css.borderTopWidth,
+            return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,border:css.borderTopWidth,
               radius:css.borderTopLeftRadius,padding:css.paddingLeft,background:css.backgroundColor};
           };
-          const wrapper=node.closest('.action-card'),outer=getComputedStyle(wrapper);
-          return {summary:shape(row),toolbar:shape(bar),config:shape(path),
-            stats:[...row.children].map(shape),
-            groups:groups.map(shape),outer:{radius:outer.borderTopLeftRadius,
-              border:outer.borderTopWidth,background:outer.backgroundColor,
-              padding:outer.paddingLeft}};
+          const outer=getComputedStyle(node.closest('.action-card'));
+          return {summary:shape(summary),path:shape(path),
+            cards:[...summary.children].map(shape),
+            pathButton:shape(path.querySelector('button')),
+            nav:nav&&shape(nav),editor:editor&&shape(editor),
+            outer:{radius:outer.borderTopLeftRadius,border:outer.borderTopWidth,
+              padding:outer.paddingLeft,background:outer.backgroundColor}};
         });
-        assert.ok(geometry.summary.bottom<=geometry.toolbar.top &&
-          geometry.toolbar.bottom<=geometry.config.top,
-          'summary first, command toolbar second, config path third');
-        assert.ok(geometry.stats.length===4 && geometry.stats.every(r=>r.border==='1px'
-          && parseFloat(r.radius)>=12 && parseFloat(r.padding)>0
-          && r.background!=='rgba(0, 0, 0, 0)'),
-          'each of the four status values must sit in its own framed rounded card');
-        assert.ok(geometry.outer.radius==='0px' && geometry.outer.border==='0px'
-          && geometry.outer.padding==='0px'
-          && geometry.outer.background==='rgba(0, 0, 0, 0)',
-          'the shared V2Ray ActionCard wrapper must be flat and invisible');
-        if(width===1280)assert.ok(geometry.stats.every(r=>r.top===geometry.stats[0].top),
-          'all four metrics should be in one row on desktop');
-        await panel.locator('.v2ray-rows > div').first().waitFor();
-        const capabilityFrames=await panel.locator('.v2ray-rows > div').evaluateAll(nodes=>nodes.map(node=>{
-          const s=getComputedStyle(node);
-          return {border:s.borderTopWidth,radius:s.borderTopLeftRadius,padding:s.paddingLeft,
-            background:s.backgroundColor};
-        }));
-        assert.ok(capabilityFrames.every(r=>r.border==='0px'&&r.radius==='0px'&&r.padding==='0px'
-          && r.background==='rgba(0, 0, 0, 0)'),
-          'V2Ray capability overview remains unboxed beneath the four standalone status cards');
+        assert.ok(geometry.summary.bottom<=geometry.path.top,
+          'the config path and right aligned refresh must follow all four cards');
+        assert.ok(geometry.cards.every(r=>r.border==='1px'&&parseFloat(r.radius)>=12
+          && parseFloat(r.padding)>0&&r.background!=='rgba(0, 0, 0, 0)'),
+          'each metric must keep its own rounded status card');
+        assert.ok(geometry.outer.radius==='0px'&&geometry.outer.border==='0px'
+          && geometry.outer.padding==='0px'&&geometry.outer.background==='rgba(0, 0, 0, 0)',
+          'the common V2Ray ActionCard must remain unboxed');
+        assert.ok(geometry.pathButton.right<=geometry.path.right+1
+          && geometry.path.right-geometry.pathButton.right<2,
+          'refresh aligns with the far right edge of the config path row');
+        if(width===1280)assert.ok(geometry.cards.every(r=>r.top===geometry.cards[0].top),
+          'desktop shows four status cards in one row');
+        const nav=panel.getByRole('navigation',{name:'V2Ray 配置目录'});
+        await nav.waitFor();
+        assert.ok(geometry.nav.right<=geometry.editor.left+1,
+          'JSON editor must be to the right of the vertical section list');
+        assert.equal(await panel.getByRole('tab').count(),0,'remove capability overview and all editing tabs');
+        const first=nav.getByRole('button').first();
+        assert.equal((await first.innerText()).trim(),'完整内容',
+          'full configuration is the first entry in the left vertical list');
+        assert.equal(await first.getAttribute('aria-pressed'),'true');
         assert.equal(await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).count(),0,
-          'installation must be hidden while V2Ray is installed');
-        await panel.getByRole('tab',{name:'完整 JSON'}).click();
+          'installation stays hidden when V2Ray is present');
         const editor=panel.getByRole('textbox',{name:'完整 V2Ray JSON 配置'});
         await editor.waitFor();
         assert.ok((await editor.inputValue()).includes('customUnknown'),
-          'the entire JSON should preserve unknown fields');
+          'the full JSON must preserve unknown fields');
         const newConfig=JSON.parse(await editor.inputValue());
         newConfig.log={loglevel:'info'};
         await editor.fill(JSON.stringify(newConfig,null,2));
@@ -948,22 +951,38 @@ try {
         await panel.getByText('保存成功',{exact:true}).waitFor();
         assert.equal(JSON.parse(v2rayConfig).customUnknown.value,true);
         assert.equal(JSON.parse(v2rayConfig).log.loglevel,'info');
-        await panel.getByRole('tab',{name:'分项编辑'}).click();
-        await panel.getByRole('combobox',{name:'配置部分'}).selectOption('dns');
-        assert.ok((await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue()).includes('1.1.1.1'));
-        await panel.getByRole('button',{name:'停止',exact:true}).click();
+        await nav.getByRole('button',{name:'DNS',exact:true}).click();
+        const part=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
+        assert.ok((await part.inputValue()).includes('1.1.1.1'));
+        // Invalid section content must block navigation; none may be silently discarded.
+        await part.fill('{invalid');
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        assert.equal(await part.count(),1,'invalid JSON must keep the current section visible');
+        assert.equal(await nav.getByRole('button',{name:'DNS',exact:true}).getAttribute('aria-pressed'),'true');
+        const dns={servers:['1.1.1.1','8.8.8.8']};
+        await part.fill(JSON.stringify(dns,null,2));
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        assert.equal(JSON.parse(await editor.inputValue()).dns.servers[1],'8.8.8.8',
+          'section edits must carry into the full JSON without saving to the server');
+        assert.equal(JSON.parse(await editor.inputValue()).customUnknown.value,true,
+          'switching editors must preserve unknown configuration fields');
+        await nav.getByRole('button',{name:'API',exact:true}).click();
+        await nav.getByRole('button',{name:'完整内容'}).click();
+        assert.equal(Object.hasOwn(JSON.parse(await editor.inputValue()),'api'),false,
+          'visiting an absent section without editing must never add an empty key');
+        await serviceCard.getByRole('button',{name:'停止',exact:true}).click();
         const confirm=panel.getByRole('dialog',{name:'确认 V2Ray 服务操作'});
         await confirm.waitFor();
-        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.service').length,0,'service action must wait for confirmation');
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.service').length,0,'service action waits for confirmation');
         await confirm.getByRole('button',{name:'取消'}).click();
         await confirm.waitFor({state:'hidden'});
         assert.equal(v2rayRunning,true);
-        await panel.getByRole('button',{name:'停止',exact:true}).click();
+        await serviceCard.getByRole('button',{name:'停止',exact:true}).click();
         await confirm.getByRole('button',{name:'确认操作'}).click();
         await confirm.waitFor({state:'hidden'});
         assert.equal(v2rayRunning,false);
         v2rayInstalled=false;v2rayRunning=false;
-        await panel.getByRole('button',{name:'刷新状态与配置'}).click();
+        await configLine.getByRole('button',{name:'刷新状态与配置'}).click();
         await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).waitFor();
         await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).click();
         const install=panel.getByRole('dialog',{name:'安装 V2Ray'});
