@@ -111,11 +111,11 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
 
 <style scoped>
 .nginx-certificates{display:grid;gap:12px;min-width:0}
-.nginx-cert-section-title{margin:0;font-size:1rem;font-weight:600}
+.nginx-cert-section-title{margin:0;font-size:1rem;font-weight:var(--ui-label-font-weight)}
 .nginx-certs-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .nginx-certs-toolbar p{margin:0}
 .nginx-certs-toolbar button,.nginx-cert-actions button,.nginx-renew-actions button{
-  font:inherit;min-height:2.35rem;padding:.35rem .8rem}
+  font:inherit;min-height:var(--ui-control-height);padding:4px 8px;font-size:var(--ui-control-font-size);font-weight:var(--ui-control-font-weight)}
 .nginx-cert-list{display:grid;gap:12px}
 /* The selected site's SSL detail is already inside one rounded outer card.
    Certificates are plain sections, not additional nested background cards. */
@@ -132,8 +132,8 @@ const condition=cert=>cert.status==='expired'?'已过期':cert.status==='expirin
 .nginx-cert-actions,.nginx-renew-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .nginx-certificates pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto}
 .nginx-certificate-dialog{background:var(--panel-bg);color:var(--text-primary);
-  border:1px solid var(--border-panel);border-radius:12px;padding:18px;width:min(94vw,38rem)}
-.nginx-certificate-dialog::backdrop{background:#0008}
+  border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);padding:var(--ui-dialog-padding);width:min(94vw,38rem);box-shadow:var(--ui-dialog-shadow)}
+.nginx-certificate-dialog::backdrop{background:var(--ui-dialog-backdrop)}
 .nginx-renew-form{display:grid;gap:12px}
 .nginx-renew-form h3,.nginx-renew-form p{margin:0}
 @media(max-width:730px){.nginx-cert-metadata{grid-template-columns:minmax(0,1fr)}}

@@ -119,16 +119,16 @@ function check(){return work(async()=>{
 .nginx-service{display:grid;gap:12px;min-width:0}
 .nginx-service-heading{display:flex;align-items:center;justify-content:space-between;
   gap:12px;flex-wrap:wrap;min-width:0}
-.nginx-service-title{margin:0;font-size:1.15rem;font-weight:600}
+.nginx-service-title{margin:0;font-size:1.15rem;font-weight:var(--ui-label-font-weight)}
 .nginx-service-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.nginx-service-card{border:1px solid var(--border-panel);border-radius:12px;
-  padding:14px;background:var(--panel-bg);display:flex;flex-direction:column;gap:6px;min-width:0}
+.nginx-service-card{border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);
+  padding:var(--ui-card-padding);background:var(--panel-bg);display:flex;flex-direction:column;gap:6px;min-width:0}
 .nginx-service-card strong{overflow-wrap:anywhere}
 .nginx-service-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:10px}
 .nginx-service pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:16rem;overflow-y:auto}
 .nginx-control-dialog{background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border-panel);
-  border-radius:12px;padding:18px;width:min(94vw,36rem)}
-.nginx-control-dialog::backdrop{background:#0008}
+  border-radius:var(--ui-card-radius);padding:var(--ui-dialog-padding);width:min(94vw,36rem);box-shadow:var(--ui-dialog-shadow)}
+.nginx-control-dialog::backdrop{background:var(--ui-dialog-backdrop)}
 .nginx-control-form{display:grid;gap:12px}
 .nginx-control-form h3,.nginx-control-form p{margin:0}
 .nginx-control-actions{display:flex;gap:8px;justify-content:flex-end}

@@ -76,6 +76,8 @@ tests/             Node 单元与集成测试
 
 模块开发先读 **[面板优先的模块开发规范（含复制示例）](docs/MODULE-DEVELOPMENT.md)**。变更契约必须同步当前文档和升级说明；旧过程归档 docs/history。
 
+Web 组件统一视觉规范：[WEB-STYLES.md](docs/WEB-STYLES.md)。
+
 更多文档：[更新验收清单](docs/UPDATE-ACCEPTANCE.md) · [架构](docs/architecture.md) · [MCP](docs/mcp.md) · [安装](docs/INSTALL.md) · [升级](docs/UPGRADING.md) · [安全](docs/security.md) · [威胁模型](docs/THREAT-MODEL.md) · [MCP 更新器](docs/UPDATER.md) · [v0.5 发布执行计划](docs/V0.5-RELEASE-PLAN.md) · [路线图](docs/roadmap.md) · [公开审查](docs/PUBLIC-RELEASE.md)
 
 许可证见 [LICENSE](LICENSE)。请勿把含密码、Cookie、Token 的数据文件推送到 GitHub。

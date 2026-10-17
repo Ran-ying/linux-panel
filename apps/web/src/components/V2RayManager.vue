@@ -627,15 +627,15 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 <style scoped>
 .v2ray-manager{min-width:0}
 .v2ray-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:.3rem 0 1rem}
-.v2ray-manager button{box-sizing:border-box;min-height:32px;padding:4px 10px;
-  border:1px solid var(--button-border);border-radius:999px;background:var(--button-bg);
-  color:var(--button-text);font:inherit;font-size:.85rem;cursor:pointer}
+.v2ray-manager button{box-sizing:border-box;min-height:var(--ui-control-height);padding:4px 8px;
+  border:1px solid var(--button-border);border-radius:var(--ui-pill-radius);background:var(--button-bg);
+  color:var(--button-text);font:inherit;font-size:var(--ui-control-font-size);font-weight:var(--ui-control-font-weight);cursor:pointer}
 .v2ray-manager button.primary{background:var(--accent-bg);color:var(--button-primary-text);border-color:var(--accent-bg)}
 .v2ray-manager button:disabled{opacity:.5;cursor:not-allowed}
 /* Four standalone framed status cards; service and autostart controls belong to their cards. */
 .v2ray-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 18px}
-.v2ray-summary>.v2ray-status-card{display:flex;flex-direction:column;gap:5px;min-width:0;padding:14px;
-  border:1px solid var(--border-panel);border-radius:14px;box-shadow:none;background:var(--panel-bg)}
+.v2ray-summary>.v2ray-status-card{display:flex;flex-direction:column;gap:5px;min-width:0;padding:var(--ui-card-padding);
+  border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);box-shadow:none;background:var(--panel-bg)}
 .v2ray-summary strong{overflow-wrap:anywhere}
 .v2ray-card-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:12px}
 .v2ray-card-actions button{flex:none;min-width:0;padding:4px 8px}
@@ -656,16 +656,16 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   overflow:hidden;background:transparent}
 .v2ray-config-full-card,.v2ray-config-fields-card{
   box-sizing:border-box;min-width:0;padding:6px;border:1px solid var(--border-panel);
-  border-radius:12px;background:var(--panel-bg)
+  border-radius:var(--ui-card-radius);background:var(--panel-bg)
 }
 .v2ray-config-full-card{flex:none}
 .v2ray-config-fields-card{flex:1 1 auto;min-height:0;overflow-y:auto;
   overscroll-behavior:contain;scrollbar-gutter:stable}
 .v2ray-config-nav .v2ray-config-item{box-sizing:border-box;display:block;width:100%;flex:none;
-  padding:9px 11px;border:0;border-radius:8px;text-align:left;white-space:normal;
+  padding:9px 11px;border:0;border-radius:var(--ui-input-radius);text-align:left;white-space:normal;
   background:transparent;color:var(--text-primary);font:inherit;font-size:.86rem}
 .v2ray-config-nav .v2ray-field-add-button{display:block;width:100%;flex:none;
-  margin:0;border-radius:8px;padding:8px 11px;min-height:38px;text-align:center}
+  margin:0;border-radius:var(--ui-input-radius);padding:8px 11px;min-height:38px;text-align:center}
 .v2ray-config-nav .v2ray-config-item.selected{background:var(--accent-bg);color:var(--button-primary-text)}
 .v2ray-config-nav .v2ray-config-item:hover:not(:disabled):not(.selected){background:var(--button-bg)}
 .v2ray-editor-content{min-width:0}
@@ -676,7 +676,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   padding:8px 0;background:var(--page-bg)}
 .v2ray-editor-header .v2ray-editor-actions{margin:0}
 .v2ray-view-toggle{display:flex;align-items:center;gap:0;margin-left:auto;
-  border:1px solid var(--button-border);border-radius:999px;overflow:hidden}
+  border:1px solid var(--button-border);border-radius:var(--ui-pill-radius);overflow:hidden}
 .v2ray-view-toggle button{border:0;border-radius:0;min-height:32px;padding:4px 11px}
 .v2ray-view-toggle button[aria-pressed="true"]{background:var(--accent-bg);
   color:var(--button-primary-text)}
@@ -688,7 +688,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-entry{border-top:1px solid var(--border-rule);padding-top:14px;display:grid;gap:12px;min-width:0}
 .v2ray-visual-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr));
   gap:10px;align-items:end;min-width:0}
-.v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:600}
+.v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:var(--ui-label-font-weight)}
 /* Caption titles are bold, but values (including selects and their options) never
    inherit the field's bold weight. This must apply to all visual editor sections. */
 /* Routing's three permanent fields share the same top baseline, even when
@@ -702,49 +702,49 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-routing-ip-field textarea{resize:none;overflow-y:hidden}
 .v2ray-routing-add-condition{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
 .v2ray-routing-add-condition select{flex:1 1 175px;width:auto;min-width:0}
-.v2ray-routing-add-condition button{flex:none;border-radius:8px}
+.v2ray-routing-add-condition button{flex:none;border-radius:var(--ui-input-radius)}
 .v2ray-routing-add-condition select,.v2ray-routing-add-condition button{
   box-sizing:border-box;height:38px;min-height:38px;line-height:20px
 }
 .v2ray-visual-fields input,.v2ray-visual-fields textarea,.v2ray-visual-fields select{
   box-sizing:border-box;width:100%;min-width:0;padding:8px;
-  border-radius:8px;border:1px solid var(--input-border);
-  color:var(--text-primary);background:var(--input-bg);font:inherit;font-weight:400}
-.v2ray-routing-tags{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:400}
-.v2ray-routing-tags>span:first-child{font-weight:600}
-.v2ray-routing-tags select,.v2ray-routing-tags button{font-weight:400}
+  border-radius:var(--ui-input-radius);border:1px solid var(--input-border);
+  color:var(--text-primary);background:var(--input-bg);font:inherit;font-weight:var(--ui-value-font-weight)}
+.v2ray-routing-tags{display:grid;gap:5px;min-width:0;font-size:.85rem;font-weight:var(--ui-value-font-weight)}
+.v2ray-routing-tags>span:first-child{font-weight:var(--ui-label-font-weight)}
+.v2ray-routing-tags select,.v2ray-routing-tags button{font-weight:var(--ui-value-font-weight)}
 /* The JSON-key captions can wrap on narrow screens. Reserve the same two-line
    caption slot so base inputs start at an equal top offset on any viewport. */
 .v2ray-routing-fields>.v2ray-route-base-field>span,
 .v2ray-routing-tags>span:first-child{display:block;min-height:42px;line-height:20px}
 .v2ray-routing-tag-row{display:flex;align-items:center;gap:6px;min-width:0}
 .v2ray-routing-tag-row select{flex:1 1 0;width:0}
-.v2ray-routing-tags>button{justify-self:start;border-radius:8px}
-.v2ray-routing-tag-row button{flex:none;border-radius:8px}
+.v2ray-routing-tags>button{justify-self:start;border-radius:var(--ui-input-radius)}
+.v2ray-routing-tag-row button{flex:none;border-radius:var(--ui-input-radius)}
 .v2ray-visual-nested,.v2ray-server-editor{display:grid;gap:10px;min-width:0;
   padding:10px 0 0 12px;border-left:2px solid var(--border-rule)}
-.v2ray-editor-label{display:grid;gap:8px;font-weight:600}
-.v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;font-weight:400;
+.v2ray-editor-label{display:grid;gap:8px;font-weight:var(--ui-label-font-weight)}
+.v2ray-editor-label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;font-weight:var(--ui-value-font-weight);
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;
   padding:12px;border-radius:10px;border:1px solid var(--input-border);
   background:var(--input-bg);color:var(--text-primary);resize:vertical}
 .v2ray-output{padding:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;
   background:transparent;border:0;border-top:1px solid var(--border-rule);border-radius:0}
 .v2ray-dialog{background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border-panel);
-  border-radius:12px;padding:18px;width:min(94vw,35rem);max-height:85dvh}
-.v2ray-dialog::backdrop{background:#0008}
+  border-radius:var(--ui-card-radius);padding:var(--ui-dialog-padding);width:min(94vw,35rem);max-height:85dvh;box-shadow:var(--ui-dialog-shadow)}
+.v2ray-dialog::backdrop{background:var(--ui-dialog-backdrop)}
 .v2ray-dialog-content{display:grid;gap:12px}
 .v2ray-dialog-content h3{margin:0}
-.v2ray-rename-label{display:grid;gap:6px;min-width:0;font-size:.9rem;font-weight:600}
+.v2ray-rename-label{display:grid;gap:6px;min-width:0;font-size:.9rem;font-weight:var(--ui-label-font-weight)}
 .v2ray-rename-label input,.v2ray-rename-label select{box-sizing:border-box;width:100%;min-height:38px;padding:8px 10px;
-  border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);
-  color:var(--text-primary);font:inherit;font-weight:400}
+  border:1px solid var(--input-border);border-radius:var(--ui-input-radius);background:var(--input-bg);
+  color:var(--text-primary);font:inherit;font-weight:var(--ui-value-font-weight)}
 @media(max-width:730px){
   .v2ray-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
   .v2ray-editor-layout{--v2ray-sticky-top:calc(var(--mobile-top,16px) + var(--mobile-header-height,110px) + 10px);
     grid-template-columns:minmax(105px,128px) minmax(0,1fr);gap:10px}
   .v2ray-config-nav .v2ray-config-item{padding:8px 7px;font-size:.8rem}
   .v2ray-editor-label textarea{padding:8px}
-  .v2ray-dialog{padding:14px}
+  .v2ray-dialog{padding:14px;box-shadow:var(--ui-dialog-shadow)}
 }
 </style>

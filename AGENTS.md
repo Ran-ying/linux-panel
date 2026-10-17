@@ -24,6 +24,8 @@
 - This repo is public: **no private hostnames/IPs, tokens, OAuth client IDs, passwords, cookies, account state, personal server configurations, or restore secrets** in issues, commits, logs or tests.
 - Check current `main`, open issues/PRs and active tool list. Do not assume a previously described tool is still exposed or that old status notes remain accurate. Use small reviewed branches/PRs with CI; report source evidence versus operator-reported evidence separately.
 
+- **Web visual contract:** Read [docs/WEB-STYLES.md](docs/WEB-STYLES.md) for shared light/dark colors, --ui-* card/control/dialog tokens, font weights and visual exceptions. Scoped Vue styles do not hardcode colors or undefined fallback variables. Preserve Nginx underlined text actions, flat Actions, V2Ray navigation and mobile touch sizes. Run tests/web-style-contract.test.js for CSS edits.
+
 - **Panel-first modules:** read [docs/MODULE-DEVELOPMENT.md](docs/MODULE-DEVELOPMENT.md). Built-in system Actions are system.resources (CPU/memory/disk, shown first) and system.info (basic host fields); old split Actions/storage module are retired. Generic metrics/progress/gauge/table/sections drive rendering; do not add business Action-ID branches or module CSS to App.vue.
 
 - **Terminal capability:** terminal.execute is the one approved ordinary-service-user Shell write Action (user-shell policy); generic writes remain denied. It is exposed to existing trusted MCP grants when the terminal module is loaded/exposed. No root/sudo/Broker escalation. Action input/output schemas are advertised through SDK fromJsonSchema; actual parameters reach the shared Engine. The panel owns textarea/terminal rendering and session-bound PTY transport; modules only declare presentation. See docs/TERMINAL.md.
