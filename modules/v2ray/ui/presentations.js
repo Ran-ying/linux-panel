@@ -1,5 +1,5 @@
 export default [
-  {actionId:'v2ray.status',renderer:'v2ray-manager',chrome:'minimal',loadOnEnter:true,refreshIntervalMs:0,
+  {actionId:'v2ray.status',renderer:'v2ray-manager',chrome:'flat',loadOnEnter:true,refreshIntervalMs:0,
     operations:{read:'v2ray.read',test:'v2ray.test',save:'v2ray.save',
       service:'v2ray.service',install:'v2ray.install'}},
   {actionId:'v2ray.read',renderer:'metrics',embedded:true,fields:[{key:'configPath',label:'配置文件'}]},
