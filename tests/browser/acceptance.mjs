@@ -549,7 +549,7 @@ try {
       }
       if(name.trim()==='Nginx 网站' && [390,1280].includes(width)){
         const cards=page.locator('.module-content .action-flow > .action-card');
-        assert.equal(await cards.count(),2,'SSL is only within selected website details');
+        assert.equal(await cards.count(),3,'Nginx status, website management and Certbot must be peer Actions');
         const statusCard=cards.first();
         assert.ok((await statusCard.getAttribute('class')).includes('flat-action'));
         const flatStyle=await statusCard.evaluate(node=>{const css=getComputedStyle(node);
@@ -559,7 +559,7 @@ try {
         assert.equal(flatStyle.radius,'0px');
         assert.equal(flatStyle.background,'rgba(0, 0, 0, 0)');
         assert.deepEqual((await cards.locator(':scope > .card-heading h3').allTextContents())
-          .map(x=>x.trim()),['Nginx 网站管理']);
+          .map(x=>x.trim()),['Nginx 网站管理','Certbot 证书管理']);
         const statusPanel=page.getByRole('region',{name:'Nginx 状态管理面板'});
         await statusPanel.waitFor();
         assert.equal(await statusPanel.getByRole('heading',{name:'Nginx 状态管理'}).count(),1);
