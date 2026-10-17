@@ -14,7 +14,7 @@ test('each module owns its Web render configuration separately from Action metad
   await modules.loadAll();
 
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
-  assert.equal(presentations.length, 36);
+  assert.equal(presentations.length, 38);
   const configured = new Map(presentations.map(p => [p.actionId, p]));
   assert.equal(configured.get('system.info').renderer, 'metrics');
   assert.equal(configured.get('system.resources').layout,'grid');
