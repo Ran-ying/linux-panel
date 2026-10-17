@@ -644,7 +644,7 @@ try {
         const facts=siteInfo.locator('.config-site-facts');
         assert.deepEqual(await facts.locator(':scope > *').evaluateAll(elements=>
           elements.map(el=>el.textContent.trim().slice(0,4))),
-          ['域名','fixture','状态','已停用'],
+          ['域名','fixt','状态','已停用'],
           'domain and status must occupy two label/value rows in the same grid');
         const factLayout=await facts.evaluate(el=>{
           const children=[...el.children].map(c=>c.getBoundingClientRect());
