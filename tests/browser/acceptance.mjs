@@ -1128,9 +1128,15 @@ try {
           .includes('入站连接（inbounds）'));
         assert.equal(await inboundVisual.getByText('legacy-in').count(),0,
           'legacy inbound entry must stay outside standard inbound editor');
-        assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),1);
+        assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).count(),0,
+          'connection tag must be edited through the standalone rename dialog, not inline');
+        const inboundEntry=inboundVisual.locator('.v2ray-visual-entry').first();
+        const inboundHeading=inboundEntry.locator('.v2ray-visual-entry-heading');
+        const inboundRename=inboundHeading.getByRole('button',{name:'重命名入站连接1'});
+        assert.deepEqual((await inboundHeading.locator('.v2ray-visual-entry-actions button')
+          .allTextContents()).map(s=>s.trim()),['重命名','移除']);
         const allInputLabels=await inboundVisual.locator('.v2ray-visual-fields > label').allTextContents();
-        for(const original of ['tag','protocol','listen','port','streamSettings.network',
+        for(const original of ['protocol','listen','port','streamSettings.network',
           'streamSettings.security','id','email','alterId']){
           assert.ok(allInputLabels.some(t=>t.includes('（'+original+'）')),
             'inbound and nested field labels must annotate raw JSON key '+original);
@@ -1138,9 +1144,9 @@ try {
         assert.ok((await inboundVisual.locator('.v2ray-visual-entry-heading strong').allTextContents())
           .some(t=>t.includes('settings.clients')),
           'nested clients heading must identify their JSON path');
-        const visualFont=await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).evaluate(input=>({
-          title:getComputedStyle(input.closest('label')).fontWeight,
-          value:getComputedStyle(input).fontWeight
+        const visualFont=await inboundVisual.getByRole('combobox',{name:'协议（protocol）'}).evaluate(select=>({
+          title:getComputedStyle(select.closest('label')).fontWeight,
+          value:getComputedStyle(select).fontWeight
         }));
         assert.equal(visualFont.title,'600','all visual section titles are bold');
         assert.equal(visualFont.value,'400','all visual section input values use regular type');
@@ -1178,8 +1184,22 @@ try {
         assert.equal(selectJson.settings.clients[0].id,'client-uuid-visible');
         assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,3);
         await viewToggle.getByRole('button',{name:'可视化'}).click();
-        await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).fill('local-visual');
-        await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).press('Tab');
+        await inboundRename.click();
+        const connectionRenameDialog=panel.getByRole('dialog',{name:'重命名连接'});
+        await connectionRenameDialog.waitFor();
+        const connectionTag=connectionRenameDialog.getByRole('textbox',{name:'连接标签（tag）'});
+        assert.equal(await connectionTag.inputValue(),'socks');
+        await connectionTag.fill('discard-me');
+        await connectionRenameDialog.getByRole('button',{name:'取消'}).click();
+        await connectionRenameDialog.waitFor({state:'hidden'});
+        assert.ok((await inboundHeading.innerText()).includes('连接 1 · socks'),
+          'canceling a connection rename must not change tag');
+        await inboundRename.click();
+        await connectionTag.fill('local-visual');
+        await connectionRenameDialog.getByRole('button',{name:'确认',exact:true}).click();
+        await connectionRenameDialog.waitFor({state:'hidden'});
+        assert.ok((await inboundHeading.innerText()).includes('连接 1 · local-visual'),
+          'confirming a connection rename updates its title in local draft only');
         await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
         let visualJson=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
         await visualJson.waitFor();
@@ -1187,8 +1207,13 @@ try {
           'visual change remains after switching to JSON');
         await visualJson.fill(JSON.stringify([{tag:'json-changed',protocol:'socks',port:10080}],null,2));
         await viewToggle.getByRole('button',{name:'可视化'}).click();
-        assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).inputValue(),'json-changed',
-          'JSON edits must carry into the visual form');
+        assert.ok((await inboundHeading.innerText()).includes('连接 1 · json-changed'),
+          'JSON edits must carry into the connection title');
+        await inboundRename.click();
+        assert.equal(await connectionTag.inputValue(),'json-changed',
+          'connection rename dialog must read existing tag exactly');
+        await connectionRenameDialog.getByRole('button',{name:'取消'}).click();
+        await connectionRenameDialog.waitFor({state:'hidden'});
         await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）',exact:true}).click();
         assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
           'legacy inbound has its own visual section');
@@ -1196,15 +1221,21 @@ try {
           .includes('旧版入站扩展（inboundDetour） · 1'));
         assert.ok((await inboundVisual.locator('.v2ray-visual-entry-heading').first().innerText())
           .includes('legacy-in'));
-        const legacyInboundTag=inboundVisual.getByRole('textbox',{name:'标签（tag）'});
-        await legacyInboundTag.fill('legacy-in-changed');
-        await legacyInboundTag.press('Tab');
+        const legacyInHeading=inboundVisual.locator('.v2ray-visual-entry-heading').first();
+        assert.deepEqual((await legacyInHeading.locator('.v2ray-visual-entry-actions button')
+          .allTextContents()).map(s=>s.trim()),['重命名','移除']);
+        await legacyInHeading.getByRole('button',{name:'重命名旧版入站扩展1'}).click();
+        assert.equal(await connectionTag.inputValue(),'legacy-in');
+        await connectionTag.fill('legacy-in-changed');
+        await connectionRenameDialog.getByRole('button',{name:'确认',exact:true}).click();
+        await connectionRenameDialog.waitFor({state:'hidden'});
         await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
         assert.equal(JSON.parse(await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue())[0].tag,
           'legacy-in-changed','legacy inbound editing must write only inboundDetour JSON');
         await nav.getByRole('button',{name:'入站连接（inbounds）',exact:true}).click();
         assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1);
-        assert.equal(await inboundVisual.getByRole('textbox',{name:'标签（tag）'}).inputValue(),'json-changed',
+        assert.ok((await inboundVisual.locator('.v2ray-visual-entry-heading').first().innerText())
+          .includes('连接 1 · json-changed'),
           'legacy inbound edit must not change ordinary inbounds');
         await nav.getByRole('button',{name:'出站连接（outbounds）',exact:true}).click();
         assert.equal(await inboundVisual.locator('.v2ray-visual-group-heading').count(),1,
@@ -1213,6 +1244,31 @@ try {
           .includes('出站连接（outbounds） · 1'));
         assert.equal(await inboundVisual.getByText('legacy-out').count(),0,
           'ordinary outbound page must not show legacy outbound entry');
+        const outboundHeading=inboundVisual.locator('.v2ray-visual-entry-heading').first();
+        assert.deepEqual((await outboundHeading.locator('.v2ray-visual-entry-actions button')
+          .allTextContents()).map(s=>s.trim()),['重命名','移除']);
+        const outboundRename=outboundHeading.getByRole('button',{name:'重命名出站连接1'});
+        await outboundRename.click();
+        assert.equal(await connectionTag.inputValue(),'direct');
+        await connectionTag.fill('');
+        await connectionTag.press('Enter');
+        await connectionRenameDialog.waitFor({state:'hidden'});
+        assert.ok((await outboundHeading.innerText()).includes('连接 1 · freedom'),
+          'clearing a connection tag deletes only tag and restores protocol title fallback');
+        await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
+        const noTagOutbound=JSON.parse(await panel.getByRole('textbox',{name:'当前配置部分 JSON'}).inputValue())[0];
+        assert.equal(Object.hasOwn(noTagOutbound,'tag'),false,
+          'empty rename must remove tag, not replace with empty literal');
+        assert.equal(noTagOutbound.protocol,'freedom',
+          'renaming must preserve outbound protocol');
+        await viewToggle.getByRole('button',{name:'可视化'}).click();
+        await outboundRename.click();
+        assert.equal(await connectionTag.inputValue(),'',
+          'dialog must be blank if the tag is missing; never use protocol fallback');
+        await connectionTag.fill('direct');
+        await connectionRenameDialog.getByRole('button',{name:'确认',exact:true}).click();
+        await connectionRenameDialog.waitFor({state:'hidden'});
+        assert.ok((await outboundHeading.innerText()).includes('连接 1 · direct'));
         await nav.getByRole('button',{name:'旧版出站扩展（outboundDetour）',exact:true}).click();
         const legacyHeading=inboundVisual.locator('.v2ray-visual-group-heading');
         assert.equal(await legacyHeading.count(),1,
@@ -1220,6 +1276,19 @@ try {
         assert.ok((await legacyHeading.innerText()).includes('旧版出站扩展（outboundDetour） · 1'));
         assert.ok((await inboundVisual.locator('.v2ray-visual-entry-heading').first().innerText())
           .includes('legacy-out'));
+        const oldOutboundHeading=inboundVisual.locator('.v2ray-visual-entry-heading').first();
+        assert.deepEqual((await oldOutboundHeading.locator('.v2ray-visual-entry-actions button')
+          .allTextContents()).map(s=>s.trim()),['重命名','移除']);
+        await oldOutboundHeading.getByRole('button',{name:'重命名旧版出站扩展1'}).click();
+        assert.equal(await connectionTag.inputValue(),'legacy-out');
+        await connectionTag.fill('old-out-temporary');
+        await connectionRenameDialog.getByRole('button',{name:'确认',exact:true}).click();
+        await connectionRenameDialog.waitFor({state:'hidden'});
+        assert.ok((await oldOutboundHeading.innerText()).includes('old-out-temporary'));
+        await oldOutboundHeading.getByRole('button',{name:'重命名旧版出站扩展1'}).click();
+        await connectionTag.fill('legacy-out');
+        await connectionRenameDialog.getByRole('button',{name:'确认',exact:true}).click();
+        await connectionRenameDialog.waitFor({state:'hidden'});
         await legacyHeading.getByRole('button',{name:'新增连接'}).click();
         await inboundVisual.getByText('旧版出站扩展（outboundDetour） · 2').waitFor();
         await inboundVisual.getByRole('button',{name:'移除旧版出站扩展2'}).click();
