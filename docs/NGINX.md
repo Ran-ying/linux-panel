@@ -89,3 +89,10 @@ systemd 单元名或内容，只有固定确认短语与 `status`/`stage`/`resta
 删除 Nginx 网站不再单纯移除配置文件。已有的 `nginx.apply` 的 `operation=remove` 保持原来的站点版本确认、Nginx 配置检查和必要时的重载；成功后对该网站中**直接引用**的 Certbot `live/<cert-name>/cert.pem` 或 `fullchain.pem` 查找真实的续期档案，并检查 Nginx `nginx -T` 的生效配置和 `sites-available` 中仍存在的网站。若证书确实未被其他 Nginx 网站使用，使用固定参数的 `certbot delete --cert-name <name> --non-interactive --quiet` 同时清理证书及自动续期档案，**不显示额外删除选项**。
 
 证书共享、来源不属于注册的 Certbot 续期档案、其他网站引入了无法确定的配置、扫描失败、Certbot 删除失败时，均**保留证书**并在返回的结果消息中提示。证书删除是不可撤销步骤，故只有网站删除、`nginx -t` 和必要时重载成功后才执行；不会在 Nginx 失败回滚期间触发。域名从网站 `server_name` 单独移除以及网站停用 **不触发**证书清理。若 Certbot 删除失败，网站删除仍算成功，但结果显示证书已保留、需要检查。参考 `tests/nginx-certbot-cleanup.test.js`。
+
+
+### 新建网站：可视化 / Nginx 配置双模式
+
+在 Nginx 网站管理中点击「新建网站」，默认打开 **可视化**：支持填写一个或多个监听域名（可填写公网 IPv4，作为 `server_name` 匹配条件）、从当前主机网络接口实时读取的「监听 IP」下拉框（保留 `0.0.0.0` / `127.0.0.1`）、监听端口，以及静态网站 / 反向代理网站类型。静态网站生成 `root <绝对路径>` 与 `index index.html`；反向代理生成 `location /` + `proxy_pass <http(s) URL>` + Host / 真实 IP / Forwarded 头，**不附带 root**。监听 IP 仅接受当前服务器实际网卡地址或通配地址，公网域名/IP（`server_name`）不是 `listen` 绑定地址。另保留手写 **Nginx 配置** 模式，供高级配置（TLS、自定义 locations 和附加模块）使用；手写草稿不会被视图切换自动解析。创建时可留空文件名，自动采用第一个域名/IP。
+
+新站点沿用已有 `nginx.apply create` 受控 root 流程，Nginx 语法检测失败回滚，且 **创建后默认停用**；在列表中明确启用后才会接管端口请求。选择 443 端口不会自动签发证书或开启 TLS。`root /var/www/html;` 仅对**静态站点**有意义：它让 Nginx 从这个本地目录读取文件。只反向代理时不必出现 `root`。详见 `apps/web/src/nginx-site-create.js` 及 `tests/nginx-site-create.test.js`。
