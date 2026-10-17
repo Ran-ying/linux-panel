@@ -1,6 +1,6 @@
 <script setup>
 import {computed,nextTick,onMounted,ref,watch} from 'vue';
-import {VISUAL_SECTIONS,visualEntries,supportsVisual,formatList,patchVisual} from './v2ray-visual.js';
+import {VISUAL_SECTIONS,visualEntries,supportsVisual,formatList,patchVisual,routingConditionVisible,availableRoutingConditions} from './v2ray-visual.js';
 import {v2raySelectChoices,v2rayRoutingTagChoices} from './v2ray-choices.js';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
@@ -11,6 +11,32 @@ const data=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref(''),o
 const draft=ref(''),revision=ref(''),original=ref(''),loaded=ref(false);
 const section=ref('full'),sectionText=ref(''),sectionOriginal=ref(''),editorMode=ref('json');
 const confirm=ref(null),confirmDialog=ref(null);
+const routeExpanded=ref({}),routeConditionSelection=ref({});
+const routeKey=(source,index)=>source+':'+index;
+const routeVisible=(entry,condition,source,index)=>
+  routingConditionVisible(entry,condition,routeExpanded.value[routeKey(source,index)]??[]);
+const routeChoices=(entry,source,index)=>
+  availableRoutingConditions(entry,routeExpanded.value[routeKey(source,index)]??[]);
+function chooseRouteCondition(source,index,event){
+  routeConditionSelection.value={...routeConditionSelection.value,
+    [routeKey(source,index)]:event.target.value};
+}
+function addRouteCondition(entry,source,index){
+  const id=routeKey(source,index),choice=routeConditionSelection.value[id];
+  if(!routeChoices(entry,source,index).some(option=>option.key===choice))return;
+  routeExpanded.value={...routeExpanded.value,
+    [id]:[...(routeExpanded.value[id]??[]),choice]};
+  routeConditionSelection.value={...routeConditionSelection.value,[id]:''};
+}
+function resizeRouteIpTextarea(el){
+  el.style.height='auto';
+  el.style.height=Math.max(el.scrollHeight+2,36)+'px';
+}
+// Resize on initial mount, reactive updates and every keystroke. Not Chromium-only CSS.
+const vAutoGrow={
+  mounted:resizeRouteIpTextarea,
+  updated:resizeRouteIpTextarea
+};
 const sections=['inbounds','outbounds','routing','dns','transport','log','policy','api','stats','reverse','observatory','burstObservatory','metrics','inboundDetour','outboundDetour'];
 const names={inbounds:'入站连接',outbounds:'出站连接',routing:'路由规则',dns:'DNS',transport:'传输设置',
   log:'日志',policy:'流量策略',api:'API',stats:'统计',reverse:'反向代理',observatory:'观测',
@@ -40,6 +66,15 @@ const routingTagChoices=(direction,current)=>{
 function changeVisual(source,action,path=[],value,kind='text',item){
   try{
     const cfg=patchVisual(parse(),source,{action,path,value,kind,item});
+    if(source==='routing'){
+      if((action==='add'&&path.length===0)||(action==='remove'&&path.length===1)){
+        routeExpanded.value={};routeConditionSelection.value={};
+      }else if(action==='set'&&path.length===2 && String(value??'').trim()===''){
+        const id=routeKey(source,path[0]);
+        routeExpanded.value={...routeExpanded.value,
+          [id]:(routeExpanded.value[id]??[]).filter(key=>key!==path[1])};
+      }
+    }
     draft.value=JSON.stringify(cfg,null,2)+'\n';
     showSection(section.value);error.value='';
   }catch(e){error.value=e.message;}
@@ -50,7 +85,7 @@ function visualSet(source,path,event,kind='text'){
 function visualAdd(source,path,item){changeVisual(source,'add',path,undefined,'text',item);}
 function visualRemove(source,path){changeVisual(source,'remove',path);}
 function addConnection(source){
-  visualAdd(source,[],source==='routing'?{type:'field',outboundTag:''}:{tag:'',protocol:'',settings:{}});
+  visualAdd(source,[],source==='routing'?{type:'field',inboundTag:[],outboundTag:''}:{tag:'',protocol:'',settings:{}});
 }
 function setEditorMode(next){
   if(next===editorMode.value||busy.value)return;
@@ -98,13 +133,18 @@ function commitSection(){
 }
 function selectSection(key){
   if(key===section.value)return;
-  try{commitSection();showSection(key);editorMode.value=visualAvailable.value?'visual':'json';error.value='';}
+  try{
+    commitSection();showSection(key);
+    routeExpanded.value={};routeConditionSelection.value={};
+    editorMode.value=visualAvailable.value?'visual':'json';error.value='';
+  }
   catch(e){error.value=e.message;}
 }
 async function load(){
   const result=await call(props.operations.read);
   draft.value=result.content;original.value=result.content;revision.value=result.revision;
   loaded.value=true;showSection('full');editorMode.value='json';
+  routeExpanded.value={};routeConditionSelection.value={};
 }
 function refreshAll(){return wrap(async()=>{
   await refreshStatus();
@@ -238,26 +278,6 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                     <label>类型
                       <input :value="entry.type??''" :disabled="busy" @change="visualSet(group.key,[i,'type'],$event)" />
                     </label>
-                    <label>目标出站标签
-                      <select :value="entry.outboundTag??''" :disabled="busy" aria-label="目标出站标签"
-                        @change="visualSet(group.key,[i,'outboundTag'],$event)">
-                        <option v-for="choice in routingTagChoices('outbound',entry.outboundTag)"
-                          :key="choice.value" :value="choice.value">{{ choice.label }}</option>
-                      </select>
-                    </label>
-                    <label>平衡器标签
-                      <input :value="entry.balancerTag??''" :disabled="busy" @change="visualSet(group.key,[i,'balancerTag'],$event)" />
-                    </label>
-                    <label>端口条件
-                      <input :value="entry.port??''" :disabled="busy" @change="visualSet(group.key,[i,'port'],$event)" />
-                    </label>
-                    <label>网络条件
-                      <input :value="entry.network??''" :disabled="busy" @change="visualSet(group.key,[i,'network'],$event)" />
-                    </label>
-                    <label>来源 IP
-                      <textarea rows="2" :value="listString(entry.source)" :disabled="busy"
-                        @change="visualSet(group.key,[i,'source'],$event,'list')" />
-                    </label>
                     <div class="v2ray-routing-tags">
                       <span>入站标签</span>
                       <template v-if="entry.inboundTag===undefined||Array.isArray(entry.inboundTag)">
@@ -276,16 +296,51 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       </template>
                       <span v-else class="muted small">此字段不是标签数组，请在 JSON 模式修改。</span>
                     </div>
-                    <label>域名条件
+                    <label>目标出站标签
+                      <select :value="entry.outboundTag??''" :disabled="busy" aria-label="目标出站标签"
+                        @change="visualSet(group.key,[i,'outboundTag'],$event)">
+                        <option v-for="choice in routingTagChoices('outbound',entry.outboundTag)"
+                          :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                      </select>
+                    </label>
+                    <label v-if="routeVisible(entry,'balancerTag',group.key,i)">平衡器标签
+                      <input :value="entry.balancerTag??''" :disabled="busy"
+                        @change="visualSet(group.key,[i,'balancerTag'],$event)" />
+                    </label>
+                    <label v-if="routeVisible(entry,'port',group.key,i)">端口条件
+                      <input :value="entry.port??''" :disabled="busy"
+                        @change="visualSet(group.key,[i,'port'],$event)" />
+                    </label>
+                    <label v-if="routeVisible(entry,'network',group.key,i)">网络条件
+                      <input :value="entry.network??''" :disabled="busy"
+                        @change="visualSet(group.key,[i,'network'],$event)" />
+                    </label>
+                    <label v-if="routeVisible(entry,'source',group.key,i)">来源 IP
+                      <textarea rows="2" :value="listString(entry.source)" :disabled="busy"
+                        @change="visualSet(group.key,[i,'source'],$event,'list')" />
+                    </label>
+                    <label v-if="routeVisible(entry,'domain',group.key,i)">域名条件
                       <textarea rows="2" :value="listString(entry.domain)" :disabled="busy"
                         @change="visualSet(group.key,[i,'domain'],$event,'list')" />
                     </label>
-                    <label>协议条件
+                    <label v-if="routeVisible(entry,'protocol',group.key,i)">协议条件
                       <textarea rows="2" :value="listString(entry.protocol)" :disabled="busy"
                         @change="visualSet(group.key,[i,'protocol'],$event,'list')" />
                     </label>
-                    <label class="v2ray-routing-ip-field">IP 条件
-                      <textarea rows="2" :value="listString(entry.ip)" :disabled="busy"
+                    <div class="v2ray-routing-add-condition">
+                      <select :value="routeConditionSelection[routeKey(group.key,i)]??''" :disabled="busy"
+                        :aria-label="'选择条件 '+(i+1)"
+                        @change="chooseRouteCondition(group.key,i,$event)">
+                        <option value="">选择条件</option>
+                        <option v-for="choice in routeChoices(entry,group.key,i)"
+                          :key="choice.key" :value="choice.key">{{ choice.label }}</option>
+                      </select>
+                      <button type="button" :disabled="busy||!routeConditionSelection[routeKey(group.key,i)]"
+                        @click="addRouteCondition(entry,group.key,i)">添加条件</button>
+                    </div>
+                    <label v-if="routeVisible(entry,'ip',group.key,i)" class="v2ray-routing-ip-field">IP 条件
+                      <textarea v-auto-grow rows="1" :value="listString(entry.ip)" :disabled="busy"
+                        @input="resizeRouteIpTextarea($event.target)"
                         @change="visualSet(group.key,[i,'ip'],$event,'list')" />
                     </label>
                   </div>
@@ -492,6 +547,10 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   gap:10px;align-items:end;min-width:0}
 .v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem}
 .v2ray-visual-fields .v2ray-routing-ip-field{grid-column:1/-1}
+.v2ray-routing-ip-field textarea{resize:none;overflow-y:hidden}
+.v2ray-routing-add-condition{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.v2ray-routing-add-condition select{flex:1 1 175px;width:auto;min-width:0}
+.v2ray-routing-add-condition button{flex:none;border-radius:8px}
 .v2ray-visual-fields input,.v2ray-visual-fields textarea,.v2ray-visual-fields select{
   box-sizing:border-box;width:100%;min-width:0;padding:8px;
   border-radius:8px;border:1px solid var(--input-border);

@@ -1,10 +1,10 @@
 # Linux Panel 当前状态
 
-## 当前部署及下拉框布局修正（2026-10-17）
+## 当前项目状态（2026-10-17）
 
-- 现有测试 VPS 的最后独立确认：Panel v0.5.0，Git main `2085035080a5bb0a65caac85045b06d1f7862d53`（[PR #153](https://github.com/Ran-ying/linux-panel/pull/153)），Web/root 执行器/V2Ray/update.path 均 active，API HTTP 200，root Broker 最近一次更新成功、工作区 clean；Git 对象权限缺陷 [#150](https://github.com/Ran-ying/linux-panel/issues/150) 已修复。详见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
-- 本 PR 待验收改动：将所有原生单选框的小三角从右侧 26px 移至 14px、文字预留从 50px 缩至 34px，使常用控件的右留白更接近上下留白；V2Ray 路由规则「IP 条件」移至最下面、跨越可视化网格全部列（100%），列表语义与 JSON 不变。CI/合并/生产部署分别验收，不将源码改动当作已上线。
-- 本次仅涉及 Web Vue/CSS、响应式浏览器测试与文档；不修改实际 V2Ray 内核配置、服务、证书、端口或 root Broker。
+- 最近实机部署验收：Linux Panel v0.5.0，main `2755b00dc23e4597cea518015fce0cc004e45a52`，关联 [PR #154](https://github.com/Ran-ying/linux-panel/pull/154)；`linux-panel.service`、特权执行器、V2Ray、更新 watcher 均 active，认证 API HTTP 200，Git 工作区 clean。相关证据与交接见 [Issue #54](https://github.com/Ran-ying/linux-panel/issues/54)。
+- 当前开发 PR（未合并、未部署前）：V2Ray 路由可视化已有规则只显示非空可选条件，空属性保留在原 JSON；新增规则只初始化 type、inboundTag、outboundTag，选取「选择条件 + 添加条件」后局部展开其它字段，展开空字段不修改草稿。IP 条件位于末尾、整行宽度，并随内容自动扩展高度；保留未知属性与历史路由结构。测试涵盖响应式浏览器和 JSON 往返。待 CI、合并、Broker 部署独立核验，不能视为已上线。
+- 仅 Web 前端、单元/浏览器测试和文档更改；不得对实际 V2Ray 配置、网络、证书、root Handler 或服务进行测试性写入。移动设备实体视觉检查仍建议单独进行。
 
 ## Telegram 个人账号 MCP（2026-10-17，开发分支未部署）
 

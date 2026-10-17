@@ -1098,12 +1098,25 @@ try {
         await nav.getByRole('button',{name:'路由规则',exact:true}).click();
         assert.equal(await viewToggle.getByRole('button',{name:'可视化'}).getAttribute('aria-pressed'),'true');
         await inboundVisual.getByRole('button',{name:'新增规则'}).click();
-        const outboundSelect=inboundVisual.getByRole('combobox',{name:'目标出站标签'});
+        const routeEntry=inboundVisual.locator('.v2ray-visual-entry').first();
+        const routeFields=routeEntry.locator(':scope > .v2ray-visual-fields');
+        assert.equal(await routeFields.locator(':scope > label').count(),2,
+          'new rule must show only type and outbound labels plus the inbound tag editor');
+        assert.equal(await routeFields.locator(':scope > .v2ray-routing-tags').count(),1);
+        assert.equal(await routeFields.locator('.v2ray-routing-ip-field').count(),0,
+          'empty optional IP criteria must be hidden by default');
+        assert.equal(await routeEntry.getByRole('textbox',{name:'域名条件'}).count(),0);
+        const conditionSelect=routeEntry.getByRole('combobox',{name:'选择条件 1'});
+        const optionsBefore=await conditionSelect.locator('option').evaluateAll(nodes=>nodes.map(n=>n.value));
+        assert.deepEqual(optionsBefore,
+          ['','balancerTag','port','network','source','domain','protocol','ip'],
+          'Add condition must offer all supported optional fields');
+        const outboundSelect=routeEntry.getByRole('combobox',{name:'目标出站标签'});
         await outboundSelect.selectOption('direct');
         assert.deepEqual(await outboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value)),
           ['','direct'],'route destinations must come from the current outbounds');
-        await inboundVisual.getByRole('button',{name:'添加入站标签'}).click();
-        const inboundSelect=inboundVisual.getByRole('combobox',{name:'入站标签 1'});
+        await routeEntry.getByRole('button',{name:'添加入站标签'}).click();
+        const inboundSelect=routeEntry.getByRole('combobox',{name:'入站标签 1'});
         await inboundSelect.selectOption('json-changed');
         assert.ok((await inboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value))).includes('json-changed'));
         const routeChevron=await outboundSelect.evaluate(select=>{
@@ -1115,7 +1128,28 @@ try {
         assert.match(routeChevron.position,/14px/);
         assert.match(routeChevron.image,/data:image\/svg\+xml/);
         assert.equal(routeChevron.padding,'34px');
-        const ipField=inboundVisual.locator('.v2ray-routing-ip-field');
+
+        await conditionSelect.selectOption('ip');
+        await routeEntry.getByRole('button',{name:'添加条件',exact:true}).click();
+        assert.ok(!(await conditionSelect.locator('option').evaluateAll(nodes=>nodes.map(n=>n.value))).includes('ip'),
+          'opened conditions must not appear a second time in the choice list');
+        const ipField=routeEntry.locator('.v2ray-routing-ip-field');
+        await ipField.waitFor();
+        const startingHeight=await ipField.locator('textarea').evaluate(el=>el.getBoundingClientRect().height);
+        await ipField.locator('textarea').fill('geoip:private\n10.0.0.0/8\n192.168.0.0/16\n2001:db8::/32');
+        const expandedHeight=await ipField.locator('textarea').evaluate(el=>({
+          height:el.getBoundingClientRect().height,scroll:el.scrollHeight,client:el.clientHeight
+        }));
+        assert.ok(expandedHeight.height>startingHeight+24,
+          'IP condition textarea must automatically grow with multiple lines');
+        assert.ok(expandedHeight.scroll<=expandedHeight.client+2,
+          'IP condition textarea must not require an inner scrollbar');
+        await ipField.locator('textarea').press('Tab');
+
+        await conditionSelect.selectOption('domain');
+        await routeEntry.getByRole('button',{name:'添加条件',exact:true}).click();
+        await routeEntry.getByRole('textbox',{name:'域名条件'}).fill('domain:one.test\ndomain:two.test');
+        await routeEntry.getByRole('textbox',{name:'域名条件'}).press('Tab');
         const ipGeometry=await ipField.evaluate(label=>{
           const grid=label.parentElement;
           const fieldRect=label.getBoundingClientRect();
@@ -1129,39 +1163,55 @@ try {
             textareaWidth:textbox.width,fieldWidth:fieldRect.width
           };
         });
-        assert.equal(ipGeometry.isLast,true,'IP criteria must be the final routing form field');
+        assert.equal(ipGeometry.isLast,true,'IP criteria stay last when another field is added');
         assert.equal(ipGeometry.gridColumn,'1 / -1','IP criteria must span all grid columns');
         assert.ok(Math.abs(ipGeometry.left-ipGeometry.gridLeft)<2 &&
           Math.abs(ipGeometry.right-ipGeometry.gridRight)<2,
           'IP criteria must fill the available routing editor width');
         assert.ok(Math.abs(ipGeometry.textareaWidth-ipGeometry.fieldWidth)<2,
           'IP condition textarea must occupy 100% of its field');
-        await ipField.locator('textarea').fill('geoip:private\n10.0.0.0/8');
-        await ipField.locator('textarea').press('Tab');
-        await inboundVisual.getByRole('textbox',{name:'域名条件'}).fill('domain:one.test\ndomain:two.test');
-        await inboundVisual.getByRole('textbox',{name:'域名条件'}).press('Tab');
+
         await viewToggle.getByRole('button',{name:'JSON',exact:true}).click();
         visualJson=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
         const routingCandidate=JSON.parse(await visualJson.inputValue());
         assert.deepEqual(routingCandidate.rules[0].domain,['domain:one.test','domain:two.test'],
           'visual routing must produce a real JSON rules array');
-        assert.deepEqual(routingCandidate.rules[0].ip,['geoip:private','10.0.0.0/8'],
-          'full-width IP criteria must still roundtrip as the original JSON array');
+        assert.deepEqual(routingCandidate.rules[0].ip,
+          ['geoip:private','10.0.0.0/8','192.168.0.0/16','2001:db8::/32']);
         assert.deepEqual(routingCandidate.rules[0].inboundTag,['json-changed']);
         assert.equal(routingCandidate.rules[0].outboundTag,'direct');
-        // Preserve existing multi-tag conditions and orphaned/custom tag names.
+        assert.deepEqual(Object.keys(routingCandidate.rules[0]).sort(),
+          ['type','inboundTag','outboundTag','ip','domain'].sort(),
+          'Add condition should not initialize unused fields');
+
+        // Existing JSON may have blank optional properties: hide but never erase them.
+        // Preserve current multi-tags and orphaned/custom names between editor modes.
+        routingCandidate.rules[0].port='';
+        routingCandidate.rules[0].source=[];
+        routingCandidate.rules[0].network='   ';
+        routingCandidate.rules[0].vendorUnknown={secret:'unchanged'};
         routingCandidate.rules[0].inboundTag.push('legacy-custom');
         routingCandidate.rules[0].outboundTag='deleted-custom';
         await visualJson.fill(JSON.stringify(routingCandidate,null,2));
         await viewToggle.getByRole('button',{name:'可视化'}).click();
-        assert.equal(await inboundVisual.getByRole('combobox',{name:'入站标签 2'}).inputValue(),'legacy-custom');
-        assert.equal(await inboundVisual.getByRole('combobox',{name:'目标出站标签'}).inputValue(),'deleted-custom');
-        await inboundVisual.getByRole('button',{name:'移除入站标签 1'}).click();
+        assert.equal(await routeEntry.getByRole('combobox',{name:'入站标签 2'}).inputValue(),'legacy-custom');
+        assert.equal(await routeEntry.getByRole('combobox',{name:'目标出站标签'}).inputValue(),'deleted-custom');
+        for(const name of ['端口条件','网络条件','来源 IP']){
+          assert.equal(await routeEntry.getByRole('textbox',{name,exact:true}).count(),0,
+            'blank existing condition must not be visible: '+name);
+        }
+        assert.ok((await conditionSelect.locator('option').evaluateAll(nodes=>nodes.map(n=>n.value))).includes('port'),
+          'blank existing port condition must be addable');
+        await routeEntry.getByRole('button',{name:'移除入站标签 1'}).click();
         await viewToggle.getByRole('button',{name:'JSON'}).click();
         visualJson=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
         const retainedRoute=JSON.parse(await visualJson.inputValue());
         assert.deepEqual(retainedRoute.rules[0].inboundTag,['legacy-custom']);
         assert.equal(retainedRoute.rules[0].outboundTag,'deleted-custom');
+        assert.equal(retainedRoute.rules[0].port,'','hidden blank keys must survive visual edits');
+        assert.deepEqual(retainedRoute.rules[0].source,[]);
+        assert.equal(retainedRoute.rules[0].network,'   ');
+        assert.deepEqual(retainedRoute.rules[0].vendorUnknown,{secret:'unchanged'});
         await nav.getByRole('button',{name:'完整内容'}).click();
         assert.equal(JSON.parse(await editor.inputValue()).customUnknown.value,true,
           'visual editor updates must not discard unrelated full-config settings');

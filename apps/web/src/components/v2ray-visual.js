@@ -39,6 +39,34 @@ export function supportsVisual(config,section){
 export function formatList(value){
   return Array.isArray(value)?value.join('\n'):value??'';
 }
+
+// Only explicitly supported routing conditions belong in the Add condition menu.
+// Unknown properties remain in the draft untouched and editable in JSON mode.
+export const ROUTING_OPTIONAL_CONDITIONS=Object.freeze([
+  {key:'balancerTag',label:'平衡器标签'},
+  {key:'port',label:'端口条件'},
+  {key:'network',label:'网络条件'},
+  {key:'source',label:'来源 IP'},
+  {key:'domain',label:'域名条件'},
+  {key:'protocol',label:'协议条件'},
+  {key:'ip',label:'IP 条件'}
+].map(option=>Object.freeze(option)));
+const routeKeys=new Set(ROUTING_OPTIONAL_CONDITIONS.map(option=>option.key));
+function hasNonBlankValue(value){
+  if(value===null||value===undefined)return false;
+  if(typeof value==='string')return value.trim().length>0;
+  if(Array.isArray(value))return value.some(hasNonBlankValue);
+  if(typeof value==='object')return Object.values(value).some(hasNonBlankValue);
+  return true; // 0 and false are real values, not blank strings.
+}
+export function routingConditionVisible(rule,key,expanded=[]){
+  if(!routeKeys.has(key))return false;
+  return hasNonBlankValue(rule?.[key]) || expanded.includes(key);
+}
+export function availableRoutingConditions(rule,expanded=[]){
+  return ROUTING_OPTIONAL_CONDITIONS.filter(option=>!routingConditionVisible(rule,option.key,expanded));
+}
+
 function ensureParent(root,path){
   guardPath(path);
   let item=root;
