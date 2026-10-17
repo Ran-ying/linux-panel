@@ -1,7 +1,7 @@
 <script setup>
 import {computed,nextTick,onMounted,ref,watch} from 'vue';
 import {VISUAL_SECTIONS,visualEntries,supportsVisual,formatList,patchVisual} from './v2ray-visual.js';
-import {v2raySelectChoices} from './v2ray-choices.js';
+import {v2raySelectChoices,v2rayRoutingTagChoices} from './v2ray-choices.js';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true}
@@ -33,6 +33,10 @@ const visualGroups=computed(()=>{
 });
 const listString=value=>formatList(value);
 const selectChoices=v2raySelectChoices;
+const routingTagChoices=(direction,current)=>{
+  try{return v2rayRoutingTagChoices(parse(),direction,current);}
+  catch{return v2rayRoutingTagChoices({},direction,current);}
+};
 function changeVisual(source,action,path=[],value,kind='text',item){
   try{
     const cfg=patchVisual(parse(),source,{action,path,value,kind,item});
@@ -235,7 +239,11 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       <input :value="entry.type??''" :disabled="busy" @change="visualSet(group.key,[i,'type'],$event)" />
                     </label>
                     <label>目标出站标签
-                      <input :value="entry.outboundTag??''" :disabled="busy" @change="visualSet(group.key,[i,'outboundTag'],$event)" />
+                      <select :value="entry.outboundTag??''" :disabled="busy" aria-label="目标出站标签"
+                        @change="visualSet(group.key,[i,'outboundTag'],$event)">
+                        <option v-for="choice in routingTagChoices('outbound',entry.outboundTag)"
+                          :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                      </select>
                     </label>
                     <label>平衡器标签
                       <input :value="entry.balancerTag??''" :disabled="busy" @change="visualSet(group.key,[i,'balancerTag'],$event)" />
@@ -250,10 +258,24 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       <textarea rows="2" :value="listString(entry.source)" :disabled="busy"
                         @change="visualSet(group.key,[i,'source'],$event,'list')" />
                     </label>
-                    <label>入站标签
-                      <textarea rows="2" :value="listString(entry.inboundTag)" :disabled="busy"
-                        @change="visualSet(group.key,[i,'inboundTag'],$event,'list')" />
-                    </label>
+                    <div class="v2ray-routing-tags">
+                      <span>入站标签</span>
+                      <template v-if="entry.inboundTag===undefined||Array.isArray(entry.inboundTag)">
+                        <div v-for="(tag,j) in (entry.inboundTag??[])" :key="j" class="v2ray-routing-tag-row">
+                          <select :value="tag" :disabled="busy" :aria-label="'入站标签 '+(j+1)"
+                            @change="visualSet(group.key,[i,'inboundTag',j],$event)">
+                            <option v-for="choice in routingTagChoices('inbound',tag)"
+                              :key="choice.value" :value="choice.value"
+                              :disabled="choice.value===''">{{ choice.label }}</option>
+                          </select>
+                          <button type="button" :disabled="busy" :aria-label="'移除入站标签 '+(j+1)"
+                            @click="visualRemove(group.key,[i,'inboundTag',j])">移除</button>
+                        </div>
+                        <button type="button" :disabled="busy"
+                          @click="visualAdd(group.key,[i,'inboundTag'],'')">添加入站标签</button>
+                      </template>
+                      <span v-else class="muted small">此字段不是标签数组，请在 JSON 模式修改。</span>
+                    </div>
                     <label>域名条件
                       <textarea rows="2" :value="listString(entry.domain)" :disabled="busy"
                         @change="visualSet(group.key,[i,'domain'],$event,'list')" />
@@ -473,7 +495,11 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
   box-sizing:border-box;width:100%;min-width:0;padding:8px;
   border-radius:8px;border:1px solid var(--input-border);
   color:var(--text-primary);background:var(--input-bg);font:inherit}
-.v2ray-visual-fields select{padding-right:22px}
+.v2ray-routing-tags{display:grid;gap:5px;min-width:0;font-size:.85rem}
+.v2ray-routing-tag-row{display:flex;align-items:center;gap:6px;min-width:0}
+.v2ray-routing-tag-row select{flex:1 1 0;width:0}
+.v2ray-routing-tags>button{justify-self:start;border-radius:8px}
+.v2ray-routing-tag-row button{flex:none;border-radius:8px}
 .v2ray-visual-nested,.v2ray-server-editor{display:grid;gap:10px;min-width:0;
   padding:10px 0 0 12px;border-left:2px solid var(--border-rule)}
 .v2ray-editor-label{display:grid;gap:8px;font-weight:600}
