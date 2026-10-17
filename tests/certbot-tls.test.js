@@ -74,7 +74,7 @@ test('Certbot inventories only renewal profiles, never reads private key',async 
 });
 test('private TLS read and Certbot renewal remain Web-only in registry and root IPC',async()=>{
   const handlers=createPrivilegedHandlers({privileged:false});
-  for(const id of ['nginx.siteTls','nginx.siteTlsKey','certbot.list','certbot.renew']){
+  for(const id of ['nginx.siteTls','nginx.siteTlsKey','nginx.certbotList','nginx.certbotRenew']){
     await assert.rejects(dispatchPrivileged({version:1,channel:'mcp',action:id,input:{}},handlers),{statusCode:403});
   }
   const registry=new ActionRegistry();
