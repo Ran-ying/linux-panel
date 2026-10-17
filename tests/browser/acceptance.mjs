@@ -912,13 +912,14 @@ try {
         assert.ok(geometry.summary.bottom<=geometry.toolbar.top &&
           geometry.toolbar.bottom<=geometry.config.top,
           'summary first, command toolbar second, config path third');
-        assert.ok(geometry.stats.every(r=>r.border==='0px'&&r.radius==='0px'&&r.padding==='0px'
-          && r.background==='rgba(0, 0, 0, 0)'),
-          'status values must not be inside nested rounded cards');
-        assert.ok(parseFloat(geometry.outer.radius)>0 && geometry.outer.border==='1px'
-          && parseFloat(geometry.outer.padding)>0
-          && geometry.outer.background!=='rgba(0, 0, 0, 0)',
-          'the V2Ray action itself must retain its outer rounded container');
+        assert.ok(geometry.stats.length===4 && geometry.stats.every(r=>r.border==='1px'
+          && parseFloat(r.radius)>=12 && parseFloat(r.padding)>0
+          && r.background!=='rgba(0, 0, 0, 0)'),
+          'each of the four status values must sit in its own framed rounded card');
+        assert.ok(geometry.outer.radius==='0px' && geometry.outer.border==='0px'
+          && geometry.outer.padding==='0px'
+          && geometry.outer.background==='rgba(0, 0, 0, 0)',
+          'the shared V2Ray ActionCard wrapper must be flat and invisible');
         if(width===1280)assert.ok(geometry.stats.every(r=>r.top===geometry.stats[0].top),
           'all four metrics should be in one row on desktop');
         await panel.locator('.v2ray-rows > div').first().waitFor();
@@ -929,7 +930,7 @@ try {
         }));
         assert.ok(capabilityFrames.every(r=>r.border==='0px'&&r.radius==='0px'&&r.padding==='0px'
           && r.background==='rgba(0, 0, 0, 0)'),
-          'V2Ray capability overview must remain unboxed inside the one outer module card');
+          'V2Ray capability overview remains unboxed beneath the four standalone status cards');
         assert.equal(await panel.getByRole('button',{name:'安装 V2Ray 5.47.0'}).count(),0,
           'installation must be hidden while V2Ray is installed');
         await panel.getByRole('tab',{name:'完整 JSON'}).click();
