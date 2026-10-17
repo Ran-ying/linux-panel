@@ -62,7 +62,7 @@ export function createNginxCertbotCleanup({
       }
       try{
         const real=await fs.realpath(path);
-        if(bounded(real,archive)){
+        if(bounded(archive,real)){
           const pieces=relative(archive,real).split(sep);
           if(pieces.length===2&&CERT_NAME.test(pieces[0]))names.add(pieces[0]);
         }
@@ -86,7 +86,7 @@ export function createNginxCertbotCleanup({
         const dir=await fs.lstat(join(live,name));
         if(!dir.isDirectory()||dir.isSymbolicLink())continue;
         const certificate=await fs.realpath(join(live,name,'cert.pem'));
-        if(!bounded(certificate,join(archive,name)))continue;
+        if(!bounded(join(archive,name),certificate))continue;
         candidates.push(name);
       }catch{ /* No actual, recognized Certbot lineage: retain. */ }
     }
