@@ -155,6 +155,19 @@ assert_web_git_acl(){
    fail "Web sees wrong Git HEAD: $web_sha"
  runuser -u linuxpanel -- test -r "$ROOT/.git/refs/heads/main" ||
    fail 'Web cannot read loose local main ref'
+ # rev-parse checks only ref text. Actual commit/tree/blob reads once failed
+ # despite green installer staging and the Web service being healthy.
+ [[ "$(runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+   -C "$ROOT" cat-file -t HEAD)" == commit ]] ||
+   fail 'Web cannot read current commit object'
+ runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+   -C "$ROOT" show HEAD:package.json >/dev/null ||
+   fail 'Web cannot read a tracked Git blob'
+ runuser -u linuxpanel -- git -c "safe.directory=$ROOT" \
+   -C "$ROOT" status --porcelain >/dev/null ||
+   fail 'Web cannot traverse Git tree/index'
+ ! runuser -u linuxpanel -- test -w "$ROOT/.git/objects" ||
+   fail 'Web gained write access to Git object store'
  ! runuser -u linuxpanel -- test -w "$ROOT/.git/refs/heads/main" ||
    fail 'Web account must not write local main ref'
  /usr/bin/python3 -I - "$ROOT" <<'PY_ACL'
@@ -251,6 +264,7 @@ wait_result 22222222222222222222222222222222 rolled_back
 [[ "$(head_now)" == "$OLD" ]] || fail 'Rollback did not restore HEAD'
 wait_healthy || fail 'Rollback did not restore Web'
 assert_web_runtime  # Detect mode regressions after rollback npm ci.
+assert_web_git_acl "$OLD"  # Objects from the fetched target stay Web-readable.
 [[ -f "/var/lib/linux-panel-update-root/panel-state.json.before-$OLD-22222222222222222222222222222222" ]] ||
  fail 'Per-request backup missing'
 
@@ -285,6 +299,7 @@ note 'Boot recovery unit returned; examining exact transaction result'
 wait_result 44444444444444444444444444444444 rolled_back
 [[ "$(head_now)" == "$OLD" ]] || fail 'Recovery did not restore old Git revision'
 wait_healthy || fail 'Recovery failed to restart healthy Web'
+assert_web_git_acl "$OLD"  # Boot recovery must restore Git object access.
 [[ ! -e "$transaction" && ! -e /var/lib/linux-panel/update-processing ]] ||
  fail 'Recovery left active transaction or processing file'
 # Recovery entrypoint must never consume a fresh unrelated trigger.
