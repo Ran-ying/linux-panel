@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'gauge', 'files', 'scheduled-tasks', 'managed-configs', 'v2ray-manager', 'nginx-service']);
+const TYPES = new Set(['metrics', 'progress', 'table', 'sections', 'terminal', 'logs', 'gauge', 'files', 'scheduled-tasks', 'managed-configs', 'v2ray-manager', 'nginx-service']);
 const FORMATS = new Set(['bytes', 'duration', 'milliseconds', 'integer', 'number']);
 
 function validateView(view,schema,actionId,depth=0) {
@@ -52,6 +52,10 @@ function validateView(view,schema,actionId,depth=0) {
         if (!nested || !Array.isArray(view.columns) || !view.columns.length)
           throw new Error('Invalid table fields');
         view.columns.forEach(f => checkField(f, nested));
+      } else if(view.renderer==='logs') {
+        if(schema.unit?.type!=='string'||schema.output?.type!=='string'||
+          schema.lines?.type!=='integer'||schema.truncated?.type!=='boolean')
+          throw new Error('Logs renderer requires unit, lines, output and truncated fields');
       } else if(view.renderer==='terminal') {
         for(const key of ['stdout','stderr'])
           if(schema[key]?.type!=='string')throw new Error('Terminal renderer requires text output fields');
@@ -129,7 +133,8 @@ export async function loadWebPresentations(modulesPath, loadedModules, registry)
         for(const field of item.inputs){
           const property=action.inputSchema?.properties?.[field.key];
           if(!field || typeof field.key!=='string' || keys.has(field.key) || !property ||
-            property.type!=='string' || !['textarea','text','select'].includes(field.type) ||
+            (field.type==='number' ? !['integer','number'].includes(property.type) : property.type!=='string') ||
+            !['textarea','text','select','number'].includes(field.type) ||
             typeof field.label!=='string' || field.label.length>100 ||
             field.placeholder!==undefined && typeof field.placeholder!=='string')
             throw new Error('Invalid input descriptor');
