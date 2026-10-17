@@ -762,9 +762,9 @@ table{min-width:500px}
 :root select:not([multiple]):not([size]){
   -webkit-appearance:none;
   appearance:none;
-  padding-right:50px;
+  padding-right:34px;
   background-image:var(--select-chevron-image);
   background-repeat:no-repeat;
-  background-position:right 26px center;
+  background-position:right 14px center;
   background-size:12px 8px;
 }
