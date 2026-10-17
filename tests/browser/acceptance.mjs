@@ -130,7 +130,11 @@ try {
         }else if(!target||target.revision!==input.revision){status=409;data={error:'版本冲突'};}
         else if(input.operation==='remove')nginxSites=nginxSites.filter(s=>s!==target);
         else{
-          if(input.operation==='edit')target.content=input.content;
+          if(input.operation==='edit'){
+             target.content=input.content;
+             target.serverNames=[...new Set([...input.content.matchAll(/server_name\s+([^;]+);/g)]
+               .flatMap(m=>m[1].trim().split(/\s+/).filter(Boolean)))].join(', ');
+           }
           if(input.operation==='enable')target.enabled='启用链接';
           if(input.operation==='disable')target.enabled='未启用';
           target.revision=revision();
@@ -631,12 +635,29 @@ try {
           'site detail parent should no longer use a shared left border');
         const siteInfo=detailCards.nth(0);
         assert.equal((await siteInfo.locator('h3').innerText()).trim(),'fixture-site');
-        assert.deepEqual(await siteInfo.locator('.config-detail-section .config-domain').allTextContents(),
+        assert.equal(await siteInfo.getByRole('button',{name:'收起'}).count(),0,
+          'remove the redundant Collapse button from selected website details');
+        assert.equal(await siteInfo.getByRole('button',{name:'编辑 fixture-site'}).count(),0);
+        const detailHeader=siteInfo.locator('.config-detail-heading');
+        assert.equal(await detailHeader.getByRole('button',{name:'删除 fixture-site'}).count(),1,
+          'Delete Configuration must appear to the right of the website name');
+        const facts=siteInfo.locator('.config-site-facts');
+        assert.deepEqual(await facts.locator(':scope > *').evaluateAll(elements=>
+          elements.map(el=>el.textContent.trim().slice(0,4))),
+          ['域名','fixt','状态','已停用'],
+          'domain and status must occupy two label/value rows in the same grid');
+        const factLayout=await facts.evaluate(el=>{
+          const children=[...el.children].map(c=>c.getBoundingClientRect());
+          return {top:children.map(r=>r.top),left:children.map(r=>r.left)};
+        });
+        assert.ok(Math.abs(factLayout.top[0]-factLayout.top[1])<6);
+        assert.ok(Math.abs(factLayout.top[2]-factLayout.top[3])<6);
+        assert.ok(factLayout.top[2]>factLayout.top[0]);
+        assert.ok(factLayout.left[1]>factLayout.left[0],
+          'values occupy second column next to labels');
+        assert.deepEqual(await facts.locator('.config-site-domain-row .config-domain').allTextContents(),
           ['fixture.test','www.fixture.test']);
         assert.ok((await siteInfo.innerText()).includes('已停用'));
-        assert.equal(await siteInfo.getByRole('button',{name:'编辑 fixture-site'}).count(),0,
-          'website identity card must no longer contain the Edit button');
-        assert.equal(await siteInfo.getByRole('button',{name:'删除 fixture-site'}).count(),1);
         const nginxConfig=detailCards.nth(1);
         assert.equal(await nginxConfig.getByRole('button',{name:'编辑 fixture-site'}).count(),1,
           'Edit now belongs to the Nginx configuration card');
@@ -677,6 +698,43 @@ try {
         await renewalModal.getByRole('button',{name:'确认续期'}).click();
         await renewalModal.waitFor({state:'hidden'});
         assert.deepEqual(nginxRenewActions,['fixture.test']);
+        const addDomain=siteInfo.getByRole('button',{name:'添加域名'});
+        await addDomain.click();
+        const domainInput=siteInfo.getByRole('textbox',{name:'新域名'});
+        await domainInput.fill('added.fixture.test');
+        assert.equal(nginxSites[0].serverNames,'fixture.test, www.fixture.test',
+          'adding a domain should never write before explicit Save');
+        await siteInfo.getByRole('button',{name:'取消'}).click();
+        assert.equal(nginxSites[0].serverNames,'fixture.test, www.fixture.test',
+          'canceling domain addition does not change config');
+        await addDomain.click();
+        await domainInput.fill('bad; include /etc/passwd;');
+        await siteInfo.getByRole('button',{name:'保存域名'}).click();
+        await siteInfo.getByRole('alert').getByText('合法域名').waitFor();
+        assert.ok(!(nginxSites[0].content.includes('include /etc/passwd')),
+          'unsafe input must never write to site');
+        await domainInput.fill('added.fixture.test');
+        await siteInfo.getByRole('button',{name:'保存域名'}).click();
+        await facts.getByText('added.fixture.test').waitFor();
+        assert.ok(nginxSites[0].content.includes('server_name fixture.test www.fixture.test added.fixture.test;'));
+        assert.equal(await siteInfo.getByRole('button',{name:'添加域名'}).count(),1);
+        const removeAdded=siteInfo.getByRole('button',{name:'删除域名 added.fixture.test'});
+        await removeAdded.click();
+        const removeDomainDialog=page.getByRole('dialog',{name:'确认移除域名'});
+        await removeDomainDialog.waitFor();
+        assert.ok(nginxSites[0].content.includes('added.fixture.test'),
+          'opening domain removal confirmation cannot write');
+        await removeDomainDialog.getByRole('button',{name:'取消'}).click();
+        await removeDomainDialog.waitFor({state:'hidden'});
+        assert.ok(nginxSites[0].content.includes('added.fixture.test'));
+        await removeAdded.click();
+        await removeDomainDialog.getByRole('button',{name:'确认移除'}).click();
+        await removeDomainDialog.waitFor({state:'hidden'});
+        await facts.getByText('added.fixture.test').waitFor({state:'detached'});
+        assert.equal(nginxSites[0].serverNames,'fixture.test, www.fixture.test');
+        assert.ok(!nginxSites[0].content.includes('added.fixture.test'));
+        await nginxConfig.locator('pre.config-nginx-preview code')
+          .getByText('server { listen 80; server_name fixture.test www.fixture.test; }').waitFor();
         const inlineEditButton=nginxConfig.getByRole('button',{name:'编辑 fixture-site'});
         await inlineEditButton.click();
         assert.equal(await page.getByRole('dialog',{name:'编辑网站配置'}).count(),0,
@@ -723,7 +781,7 @@ try {
         await headerButtons.getByRole('button',{name:'刷新数据'}).click();
         await nginxConfig.locator('pre.config-nginx-preview code')
           .getByText('server { listen 8080; server_name fixture.test www.fixture.test; }').waitFor();
-        await details.getByRole('button',{name:'收起'}).click();
+        await website.click();
         await details.waitFor({state:'detached'});
         assert.equal(await website.getAttribute('aria-pressed'),'false');
         assert.equal(await manager.getByRole('button',{name:'编辑 fixture-site'}).count(),0);

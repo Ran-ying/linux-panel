@@ -1,6 +1,7 @@
 <script setup>
 import {ref,computed,watch,onUnmounted} from 'vue';
 import NginxCertificates from './NginxCertificates.vue';
+import {updateNginxSiteDomain,validNginxDomain} from '../nginx-site-domains.js';
 const props=defineProps({
   initialData:{type:Object,required:true},listAction:{type:String,required:true},
   operations:{type:Object,required:true},csrf:{type:String,required:true},
@@ -10,6 +11,8 @@ const emit=defineEmits(['unauthorized','listing-change']);
 const listing=ref(props.initialData),busy=ref(false),error=ref(''),notice=ref('');
 const modal=ref(null),confirmModal=ref(null),draft=ref(null),pending=ref(null),checkResult=ref(null);
 const selectedFile=ref(null);
+const addingDomain=ref(false),domainInput=ref(''),domainError=ref('');
+const domainConfirm=ref(null),pendingDomain=ref(null);
 const selectedSite=computed(()=>(listing.value.sites??[]).find(site=>site.file===selectedFile.value)??null);
 // This is a read-only preview of the selected site's real Nginx file. It does
 // not enter the edit draft or mutate the on-disk configuration.
@@ -21,22 +24,62 @@ const domains=site=>site.serverNames?.trim()
   :['—'];
 function selectSite(site){
   if(busy.value)return;
-  if(inlineDraft.value){
-    inlineError.value='请先保存或取消当前 Nginx 配置编辑，再切换网站';
+  if(inlineDraft.value||addingDomain.value||pendingDomain.value){
+    domainError.value='请先保存或取消当前配置或域名操作，再切换网站';
     return;
   }
   selectedFile.value=selectedFile.value===site.file?null:site.file;
 }
-function closeSite(){
-  if(busy.value)return;
-  if(inlineDraft.value){
-    inlineError.value='请先保存或取消当前 Nginx 配置编辑，再收起网站';
-    return;
-  }
-  selectedFile.value=null;
-}
 let noticeTimer;
 watch(()=>props.initialData,v=>{listing.value=v;});
+watch(selectedFile,()=>{addingDomain.value=false;domainInput.value='';domainError.value='';});
+function startAddingDomain(){
+  if(busy.value||inlineDraft.value||pendingDomain.value)return;
+  domainError.value='';domainInput.value='';addingDomain.value=true;
+}
+function cancelAddingDomain(){
+  if(busy.value)return;
+  addingDomain.value=false;domainInput.value='';domainError.value='';
+}
+function requestRemoveDomain(domain){
+  if(busy.value||inlineDraft.value||addingDomain.value)return;
+  domainError.value='';
+  pendingDomain.value={site:selectedSite.value,domain};
+  domainConfirm.value?.showModal();
+}
+function cancelRemoveDomain(){
+  if(busy.value)return;
+  domainConfirm.value?.close();
+  pendingDomain.value=null;domainError.value='';
+}
+async function applyDomainChange(operation,domain,site){
+  return work(async()=>{
+    domainError.value='';
+    try{
+      if(!site?.editable||selectedSite.value?.file!==site.file)
+        throw Error('该网站不可编辑或已切换');
+      if(inlineDraft.value)throw Error('请先完成 Nginx 配置编辑');
+      if(!validNginxDomain(domain))
+        throw Error('请输入合法域名，例如 example.com');
+      const current=await request(props.operations.read,{name:site.name});
+      if(current.revision!==site.revision)
+        throw Error('网站配置已变化，请刷新网站数据后重试');
+      const content=updateNginxSiteDomain(current.content,operation,domain);
+      const outcome=await request(props.operations.apply,{
+        name:site.name,content,revision:current.revision,operation:'edit'
+      });
+      if(!outcome.ok)throw Error(outcome.status+(outcome.output?': '+outcome.output:''));
+      configPreview.value=content;
+      if(operation==='add'){addingDomain.value=false;domainInput.value='';}
+      else{domainConfirm.value?.close();pendingDomain.value=null;}
+      notify(outcome.status);
+      await refresh();
+    }catch(cause){
+      domainError.value=cause.message||'域名操作失败，修改未保存';
+    }
+  });
+}
+
 watch(()=>selectedSite.value?selectedSite.value.name+'|'+selectedSite.value.revision:null,async()=>{
   const site=selectedSite.value,generation=++configPreviewGeneration;
   configPreview.value=null;configPreviewError.value='';configPreviewLoading.value=!!site;
@@ -85,7 +128,7 @@ function openNew(){
   modal.value?.showModal();
 }
 function openInlineEdit(site){
-  if(inlineDraft.value||busy.value)return;
+  if(inlineDraft.value||busy.value||addingDomain.value||pendingDomain.value)return;
   return work(async()=>{
     inlineError.value='';
     const data=await request(props.operations.read,{name:site.name});
@@ -219,25 +262,42 @@ function check(){
         <section class="config-detail-card config-site-info-card" aria-label="网站基本信息">
           <div class="config-detail-heading">
             <h3>{{ selectedSite.name }}</h3>
-            <button type="button" :disabled="busy" @click="closeSite">收起</button>
-          </div>
-          <div class="config-detail-section">
-            <span class="muted small">域名</span>
-            <span v-for="(domain,index) in domains(selectedSite)" :key="index"
-              class="config-domain">{{ domain }}</span>
-          </div>
-          <div class="config-detail-section">
-            <span class="muted small">状态</span>
-            <span>{{ selectedSite.enabled==='启用链接'?'已启用'
-              :selectedSite.enabled==='启用目录'?'已启用'
-              :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
-          </div>
-          <div v-if="selectedSite.editable" class="config-actions">
-            <button type="button" :disabled="busy||!!inlineDraft"
+            <button v-if="selectedSite.editable" type="button"
+              :disabled="busy||!!inlineDraft||addingDomain||!!pendingDomain"
               :aria-label="'删除 '+selectedSite.name"
               @click="ask(selectedSite,'remove')">删除</button>
           </div>
-          <p v-else class="muted small">此配置仅支持查看，不能编辑或删除。</p>
+          <div class="config-site-facts">
+            <span class="muted small">域名</span>
+            <div class="config-site-domains">
+              <div v-for="(domain,index) in domains(selectedSite)" :key="index"
+                class="config-site-domain-row">
+                <span class="config-domain">{{ domain }}</span>
+                <button v-if="selectedSite.editable && domain!=='—'" type="button"
+                  :disabled="busy||!!inlineDraft||addingDomain||!!pendingDomain"
+                  :aria-label="'删除域名 '+domain" @click="requestRemoveDomain(domain)">移除</button>
+              </div>
+              <button v-if="selectedSite.editable && !addingDomain" type="button"
+                class="config-domain-add" :disabled="busy||!!inlineDraft||!!pendingDomain"
+                @click="startAddingDomain">添加域名</button>
+              <form v-if="addingDomain" class="config-domain-add-form"
+                @submit.prevent="applyDomainChange('add',domainInput,selectedSite)">
+                <input v-model="domainInput" type="text" aria-label="新域名"
+                  placeholder="example.com" spellcheck="false" autocomplete="off"
+                  :disabled="busy" required maxlength="253" />
+                <div class="config-domain-add-actions">
+                  <button type="button" :disabled="busy" @click="cancelAddingDomain">取消</button>
+                  <button type="submit" :disabled="busy">保存域名</button>
+                </div>
+              </form>
+            </div>
+            <span class="muted small">状态</span>
+            <span class="config-site-state">{{ selectedSite.enabled==='启用链接'?'已启用'
+              :selectedSite.enabled==='启用目录'?'已启用'
+              :selectedSite.enabled==='未启用'?'已停用':'状态待确认' }}</span>
+          </div>
+          <p v-if="domainError" class="error" role="alert">{{ domainError }}</p>
+          <p v-if="!selectedSite.editable" class="muted small">此配置仅支持查看，不能编辑或删除。</p>
         </section>
         <section class="config-detail-card config-nginx-card" aria-label="Nginx 配置">
           <div class="config-nginx-heading">
@@ -295,6 +355,22 @@ function check(){
           <button type="submit" :disabled="busy">保存配置</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog ref="domainConfirm" class="config-dialog" aria-labelledby="config-domain-confirm-heading"
+      @close="pendingDomain=null">
+      <div v-if="pendingDomain" class="config-form">
+        <h3 id="config-domain-confirm-heading">确认移除域名</h3>
+        <p>从 <strong>{{ pendingDomain.site.name }}</strong> 的 Nginx server_name 中移除
+          <strong>{{ pendingDomain.domain }}</strong>？</p>
+        <p class="muted small">将按现有站点配置版本校验并执行 nginx -t；不能删除最后一个域名。SSL 证书本身不会被删除。</p>
+        <p v-if="domainError" class="error" role="alert">{{ domainError }}</p>
+        <div class="config-dialog-actions">
+          <button type="button" :disabled="busy" @click="cancelRemoveDomain">取消</button>
+          <button type="button" :disabled="busy"
+            @click="applyDomainChange('remove',pendingDomain.domain,pendingDomain.site)">确认移除</button>
+        </div>
+      </div>
     </dialog>
 
     <dialog ref="confirmModal" class="config-dialog" aria-labelledby="config-confirm-heading" @close="pending=null">
@@ -362,6 +438,19 @@ function check(){
 .config-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:.7rem}
 .config-detail-heading h3{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
 .config-detail-heading button{font:inherit;min-height:2.2rem;padding:.25rem .7rem}
+.config-site-facts{display:grid;grid-template-columns:minmax(4rem,auto) minmax(0,1fr);
+  gap:12px 16px;align-items:start;min-width:0}
+.config-site-domains{display:grid;justify-items:start;gap:8px;min-width:0}
+.config-site-domain-row{display:flex;align-items:center;gap:8px;min-width:0;
+  flex-wrap:wrap}
+.config-site-domain-row .config-domain{font-size:1rem}
+.config-site-state{overflow-wrap:anywhere}
+.config-domain-add{justify-self:start}
+.config-domain-add-form{display:grid;gap:8px;min-width:0;max-width:100%}
+.config-domain-add-form input{box-sizing:border-box;min-width:0;width:min(100%,22rem);
+  padding:8px;border:1px solid var(--input-border);border-radius:8px;
+  background:var(--input-bg);color:var(--text-primary);font:inherit}
+.config-domain-add-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .config-detail-section{gap:.35rem}
 .config-detail-section .config-domain{font-size:1rem}
 .config-actions{gap:.5rem}
