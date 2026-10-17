@@ -411,42 +411,42 @@ function check(){
 .config-summary{margin:.1rem 0 .45rem}
 .config-browser{display:grid;grid-template-columns:minmax(0,17rem);align-items:start;gap:1rem;min-width:0}
 .config-browser.has-selection{grid-template-columns:minmax(0,17rem) minmax(0,1fr)}
-.config-list-panel{border:1px solid var(--border-panel);border-radius:12px;min-width:0;
+.config-list-panel{border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);min-width:0;
   overflow:hidden;background:var(--panel-bg);box-shadow:none;padding:0}
 .config-detail-panel{border:0;border-radius:0;min-width:0;overflow:visible;
   background:transparent;box-shadow:none;padding:0}
 .config-site-list{list-style:none;margin:0;padding:0}
-.config-site-row{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--border,#8885)}
+.config-site-row{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--border-panel)}
 .config-site-row:last-child{border-bottom:none}
-.config-site-row.is-selected{background:var(--surface-secondary,#8881)}
+.config-site-row.is-selected{background:var(--selected-bg)}
 .config-site-selector{flex:1;display:flex;flex-direction:column;gap:.25rem;min-width:0;
   border:0;background:none;color:inherit;text-align:left;padding:.7rem .3rem .7rem 0;
   font:inherit;cursor:pointer}
-.config-site-selector:focus-visible{outline:2px solid var(--accent,#538ad7);outline-offset:-2px}
+.config-site-selector:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .config-site-selector:disabled{cursor:wait}
-.config-site-name{font-weight:600;overflow-wrap:anywhere}
+.config-site-name{font-weight:var(--ui-label-font-weight);overflow-wrap:anywhere}
 .config-domains,.config-detail-section{display:flex;flex-direction:column;gap:.2rem;min-width:0}
-.config-domain{display:block;font-size:.87rem;color:var(--text-muted,#888);overflow-wrap:anywhere}
+.config-domain{display:block;font-size:.87rem;color:var(--text-muted);overflow-wrap:anywhere}
 .config-status-checkbox{width:1.15rem;height:1.15rem;min-width:1.15rem;margin:0 0 0 .75rem;
-  cursor:pointer;accent-color:var(--accent,#538ad7)}
+  cursor:pointer;accent-color:var(--focus-ring)}
 .config-status-checkbox:disabled{cursor:not-allowed;opacity:.65}
 .config-empty{padding:1rem;margin:0}
 .config-detail-panel{display:grid;gap:12px;align-content:start}
-.config-detail-card{display:grid;gap:12px;min-width:0;padding:14px;
-  border:1px solid var(--border-panel);border-radius:12px;background:var(--panel-bg)}
+.config-detail-card{display:grid;gap:12px;min-width:0;padding:var(--ui-card-padding);
+  border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);background:var(--panel-bg)}
 .config-nginx-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.config-nginx-card h4{margin:0;font-size:1rem;font-weight:600}
+.config-nginx-card h4{margin:0;font-size:1rem;font-weight:var(--ui-label-font-weight)}
 .config-inline-form{display:grid;gap:10px;min-width:0}
 .config-inline-form textarea{box-sizing:border-box;width:100%;min-width:0;min-height:18rem;
   max-height:70vh;resize:vertical;overflow:auto;padding:12px;
   background:var(--input-bg);color:var(--text-primary);
-  border:1px solid var(--input-border);border-radius:8px;
+  border:1px solid var(--input-border);border-radius:var(--ui-input-radius);
   font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
   font-size:.82rem;line-height:1.55;tab-size:2}
 .config-inline-form p{margin:0}
 .config-inline-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .config-nginx-preview{margin:0;min-width:0;max-height:22rem;overflow:auto;
-  padding:12px;border:1px solid var(--border-rule);border-radius:8px;
+  padding:12px;border:1px solid var(--border-rule);border-radius:var(--ui-input-radius);
   background:var(--input-bg);color:var(--text-primary);font:inherit;
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
   font-size:.82rem;line-height:1.55;white-space:pre;tab-size:2}
@@ -454,26 +454,26 @@ function check(){
 .config-detail-heading h3{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
 .config-site-facts{display:grid;grid-template-columns:minmax(4rem,auto) minmax(0,1fr);
   gap:12px 16px;align-items:start;min-width:0}
-.config-site-label{color:var(--text-primary);font-size:1rem;font-weight:600;line-height:1.5}
+.config-site-label{color:var(--text-primary);font-size:1rem;font-weight:var(--ui-label-font-weight);line-height:1.5}
 .config-site-domains{display:grid;gap:8px;min-width:0}
 .config-site-domain-row,.config-site-state-row{display:grid;
   grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px;min-width:0}
-.config-site-domain-row .config-domain,.config-site-state{font-size:1rem;font-weight:400;
+.config-site-domain-row .config-domain,.config-site-state{font-size:1rem;font-weight:var(--ui-value-font-weight);
   color:var(--text-primary);line-height:1.5;overflow-wrap:anywhere}
 .config-site-state-actions{display:flex;align-items:center;justify-content:flex-end;
   gap:12px;flex-wrap:wrap}
 .config-site-text-action{appearance:none;display:inline-block;box-sizing:border-box;
   border:0;border-radius:0;background:transparent;box-shadow:none;
   padding:0;margin:0;min-height:0;line-height:1.5;font-family:inherit;
-  font-size:1rem;font-weight:400;color:var(--text-primary);
+  font-size:1rem;font-weight:var(--ui-value-font-weight);color:var(--text-primary);
   text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .config-site-text-action:hover{text-decoration-thickness:2px}
-.config-site-text-action:focus-visible{outline:2px solid var(--accent,#538ad7);outline-offset:3px}
+.config-site-text-action:focus-visible{outline:2px solid var(--focus-ring);outline-offset:3px}
 .config-site-text-action:disabled{opacity:.5;cursor:not-allowed}
 .config-domain-add{justify-self:start}
 .config-domain-add-form{display:grid;gap:8px;min-width:0;max-width:100%}
 .config-domain-add-form input{box-sizing:border-box;min-width:0;width:min(100%,22rem);
-  padding:8px;border:1px solid var(--input-border);border-radius:8px;
+  padding:8px;border:1px solid var(--input-border);border-radius:var(--ui-input-radius);
   background:var(--input-bg);color:var(--text-primary);font:inherit}
 .config-domain-add-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .config-detail-section{gap:.35rem}
@@ -484,13 +484,13 @@ function check(){
 .config-check{padding:.7rem 0}
 .config-check pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:18rem;overflow:auto}
 .config-warnings{margin:.8rem 0}
-.config-dialog{background:var(--surface,Canvas);color:inherit;border:1px solid var(--border,#8885);
- border-radius:12px;padding:1.2rem;width:min(94vw,52rem);max-height:90vh}
-.config-dialog::backdrop{background:#0008}
+.config-dialog{background:var(--panel-bg);color:inherit;border:1px solid var(--border-panel);
+ border-radius:var(--ui-card-radius);padding:var(--ui-dialog-padding);width:min(94vw,52rem);max-height:90vh;box-shadow:var(--ui-dialog-shadow)}
+.config-dialog::backdrop{background:var(--ui-dialog-backdrop)}
 .config-form{display:grid;gap:1rem}
 .config-form h3{margin:0}
-.config-form label{display:grid;gap:.4rem;font-weight:600}
-.config-form label input,.config-form textarea{width:100%;min-width:0;box-sizing:border-box;font:inherit}
+.config-form label{display:grid;gap:.4rem;font-weight:var(--ui-label-font-weight)}
+.config-form label input,.config-form textarea{width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:var(--ui-value-font-weight)}
 .config-form textarea{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
 .config-dialog-actions{justify-content:flex-end}
 .config-notice{padding:.55rem 0}

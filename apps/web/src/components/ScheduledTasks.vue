@@ -281,7 +281,7 @@ function remove(){
 <style scoped>
 .scheduled-tasks{border:0;border-radius:0;box-shadow:none;background:transparent;padding:0;min-width:0}
 .task-group{
-  border:1px solid var(--border-panel);border-radius:14px;
+  border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);
   background:var(--panel-bg);box-shadow:none;padding:18px;min-width:0;
 }
 .task-group + .task-group{margin-top:var(--content-space,24px)}
@@ -305,13 +305,13 @@ function remove(){
 .task-command{white-space:pre-wrap;overflow-wrap:anywhere;max-width:28rem;display:block}
 .task-row-actions{gap:.3rem}
 .task-row-actions button{white-space:nowrap}
-.task-dialog{border:1px solid var(--border, #8885);border-radius:12px;color:inherit;background:var(--surface,Canvas);padding:1.2rem;width:min(94vw,35rem);max-height:90vh}
-.task-dialog::backdrop{background:#0008}
+.task-dialog{border:1px solid var(--border-panel);border-radius:var(--ui-card-radius);color:inherit;background:var(--panel-bg);padding:var(--ui-dialog-padding);width:min(94vw,35rem);max-height:90vh;box-shadow:var(--ui-dialog-shadow)}
+.task-dialog::backdrop{background:var(--ui-dialog-backdrop)}
 .task-form{display:grid;gap:1rem}
 .task-form h3{margin:0}
-.task-form label{display:grid;gap:.4rem;font-weight:600}
-.task-form label input,.task-form textarea{width:100%;min-width:0;box-sizing:border-box;font:inherit}
-.task-form .task-switch{display:flex;align-items:center;font-weight:400}
+.task-form label{display:grid;gap:.4rem;font-weight:var(--ui-label-font-weight)}
+.task-form label input,.task-form textarea{width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:var(--ui-value-font-weight)}
+.task-form .task-switch{display:flex;align-items:center;font-weight:var(--ui-value-font-weight)}
 .task-switch input{width:auto!important}
 .task-dialog-actions{justify-content:flex-end}
 .task-notice{padding:.6rem 0}
