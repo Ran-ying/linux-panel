@@ -1100,6 +1100,10 @@ try {
         await inboundVisual.getByRole('button',{name:'新增规则'}).click();
         const routeEntry=inboundVisual.locator('.v2ray-visual-entry').first();
         const routeFields=routeEntry.locator(':scope > .v2ray-visual-fields');
+        assert.equal(await routeFields.evaluate(node=>getComputedStyle(node).alignItems),'start',
+          'routing grid top-aligns each field instead of bottom-aligning against tall inbound tags');
+        assert.equal(await routeFields.locator(':scope > *').last().getAttribute('class'),
+          'v2ray-routing-add-condition','Add condition row must be the last rule element');
         assert.equal(await routeFields.locator(':scope > label').count(),2,
           'new rule must show only type and outbound labels plus the inbound tag editor');
         assert.equal(await routeFields.locator(':scope > .v2ray-routing-tags').count(),1);
@@ -1119,6 +1123,34 @@ try {
         const inboundSelect=routeEntry.getByRole('combobox',{name:'入站标签 1'});
         await inboundSelect.selectOption('json-changed');
         assert.ok((await inboundSelect.locator('option').evaluateAll(options=>options.map(o=>o.value))).includes('json-changed'));
+        const baseFieldGeometry=await routeFields.evaluate(grid=>{
+          const type=grid.querySelector(':scope > label:first-child');
+          const inbound=grid.querySelector(':scope > .v2ray-routing-tags');
+          const outbound=[...grid.children].find(node=>node.tagName==='LABEL'&&node.textContent.includes('目标出站标签'));
+          const controls=[type.querySelector('input'),inbound.querySelector('select'),outbound.querySelector('select')];
+          const labels=[type,inbound,outbound];
+          return {heights:controls.map(node=>node.getBoundingClientRect().height),
+            fieldTops:labels.map(node=>node.getBoundingClientRect().top),
+            fieldLefts:labels.map(node=>node.getBoundingClientRect().left),
+            fontSizes:labels.map(node=>getComputedStyle(node).fontSize),
+            firstControlOffsets:controls.map((node,i)=>Math.round((node.getBoundingClientRect().top-
+              labels[i].getBoundingClientRect().top)*10)/10)};
+        });
+        assert.ok(baseFieldGeometry.heights.every(h=>Math.abs(h-38)<1),
+          'type, inbound and outbound tag controls must have one 38px visual height');
+        assert.equal(new Set(baseFieldGeometry.fontSizes).size,1,
+          'base routing labels must use the same font size');
+        assert.ok(Math.max(...baseFieldGeometry.firstControlOffsets)-
+          Math.min(...baseFieldGeometry.firstControlOffsets)<2,
+          'all three controls start at the same offset beneath their labels');
+        if(width===1280 && new Set(baseFieldGeometry.fieldLefts).size===3)
+          assert.ok(Math.max(...baseFieldGeometry.fieldTops)-Math.min(...baseFieldGeometry.fieldTops)<2,
+            'when the three base fields share a desktop row, their tops must align');
+        const addRow=routeFields.locator(':scope > .v2ray-routing-add-condition');
+        const addControlHeights=await addRow.evaluate(row=>
+          [...row.querySelectorAll('select,button')].map(el=>el.getBoundingClientRect().height));
+        assert.ok(addControlHeights.every(h=>Math.abs(h-38)<1),
+          'condition picker and add button must share an exact 38px height');
         const routeChevron=await outboundSelect.evaluate(select=>{
           const css=getComputedStyle(select);
           return {appearance:css.appearance,position:css.backgroundPosition,
@@ -1156,14 +1188,18 @@ try {
           const gridRect=grid.getBoundingClientRect();
           const textbox=label.querySelector('textarea').getBoundingClientRect();
           return {
-            isLast:grid.lastElementChild===label,
+            isLastCondition:grid.children[grid.children.length-2]===label,
+            lastElementClass:grid.lastElementChild.className,
             gridColumn:getComputedStyle(label).gridColumn,
             left:fieldRect.left,right:fieldRect.right,
             gridLeft:gridRect.left,gridRight:gridRect.right,
             textareaWidth:textbox.width,fieldWidth:fieldRect.width
           };
         });
-        assert.equal(ipGeometry.isLast,true,'IP criteria stay last when another field is added');
+        assert.equal(ipGeometry.isLastCondition,true,
+          'IP remains the final condition immediately before bottom action controls');
+        assert.equal(ipGeometry.lastElementClass,'v2ray-routing-add-condition',
+          'the condition picker and add button stay at the very bottom of the rule');
         assert.equal(ipGeometry.gridColumn,'1 / -1','IP criteria must span all grid columns');
         assert.ok(Math.abs(ipGeometry.left-ipGeometry.gridLeft)<2 &&
           Math.abs(ipGeometry.right-ipGeometry.gridRight)<2,
