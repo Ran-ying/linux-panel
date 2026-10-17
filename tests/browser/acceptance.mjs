@@ -391,7 +391,66 @@ try {
         assert.equal(await visibleRows.count(),3);
         assert.deepEqual(await owner.locator('option').allTextContents(),
           ['全部用户','alice','root','systemd']);
+        // These header dropdowns and the search input are outside task-form.
+        const checkCronFilters=async theme=>{
+          await page.locator('html').evaluate((node,name)=>{node.dataset.theme=name;},theme);
+          const controls=await system.locator(
+            '.system-filters input, .task-filter-heading select'
+          ).evaluateAll(nodes=>{
+            const probe=document.createElement('span');
+            probe.style.cssText='position:absolute;visibility:hidden;pointer-events:none';
+            probe.style.backgroundColor='var(--input-bg)';
+            probe.style.border='1px solid var(--input-border)';
+            probe.style.color='var(--text-primary)';
+            document.body.appendChild(probe);
+            const palette=getComputedStyle(probe);
+            const expected={bg:palette.backgroundColor,border:palette.borderTopColor,color:palette.color};
+            const values=nodes.map(node=>{
+              const css=getComputedStyle(node),rect=node.getBoundingClientRect();
+              return {tag:node.tagName,background:css.backgroundColor,
+                border:css.borderTopColor,borderWidth:css.borderTopWidth,
+                borderStyle:css.borderTopStyle,color:css.color,
+                radius:css.borderTopLeftRadius,fontSize:css.fontSize,
+                weight:css.fontWeight,height:rect.height,paddingRight:css.paddingRight,
+                image:css.backgroundImage};
+            });
+            probe.remove();
+            return {expected,values};
+          });
+          assert.equal(controls.values.length,4,theme+': three selects and one search input');
+          assert.equal(controls.values.filter(x=>x.tag==='SELECT').length,3);
+          for(const control of controls.values){
+            assert.ok(Math.abs(control.height-38)<.2,theme+': field height '+JSON.stringify(control));
+            assert.equal(control.radius,'8px',theme+': field radius');
+            assert.equal(control.borderStyle,'solid',theme+': solid input border');
+            assert.equal(control.borderWidth,'1px',theme+': input border width');
+            assert.equal(control.fontSize,'16px',theme+': regular field text size');
+            assert.equal(control.weight,'400',theme+': do not inherit bold heading');
+            assert.equal(control.background,controls.expected.bg,theme+': themed background');
+            assert.equal(control.border,controls.expected.border,theme+': themed border color');
+            assert.equal(control.color,controls.expected.color,theme+': themed text color');
+            if(control.tag==='SELECT'){
+              assert.ok(parseFloat(control.paddingRight)>=30,theme+': chevron text clearance');
+              assert.ok(control.image.includes('svg'),theme+': shared chevron graphic');
+            }
+          }
+        };
+        const oldTheme=await page.locator('html').getAttribute('data-theme');
+        try{
+          await checkCronFilters('light');
+          await checkCronFilters('dark');
+        }finally{
+          await page.locator('html').evaluate((node,name)=>{
+            if(name===null)node.removeAttribute('data-theme');
+            else node.dataset.theme=name;
+          },oldTheme);
+        }
+        const search=system.getByRole('textbox',{name:'搜索系统任务'});
         const callsBeforeFilters=cronListCalls;
+        await search.fill('certbot');
+        assert.equal(await visibleRows.count(),1,'search must filter client-side');
+        await search.clear();
+        assert.equal(await visibleRows.count(),3);
         await source.selectOption('user-crontab');
         assert.equal(await visibleRows.count(),1);
         await owner.selectOption('root');

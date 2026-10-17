@@ -24,3 +24,5 @@
 ## 回归门槛
 
 静态契约：node --test tests/web-style-contract.test.js；生产编译：npm run build:web；项目完整 CI 包含桌面 1280px 和手机 390px 浏览器回归。人工仍需核对浅色/深色下登录、系统概览、设置、文件、Cron、Nginx/SSL、V2Ray 与确认对话框；自动静态检查不能代替真实视觉测试。本轮不修改 Action/API、root 执行器或服务器配置。
+
+2026-10-17：补充 Cron 系统任务表头筛选下拉框和独立搜索输入框。这些控件位于弹窗 task-form 外，不受弹窗通用规则覆盖；局部样式显式应用 --ui-field-height、--input-bg、--input-border、--text-primary 以及正常字重。浏览器回归须验证两种主题下的实际计算样式及前端筛选行为。

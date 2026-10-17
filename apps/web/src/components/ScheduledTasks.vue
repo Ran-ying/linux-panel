@@ -293,10 +293,29 @@ function remove(){
   flex-wrap:wrap;margin-left:auto;min-width:0}
 .task-count{margin:0 0 .6rem}
 .system-origin{display:block;margin-top:.25rem;font-size:.78rem;opacity:.7;overflow-wrap:anywhere}
-.system-filters label{display:flex;align-items:center;gap:.4rem}
-.system-filters input{min-height:2.35rem;max-width:18rem;font:inherit}
-.task-filter-heading{display:flex;flex-direction:column;align-items:stretch;gap:.35rem;font-weight:inherit}
-.task-filter-heading select{width:100%;min-width:7rem;max-width:15rem;min-height:2.35rem;font:inherit}
+/* Search and table-header filters are outside the task-form dialogs: they must
+   explicitly use panel input tokens rather than native browser control styles.
+   Keep headings bold but selected values/search text regular-weight. */
+.system-filters label{
+  display:flex;align-items:center;gap:8px;width:min(100%,24rem);min-width:0;
+  margin:0;font-weight:var(--ui-label-font-weight)
+}
+.task-filter-heading{
+  display:flex;flex-direction:column;align-items:stretch;gap:8px;
+  min-width:0;margin:0;font-weight:var(--ui-label-font-weight)
+}
+.system-filters input,.task-filter-heading select{
+  box-sizing:border-box;height:var(--ui-field-height);min-height:var(--ui-field-height);
+  border:1px solid var(--input-border);border-radius:var(--ui-input-radius);
+  padding:8px 10px;background-color:var(--input-bg);color:var(--text-primary);
+  font-family:inherit;font-size:1rem;font-weight:var(--ui-value-font-weight);
+  line-height:20px
+}
+.system-filters input{flex:1 1 10rem;width:100%;min-width:0;max-width:18rem}
+.task-filter-heading select{display:block;width:100%;min-width:7rem;max-width:15rem;cursor:pointer}
+.system-filters input:focus-visible,.task-filter-heading select:focus-visible{
+  outline:2px solid var(--focus-ring);outline-offset:2px
+}
 .task-toolbar,.task-row-actions,.task-dialog-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .task-toolbar{margin:.2rem 0 1rem}
 .task-row-actions button,.task-dialog-actions button{min-height:2.35rem;font:inherit;padding:.35rem .8rem}

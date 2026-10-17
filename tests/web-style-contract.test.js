@@ -53,3 +53,17 @@ test('dialog input values do not inherit their bold labels',()=>{
   assert.match(style(name),/label input[^}]*font-weight:var\(--ui-value-font-weight\)/,name);
  }
 });
+
+test('Cron search and table-header selects share normal-weight themed field geometry',()=>{
+ const cron=style('ScheduledTasks.vue');
+ for(const selector of ['.system-filters input','.task-filter-heading select']){
+  assert.ok(cron.includes(selector),selector);
+ }
+ const shared=cron.match(/\.system-filters input,\.task-filter-heading select\{([^}]+)\}/)?.[1]||'';
+ for(const rule of ['height:var(--ui-field-height)','border:1px solid var(--input-border)',
+  'border-radius:var(--ui-input-radius)','background-color:var(--input-bg)',
+  'color:var(--text-primary)','font-weight:var(--ui-value-font-weight)']){
+  assert.ok(shared.includes(rule),rule);
+ }
+ assert.match(cron,/\.task-filter-heading select:focus-visible\{[^}]*var\(--focus-ring\)/);
+});
