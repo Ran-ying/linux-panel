@@ -274,7 +274,7 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                     <button type="button" :disabled="busy"
                       :aria-label="'移除'+group.label+(i+1)" @click="visualRemove(group.key,[i])">移除</button>
                   </div>
-                  <div v-if="section==='routing'" class="v2ray-visual-fields">
+                  <div v-if="section==='routing'" class="v2ray-visual-fields v2ray-routing-fields">
                     <label>类型
                       <input :value="entry.type??''" :disabled="busy" @change="visualSet(group.key,[i,'type'],$event)" />
                     </label>
@@ -327,6 +327,11 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       <textarea rows="2" :value="listString(entry.protocol)" :disabled="busy"
                         @change="visualSet(group.key,[i,'protocol'],$event,'list')" />
                     </label>
+                    <label v-if="routeVisible(entry,'ip',group.key,i)" class="v2ray-routing-ip-field">IP 条件
+                      <textarea v-auto-grow rows="1" :value="listString(entry.ip)" :disabled="busy"
+                        @input="resizeRouteIpTextarea($event.target)"
+                        @change="visualSet(group.key,[i,'ip'],$event,'list')" />
+                    </label>
                     <div class="v2ray-routing-add-condition">
                       <select :value="routeConditionSelection[routeKey(group.key,i)]??''" :disabled="busy"
                         :aria-label="'选择条件 '+(i+1)"
@@ -338,11 +343,6 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
                       <button type="button" :disabled="busy||!routeConditionSelection[routeKey(group.key,i)]"
                         @click="addRouteCondition(entry,group.key,i)">添加条件</button>
                     </div>
-                    <label v-if="routeVisible(entry,'ip',group.key,i)" class="v2ray-routing-ip-field">IP 条件
-                      <textarea v-auto-grow rows="1" :value="listString(entry.ip)" :disabled="busy"
-                        @input="resizeRouteIpTextarea($event.target)"
-                        @change="visualSet(group.key,[i,'ip'],$event,'list')" />
-                    </label>
                   </div>
                   <template v-else>
                     <div class="v2ray-visual-fields">
@@ -546,11 +546,21 @@ onMounted(()=>{if(data.value.installed&&data.value.configExists)void wrap(load);
 .v2ray-visual-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr));
   gap:10px;align-items:end;min-width:0}
 .v2ray-visual-fields label{display:grid;gap:5px;min-width:0;font-size:.85rem}
+/* Routing's three permanent fields share the same top baseline, even when
+   inboundTag contains several rows or its add button makes that cell taller. */
+.v2ray-visual-fields.v2ray-routing-fields{align-items:start}
+.v2ray-routing-fields>label>input,.v2ray-routing-fields>label>select,
+.v2ray-routing-tags select,.v2ray-routing-tags>button,.v2ray-routing-tag-row button{
+  box-sizing:border-box;height:38px;min-height:38px;line-height:20px
+}
 .v2ray-visual-fields .v2ray-routing-ip-field{grid-column:1/-1}
 .v2ray-routing-ip-field textarea{resize:none;overflow-y:hidden}
 .v2ray-routing-add-condition{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
 .v2ray-routing-add-condition select{flex:1 1 175px;width:auto;min-width:0}
 .v2ray-routing-add-condition button{flex:none;border-radius:8px}
+.v2ray-routing-add-condition select,.v2ray-routing-add-condition button{
+  box-sizing:border-box;height:38px;min-height:38px;line-height:20px
+}
 .v2ray-visual-fields input,.v2ray-visual-fields textarea,.v2ray-visual-fields select{
   box-sizing:border-box;width:100%;min-width:0;padding:8px;
   border-radius:8px;border:1px solid var(--input-border);
