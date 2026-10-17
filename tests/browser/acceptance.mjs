@@ -112,6 +112,7 @@ try {
     });
     // Synthetic V2Ray server: browser coverage without changing the CI host.
     let v2rayInstalled=true,v2rayRunning=true,v2rayEnabled=true,v2rayRevision=0;
+    let v2rayFailStatusOnce=false;
     let v2rayConfig=JSON.stringify({inbounds:[{tag:'socks',listen:'192.0.2.55',
       port:10080,protocol:'socks',streamSettings:{network:'ws',security:'tls'},
       settings:{clients:[{id:'client-uuid-visible',level:1}]}}],outbounds:[{tag:'direct',protocol:'freedom'}],
@@ -125,7 +126,9 @@ try {
       const input=route.request().postDataJSON()?.input??{};
       v2rayCalls.push({id,operation:input.operation??null});
       let status=200,result;
-      if(id==='v2ray.status')result={installed:v2rayInstalled,version:v2rayInstalled?'V2Ray 5.47.0':'',
+      if(id==='v2ray.status'&&v2rayFailStatusOnce){
+        v2rayFailStatusOnce=false;status=503;result={error:'Temporary status outage'};
+      }else if(id==='v2ray.status')result={installed:v2rayInstalled,version:v2rayInstalled?'V2Ray 5.47.0':'',
         service:v2rayRunning?'running':'stopped',enabled:v2rayEnabled,binary:v2rayInstalled?'/usr/local/bin/v2ray':'',
         configPath:'/usr/local/etc/v2ray/config.json',configExists:v2rayInstalled,
         inbounds:v2rayInstalled?1:0,outbounds:v2rayInstalled?1:0,features:['inbounds','outbounds','routing','dns'],
@@ -1023,6 +1026,24 @@ try {
         await panel.getByText('保存成功',{exact:true}).waitFor();
         assert.equal(JSON.parse(v2rayConfig).customUnknown.value,true);
         assert.equal(JSON.parse(v2rayConfig).log.loglevel,'info');
+        // Regression: a transient panel status failure after a successful Save
+        // must not strand the editor on the previous SHA-256 revision. Both
+        // this save and the next save must succeed without manually refreshing.
+        const followup=JSON.parse(await editor.inputValue());
+        followup.log.temporaryMarker='second-save';
+        await editor.fill(JSON.stringify(followup,null,2));
+        v2rayFailStatusOnce=true;
+        await panel.getByRole('button',{name:'保存并应用'}).click();
+        await panel.getByText(/保存成功；状态摘要刷新失败/).waitFor();
+        assert.equal(JSON.parse(v2rayConfig).log.temporaryMarker,'second-save');
+        const finalDraft=JSON.parse(await editor.inputValue());
+        delete finalDraft.log.temporaryMarker;
+        await editor.fill(JSON.stringify(finalDraft,null,2));
+        await panel.getByRole('button',{name:'保存并应用'}).click();
+        await panel.getByText('保存成功',{exact:true}).waitFor();
+        assert.equal(JSON.parse(v2rayConfig).log.temporaryMarker,undefined);
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,3,
+          'two consecutive Saves after a status outage use updated revisions');
         await nav.getByRole('button',{name:'DNS（dns）',exact:true}).click();
         const part=panel.getByRole('textbox',{name:'当前配置部分 JSON'});
         assert.ok((await part.inputValue()).includes('1.1.1.1'));
@@ -1038,10 +1059,10 @@ try {
           'section edits must carry into the full JSON without saving to the server');
         assert.equal(JSON.parse(await editor.inputValue()).customUnknown.value,true,
           'switching editors must preserve unknown configuration fields');
-        await nav.getByRole('button',{name:'API（api）',exact:true}).click();
-        await nav.getByRole('button',{name:'完整内容'}).click();
+        assert.equal(await nav.getByRole('button',{name:'API（api）'}).count(),0,
+          'unconfigured sections must not appear without explicit adding');
         assert.equal(Object.hasOwn(JSON.parse(await editor.inputValue()),'api'),false,
-          'visiting an absent section without editing must never add an empty key');
+          'unconfigured keys remain absent when unrelated sections are visited');
         const header=panel.locator('.v2ray-editor-header');
         const viewToggle=header.locator('.v2ray-view-toggle');
         assert.deepEqual((await viewToggle.getByRole('button').allTextContents()).map(s=>s.trim()),
@@ -1244,7 +1265,7 @@ try {
         await renameDialog.waitFor({state:'hidden'});
         assert.ok((await heading.innerText()).includes('规则 1 · 未命名'),
           'clearing rule tag should restore outboundTag fallback');
-        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1,
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,3,
           'renaming must only change local draft before explicit Save');
         const fieldCaptions=await routeEntry.locator(
           '.v2ray-routing-fields > label, .v2ray-routing-tags > span'
@@ -1467,7 +1488,7 @@ try {
         delete afterAdd.inboundDetour;
         await editor.fill(JSON.stringify(afterAdd,null,2));
         assert.equal(await nav.getByRole('button',{name:'旧版入站扩展（inboundDetour）'}).count(),0);
-        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,1,
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,3,
           'visual edits must remain local unless the operator clicks Save');
         // Simulate a second actor changing the revision while the user is
         // editing. Conflict handling must never silently overwrite or discard.
@@ -1483,7 +1504,7 @@ try {
           'a 409 must retain the entire pending local draft');
         assert.equal(v2rayConfig,latestConfig,
           'the backend must not overwrite externally changed configuration');
-        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,2,
+        assert.equal(v2rayCalls.filter(x=>x.id==='v2ray.save').length,4,
           'one explicit save attempt must be refused on stale revision');
         await serviceCard.getByRole('button',{name:'停止',exact:true}).click();
         const confirm=panel.getByRole('dialog',{name:'确认 V2Ray 服务操作'});
