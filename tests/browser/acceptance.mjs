@@ -1447,6 +1447,47 @@ try {
         },width);
         await browser.getByText('上传完成',{exact:true}).waitFor();
         assert.equal(await readFile(join(fileFixture,'drop-'+width+'.txt'),'utf8'),'drop-fixture');
+
+        // A single drop can contain multiple stand-alone files and an entire
+        // folder hierarchy. Chromium's FileSystemDirectoryReader may return
+        // entries in multiple batches; empty directories must be preserved.
+        await browser.evaluate((element,width)=>{
+          const fileEntry=(name,text)=>({
+            name,isFile:true,isDirectory:false,
+            file(callback){callback(new File([text],name,{type:'text/plain'}));}
+          });
+          const directory=(name,children)=>({
+            name,isFile:false,isDirectory:true,
+            createReader(){
+              let next=0;
+              return {readEntries(callback){
+                const part=children.slice(next,next+1);
+                next+=part.length;
+                callback(part);
+              }};
+            }
+          });
+          const dir=directory('drop-folder-'+width,[
+            fileEntry('top.txt','top-'+width),
+            directory('nested',[fileEntry('deep.txt','deep-'+width)]),
+            directory('empty',[])
+          ]);
+          const event=new Event('drop',{bubbles:true,cancelable:true});
+          Object.defineProperty(event,'dataTransfer',{value:{items:[
+            {kind:'file',webkitGetAsEntry:()=>dir},
+            {kind:'file',webkitGetAsEntry:()=>fileEntry('batch-a-'+width+'.txt','batch-a')},
+            {kind:'file',webkitGetAsEntry:()=>fileEntry('batch-b-'+width+'.txt','batch-b')}
+          ]}});
+          element.dispatchEvent(event);
+        },width);
+        await browser.getByText('上传完成：4 个文件、3 个文件夹',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'top.txt'),'utf8'),'top-'+width);
+        assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'nested','deep.txt'),'utf8'),'deep-'+width);
+        assert.ok((await stat(join(fileFixture,'drop-folder-'+width,'empty'))).isDirectory(),
+          'dragged empty folder is retained');
+        assert.equal(await readFile(join(fileFixture,'batch-a-'+width+'.txt'),'utf8'),'batch-a');
+        assert.equal(await readFile(join(fileFixture,'batch-b-'+width+'.txt'),'utf8'),'batch-b');
+
         await browser.getByRole('button',{name:'new-dir-'+width+'/',exact:true}).click();
         await browser.getByRole('button',{name:'新建文件',exact:true}).click();
         await browser.getByRole('dialog',{name:'新建文件',exact:true}).getByRole('textbox',{name:'名称',exact:true}).fill('child.txt');
