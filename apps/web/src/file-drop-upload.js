@@ -78,7 +78,9 @@ export function collectDroppedItems(transfer){
           :{type:'file',name:entry.name,entry});
       }else if(typeof item.getAsFileSystemHandle==='function'){
         // Call while inside the user-initiated drop, before any await.
-        handlePromises.push(item.getAsFileSystemHandle());
+        const fallback=item.getAsFile?.();
+        handlePromises.push(Promise.resolve(item.getAsFileSystemHandle()).then(handle=>
+          handle??(fallback?{kind:'file',name:fallback.name,file:fallback}:null)));
       }else{
         const file=item.getAsFile?.();
         if(file)sources.push({type:'file',name:file.name,file});
@@ -93,7 +95,8 @@ export function collectDroppedItems(transfer){
   return Promise.all(handlePromises).then(handles=>walkDropSources([
     ...sources,...handles.filter(Boolean).map(handle=>handle.kind==='directory'
       ?{type:'directory',name:handle.name,handle}
-      :{type:'file',name:handle.name,handle})
+      :handle.file?{type:'file',name:handle.name,file:handle.file}
+        :{type:'file',name:handle.name,handle})
   ]));
 }
 export function collectSelectedFiles(files){
