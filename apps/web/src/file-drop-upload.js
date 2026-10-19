@@ -61,6 +61,7 @@ export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDe
       }
     }
   }
+  }
   for(const source of sources)await traverse(source);
   return entries;
 }
