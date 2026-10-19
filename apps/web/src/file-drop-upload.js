@@ -80,7 +80,10 @@ export function collectDroppedItems(transfer){
       }else if(typeof item.getAsFileSystemHandle==='function'){
         // Call while inside the user-initiated drop, before any await.
         const fallback=item.getAsFile?.();
-        handlePromises.push(Promise.resolve(item.getAsFileSystemHandle()).then(handle=>
+        let handlePromise;
+        try{handlePromise=item.getAsFileSystemHandle();}
+        catch{handlePromise=null;}
+        handlePromises.push(Promise.resolve(handlePromise).catch(()=>null).then(handle=>
           handle??(fallback?{kind:'file',name:fallback.name,file:fallback}:null)));
       }else{
         const file=item.getAsFile?.();
