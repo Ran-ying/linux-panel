@@ -79,6 +79,7 @@ function uploadItems(collected){
     if(!entries.length)return;
     uploadProgress.value={completed:0,total:entries.length,files:0,folders:0,failed:0};
     const failed=[],blocked=[];
+    let uploadedFiles=0,createdFolders=0;
     const base=listing.value.path;
     try{
       for(const entry of entries){
@@ -94,13 +95,13 @@ function uploadItems(collected){
           const path=(base==='/'?'':base)+'/'+relative;
           if(entry.type==='directory'){
             await request(props.operations.create,{path,type:'directory'});
-            uploadProgress.value.folders++;
+            uploadProgress.value.folders++;createdFolders++;
           }else if(entry.type==='file'){
             if(entry.file.size>8*1024*1024)throw Error('单文件超过 8 MiB 上限');
             await request(props.operations.upload,{
               path,contentBase64:base64(await entry.file.arrayBuffer())
             });
-            uploadProgress.value.files++;
+            uploadProgress.value.files++;uploadedFiles++;
           }
         }catch(cause){
           if(cause.name==='AbortError')throw cause;
@@ -110,18 +111,16 @@ function uploadItems(collected){
         }finally{uploadProgress.value.completed++;}
       }
     }finally{
-      await list(base);
-      uploadProgress.value=null;
+      try{await list(base);}finally{uploadProgress.value=null;}
     }
     if(failed.length){
       error.value='部分内容上传失败（'+failed.length+' 项）：'+failed.slice(0,5).join('；')+
         (failed.length>5?'；另外 '+(failed.length-5)+' 项失败':'');
-      return '已上传 '+entries.filter(x=>x.type==='file').length+' 个待处理文件中的部分内容，失败 '+failed.length+' 项';
+      return '部分上传完成：'+uploadedFiles+' 个文件、'+createdFolders+' 个文件夹；'+failed.length+' 项失败';
     }
     return entries.length===1&&entries[0].type==='file'
       ?'上传完成'
-      :'上传完成：'+entries.filter(x=>x.type==='file').length+' 个文件、'+
-        entries.filter(x=>x.type==='directory').length+' 个文件夹';
+      :'上传完成：'+uploadedFiles+' 个文件、'+createdFolders+' 个文件夹';
   });
 }
 function beginCreate(type){
