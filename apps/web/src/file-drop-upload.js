@@ -31,7 +31,7 @@ export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDe
     if(source.type==='file'){
       const name=source.name??source.file?.name;
       const path=entryPath(prefix,name);
-      const file=source.file??await callbackFile(source.entry);
+      const file=source.file?await source.file:source.handle?await source.handle.getFile():await callbackFile(source.entry);
       if(!file)throw Error('无法读取拖入文件 '+path);
       await add({type:'file',relativePath:path,file});
       return;
@@ -93,14 +93,8 @@ export function collectDroppedItems(transfer){
   return Promise.all(handlePromises).then(handles=>walkDropSources([
     ...sources,...handles.filter(Boolean).map(handle=>handle.kind==='directory'
       ?{type:'directory',name:handle.name,handle}
-      :{type:'file',name:handle.name,handleFile:handle})
-  ].map(s=>s.handleFile
-    ?{type:'file',name:s.name,filePromise:s.handleFile.getFile()}
-    :s).map(s=>s.filePromise?{...s,file:s.filePromise}:s))).then(async entries=>{
-      // File System Access handles can provide a Promise<File>.
-      for(const item of entries)if(item.type==='file'&&item.file?.then)item.file=await item.file;
-      return entries;
-    });
+      :{type:'file',name:handle.name,handle})
+  ]));
 }
 export function collectSelectedFiles(files){
   return Array.from(files||[]).map(file=>({
