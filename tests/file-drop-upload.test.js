@@ -46,6 +46,14 @@ test('File System Access folder handles are supported if WebKit entries are abse
   assert.deepEqual((await collectDroppedItems(transfer)).map(x=>x.relativePath),
     ['folder','folder/inside.txt']);
 });
+test('modern drag API returning null falls back to the captured ordinary File',async()=>{
+  const original=file('safari-compatible.txt');
+  const entries=await collectDroppedItems({items:[{kind:'file',
+    webkitGetAsEntry:()=>null,
+    getAsFileSystemHandle:async()=>null,
+    getAsFile:()=>original}],files:[original]});
+  assert.deepEqual(entries.map(x=>x.relativePath),['safari-compatible.txt']);
+});
 test('plain DataTransfer.files fallback and multi-file picker are supported',async()=>{
   const picked=[file('alpha.txt'),file('beta.txt')];
   assert.deepEqual((await collectDroppedItems({files:picked})).map(x=>x.relativePath),
