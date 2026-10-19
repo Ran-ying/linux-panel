@@ -42,3 +42,12 @@ files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied�
 API 的 execute 路由允许最多 12 MiB JSON，以容纳 Base64 上传；其他路由保留原有请求限制，Action Schema 继续独立限制输入。反向代理也可能有自己的上传限制；如需 8 MiB 上传，代理应允许至少 12 MiB 请求，例如 Nginx client_max_body_size 12m。代理设置不会被面板擅自修改。
 
 [模块规范](MODULE-DEVELOPMENT.md) · [安全](security.md)
+
+
+## 一次拖入多个文件与文件夹（2026-10-19）
+
+文件管理支持一次拖入**多个文件、一个或多个整个文件夹以及混合内容**。前端优先使用浏览器的 `DataTransferItem.webkitGetAsEntry`（回退到 `getAsFileSystemHandle` / `DataTransfer.files`）递归读取目录，反复调用 `readEntries` 直到读空以支持分批枚举；保留顶层文件夹、嵌套子文件夹及空目录。普通「上传文件」文件选择器继续支持多选。
+
+每个目录用既有 `files.create` Action 建立，每个文件用 `files.upload` 顺序写入，沿用原有登录/CSRF、目录写权限、**单文件 8 MiB 上限**与**不覆盖同名文件**安全策略；上传过程中显示项目进度及成功/失败摘要。路径段过滤相对路径逃逸和控制字符，最多处理 3000 项，最大嵌套 32 层。某个目录创建失败将跳过其子树，其他独立文件继续处理；若有失败提供具体项目列表（前五项）。成功和失败后均刷新当前目录以显示实际状态。
+
+已有文件或目录发生名称冲突时不自动覆盖、不自动合并文件夹（避免覆盖既有数据），会被统计为失败；拖入目录时保留路径结构。浏览器不具备读取目录的 API 时仍可拖放普通多文件，但是否支持整个文件夹取决于浏览器。此改动**不提升**文件管理的权限，也不改变 root/MCP 文件通道。
