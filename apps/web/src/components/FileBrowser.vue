@@ -1,5 +1,6 @@
 <script setup>
 import {ref,watch,onUnmounted,computed,nextTick} from 'vue';
+import {collectDroppedItems,collectSelectedFiles} from '../file-drop-upload.js';
 const props=defineProps({initialData:Object,listAction:String,operations:Object,csrf:String});
 const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
@@ -7,6 +8,7 @@ const busy=ref(false),error=ref(''),message=ref(''),uploadInput=ref(null);
 const actionDialog=ref(null),accounts=ref(null),accountsLoading=ref(false),accountsError=ref('');
 let notificationTimer;
 const dragging=ref(false),operation=ref(null),entryName=ref('');
+const uploadProgress=ref(null);
 const permissionForm=ref({mode:'',owner:'',group:''});
 const canWrite=computed(()=>listing.value.writeAccess==='allowed');
 const controller=new AbortController();
@@ -57,19 +59,69 @@ function base64(buffer){
   for(let i=0;i<bytes.length;i+=16384)value+=String.fromCharCode(...bytes.subarray(i,i+16384));
   return btoa(value);
 }
-function upload(event){const files=Array.from(event.target.files || []);event.target.value='';return uploadFiles(files);}
-function drop(event){dragging.value=false;return uploadFiles(Array.from(event.dataTransfer.files || []));}
-function uploadFiles(files){
-  if(!files.length)return;
+function upload(event){
+  const files=Array.from(event.target.files||[]);
+  event.target.value='';
+  return uploadItems(Promise.resolve().then(()=>collectSelectedFiles(files)));
+}
+function drop(event){
+  dragging.value=false;
+  // Capture WebKit directory entries before the browser invalidates the
+  // DataTransferItemList outside the drop event.
+  const collected=collectDroppedItems(event.dataTransfer);
+  return uploadItems(collected);
+}
+function uploadItems(collected){
+  if(busy.value){error.value='正在执行其他操作，请稍后再上传';return;}
   if(!canWrite.value){error.value='当前目录不可写，请打开有写入权限的目录后上传';return;}
   return task(async()=>{
+    const entries=await collected;
+    if(!entries.length)return;
+    uploadProgress.value={completed:0,total:entries.length,files:0,folders:0,failed:0};
+    const failed=[],blocked=[];
+    const base=listing.value.path;
     try{
-      for(const file of files){
-        if(file.size>8*1024*1024)throw new Error(file.name+' 超过 8 MiB');
-        await request(props.operations.upload,{path:join(file.name),contentBase64:base64(await file.arrayBuffer())});
+      for(const entry of entries){
+        const relative=entry.relativePath;
+        // A directory that failed to be created must never cause uploads into
+        // an unrelated path or force auto-creation of its missing descendants.
+        if(blocked.some(folder=>relative.startsWith(folder+'/'))){
+          failed.push(relative+'：父目录创建失败');
+          uploadProgress.value.completed++;uploadProgress.value.failed++;
+          continue;
+        }
+        try{
+          const path=(base==='/'?'':base)+'/'+relative;
+          if(entry.type==='directory'){
+            await request(props.operations.create,{path,type:'directory'});
+            uploadProgress.value.folders++;
+          }else if(entry.type==='file'){
+            if(entry.file.size>8*1024*1024)throw Error('单文件超过 8 MiB 上限');
+            await request(props.operations.upload,{
+              path,contentBase64:base64(await entry.file.arrayBuffer())
+            });
+            uploadProgress.value.files++;
+          }
+        }catch(cause){
+          if(cause.name==='AbortError')throw cause;
+          failed.push(relative+'：'+(cause.message||'上传失败'));
+          uploadProgress.value.failed++;
+          if(entry.type==='directory')blocked.push(relative);
+        }finally{uploadProgress.value.completed++;}
       }
-    }finally{await list(listing.value.path);}
-    return '上传完成';
+    }finally{
+      await list(base);
+      uploadProgress.value=null;
+    }
+    if(failed.length){
+      error.value='部分内容上传失败（'+failed.length+' 项）：'+failed.slice(0,5).join('；')+
+        (failed.length>5?'；另外 '+(failed.length-5)+' 项失败':'');
+      return '已上传 '+entries.filter(x=>x.type==='file').length+' 个待处理文件中的部分内容，失败 '+failed.length+' 项';
+    }
+    return entries.length===1&&entries[0].type==='file'
+      ?'上传完成'
+      :'上传完成：'+entries.filter(x=>x.type==='file').length+' 个文件、'+
+        entries.filter(x=>x.type==='directory').length+' 个文件夹';
   });
 }
 function beginCreate(type){
@@ -161,7 +213,10 @@ function dateParts(value){
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('directory')">新建文件夹</button>
     </div>
     <p v-if="!canWrite" class="notice file-access-notice" role="status">{{ listing.writeAccess==='readonly'?'当前目录所在文件系统只读。':'面板服务账户没有当前目录的写入权限。' }}请打开可写目录后新建或上传文件。</p>
-    <div v-if="dragging" class="file-drop-hint">松开以上传到当前目录</div>
+    <div v-if="dragging" class="file-drop-hint">松开以上传多个文件或整个文件夹，保留目录结构</div>
+    <p v-if="uploadProgress" class="muted small" role="status">
+      正在上传 {{ uploadProgress.completed }} / {{ uploadProgress.total }} 项，已上传 {{ uploadProgress.files }} 个文件、创建 {{ uploadProgress.folders }} 个文件夹{{ uploadProgress.failed?'，失败 '+uploadProgress.failed+' 项':'' }}
+    </p>
     <dialog v-if="operation" ref="actionDialog" class="file-action-dialog"
       aria-labelledby="file-dialog-title" @close="operation=null">
       <form v-if="operation.kind==='create'" class="file-dialog-body" @submit.prevent="submitEntry">
