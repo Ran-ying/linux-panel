@@ -54,6 +54,15 @@ test('modern drag API returning null falls back to the captured ordinary File',a
     getAsFile:()=>original}],files:[original]});
   assert.deepEqual(entries.map(x=>x.relativePath),['safari-compatible.txt']);
 });
+test('unavailable modern drag API exceptions still preserve ordinary files',async()=>{
+  const original=file('fallback.txt');
+  for(const api of [()=>{throw Error('not supported');},async()=>{throw Error('denied');}]){
+    const items=await collectDroppedItems({items:[{kind:'file',
+      webkitGetAsEntry:()=>null,getAsFileSystemHandle:api,
+      getAsFile:()=>original}]});
+    assert.deepEqual(items.map(x=>x.relativePath),['fallback.txt']);
+  }
+});
 test('plain DataTransfer.files fallback and multi-file picker are supported',async()=>{
   const picked=[file('alpha.txt'),file('beta.txt')];
   assert.deepEqual((await collectDroppedItems({files:picked})).map(x=>x.relativePath),
