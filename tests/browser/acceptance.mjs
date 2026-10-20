@@ -1,6 +1,6 @@
 // Disposable browser acceptance: no production accounts or update execution.
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,mkdir,writeFile,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,mkdir,writeFile,readFile,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
@@ -1322,7 +1322,7 @@ try {
         assert.deepEqual(items.map(i=>i.tag),['BUTTON','INPUT','BUTTON']);
         assert.deepEqual(items.filter(i=>i.tag==='BUTTON').map(i=>i.label),['上一级','打开目录']);
         assert.ok(items.every(i=>Math.abs(i.height-items[0].height)<1 && Math.abs(i.top-items[0].top)<1),'three equal-height controls stay on one row');
-        assert.deepEqual(await browser.locator('.file-toolbar>button').allTextContents(),['上传文件','新建文件','新建文件夹']);
+        assert.deepEqual(await browser.locator('.file-toolbar>button').allTextContents(),['上传文件','上传文件夹','新建文件','新建文件夹']);
         assert.equal(await browser.locator('.file-toolbar.panel-control-capsule').count(),0,
           'file creation/upload are standalone commands, not a grouped segmented capsule');
         assert.equal(await browser.getByText('可将文件拖入此处上传',{exact:true}).count(),0);
@@ -1334,7 +1334,7 @@ try {
         await browser.getByRole('textbox',{name:'目录路径',exact:true}).fill(lockedFixture);
         await browser.getByRole('button',{name:'打开目录',exact:true}).click();
         await browser.getByText('面板服务账户没有当前目录的写入权限。请打开可写目录后新建或上传文件。',{exact:true}).waitFor();
-        for(const label of ['上传文件','新建文件','新建文件夹'])assert.equal(await browser.getByRole('button',{name:label,exact:true}).isDisabled(),true);
+        for(const label of ['上传文件','上传文件夹','新建文件','新建文件夹'])assert.equal(await browser.getByRole('button',{name:label,exact:true}).isDisabled(),true);
         await browser.getByRole('textbox',{name:'目录路径',exact:true}).fill(fileFixture);
         await browser.getByRole('button',{name:'打开目录',exact:true}).click();
         await browser.getByRole('button',{name:'note.txt',exact:true}).click();
@@ -1447,6 +1447,75 @@ try {
         },width);
         await browser.getByText('上传完成',{exact:true}).waitFor();
         assert.equal(await readFile(join(fileFixture,'drop-'+width+'.txt'),'utf8'),'drop-fixture');
+
+        // A single drop can contain multiple stand-alone files and an entire
+        // folder hierarchy. Chromium's FileSystemDirectoryReader may return
+        // entries in multiple batches; empty directories must be preserved.
+        await browser.evaluate((element,width)=>{
+          const fileEntry=(name,text)=>({
+            name,isFile:true,isDirectory:false,
+            file(callback){callback(new File([text],name,{type:'text/plain'}));}
+          });
+          const directory=(name,children)=>({
+            name,isFile:false,isDirectory:true,
+            createReader(){
+              let next=0;
+              return {readEntries(callback){
+                const part=children.slice(next,next+1);
+                next+=part.length;
+                callback(part);
+              }};
+            }
+          });
+          const dir=directory('drop-folder-'+width,[
+            fileEntry('top.txt','top-'+width),
+            directory('nested',[fileEntry('deep.txt','deep-'+width)]),
+            directory('empty',[])
+          ]);
+          const event=new Event('drop',{bubbles:true,cancelable:true});
+          Object.defineProperty(event,'dataTransfer',{value:{items:[
+            {kind:'file',webkitGetAsEntry:()=>dir},
+            {kind:'file',webkitGetAsEntry:()=>fileEntry('batch-a-'+width+'.txt','batch-a')},
+            {kind:'file',webkitGetAsEntry:()=>fileEntry('batch-b-'+width+'.txt','batch-b')}
+          ]}});
+          element.dispatchEvent(event);
+        },width);
+        assert.equal(await browser.locator('input[type="file"][webkitdirectory]').count(),1,
+          'native folder chooser fallback must exist');
+        await browser.getByText('上传完成：4 个文件、3 个文件夹',{exact:true}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'top.txt'),'utf8'),'top-'+width);
+        assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'nested','deep.txt'),'utf8'),'deep-'+width);
+        assert.ok((await stat(join(fileFixture,'drop-folder-'+width,'empty'))).isDirectory(),
+          'dragged empty folder is retained');
+        assert.equal(await readFile(join(fileFixture,'batch-a-'+width+'.txt'),'utf8'),'batch-a');
+        assert.equal(await readFile(join(fileFixture,'batch-b-'+width+'.txt'),'utf8'),'batch-b');
+
+        // One stale browser file handle must not discard the rest of a folder.
+        await browser.evaluate((element,width)=>{
+          const good={name:'healthy.txt',isFile:true,isDirectory:false,
+            file:callback=>callback(new File(['healthy'],'healthy.txt'))};
+          const missing={name:'missing-cloud-file.txt',isFile:true,isDirectory:false,
+            file:(callback,error)=>error(new DOMException(
+              'A requested file or directory could not be found at the time an operation was processed.','NotFoundError'))};
+          const folder={name:'partial-folder-'+width,isDirectory:true,isFile:false,
+            createReader(){
+              let next=0;return {readEntries(callback){
+                if(next++)callback([]);
+                else callback([missing,good]);
+              }};
+            }};
+          const event=new Event('drop',{bubbles:true,cancelable:true});
+          Object.defineProperty(event,'dataTransfer',{value:{items:[
+            {kind:'file',webkitGetAsEntry:()=>folder}
+          ]}});
+          element.dispatchEvent(event);
+        },width);
+        await browser.getByText('部分上传完成：1 个文件、1 个文件夹；1 项失败',{exact:true}).waitFor();
+        await browser.getByRole('alert').filter({hasText:'partial-folder-'+width+'/missing-cloud-file.txt'}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'partial-folder-'+width,'healthy.txt'),'utf8'),'healthy');
+        await assert.rejects(readFile(join(fileFixture,'partial-folder-'+width,'missing-cloud-file.txt')),{code:'ENOENT'});
+
+
         await browser.getByRole('button',{name:'new-dir-'+width+'/',exact:true}).click();
         await browser.getByRole('button',{name:'新建文件',exact:true}).click();
         await browser.getByRole('dialog',{name:'新建文件',exact:true}).getByRole('textbox',{name:'名称',exact:true}).fill('child.txt');

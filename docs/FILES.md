@@ -42,3 +42,19 @@ files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied�
 API 的 execute 路由允许最多 12 MiB JSON，以容纳 Base64 上传；其他路由保留原有请求限制，Action Schema 继续独立限制输入。反向代理也可能有自己的上传限制；如需 8 MiB 上传，代理应允许至少 12 MiB 请求，例如 Nginx client_max_body_size 12m。代理设置不会被面板擅自修改。
 
 [模块规范](MODULE-DEVELOPMENT.md) · [安全](security.md)
+
+
+## 一次拖入多个文件与文件夹（2026-10-19）
+
+文件管理支持一次拖入**多个文件、一个或多个整个文件夹以及混合内容**。前端优先使用浏览器的 `DataTransferItem.webkitGetAsEntry`（回退到 `getAsFileSystemHandle` / `DataTransfer.files`）递归读取目录，反复调用 `readEntries` 直到读空以支持分批枚举；保留顶层文件夹、嵌套子文件夹及空目录。普通「上传文件」文件选择器继续支持多选。
+
+每个目录用既有 `files.create` Action 建立，每个文件用 `files.upload` 顺序写入，沿用原有登录/CSRF、目录写权限、**单文件 8 MiB 上限**与**不覆盖同名文件**安全策略；上传过程中显示项目进度及成功/失败摘要。路径段过滤相对路径逃逸和控制字符，最多处理 3000 项，最大嵌套 32 层。某个目录创建失败将跳过其子树，其他独立文件继续处理；若有失败提供具体项目列表（前五项）。成功和失败后均刷新当前目录以显示实际状态。
+
+已有文件或目录发生名称冲突时不自动覆盖、不自动合并文件夹（避免覆盖既有数据），会被统计为失败；拖入目录时保留路径结构。浏览器不具备读取目录的 API 时仍可拖放普通多文件，但是否支持整个文件夹取决于浏览器。此改动**不提升**文件管理的权限，也不改变 root/MCP 文件通道。
+
+
+### 浏览器拖入目录的可用性和上传体积
+
+遇到 `NotFoundError`（浏览器报告 “A requested file or directory could not be found at the time an operation was processed.”）可能是浏览器发放的文件/目录句柄不可再访问，或 Finder/云盘提供的是未下载到本机的占位内容。拖放上传优先在 `drop` 事件中取得现代 `getAsFileSystemHandle()`，失败退回已获取的 WebKit 目录入口和普通 File 对象；若仅个别项目不可读，给出项目相对路径并继续上传其它文件，不能让整个文件夹失败。还增加了「上传文件夹」按钮（原生 `webkitdirectory` 选择器）作为拖放兼容性退路，可保留文件层级路径；**原生目录选择器不能列举空目录**，拖放目录仍能保留空目录。
+
+单文件 8 MiB 不是 OS/Nginx 限制：当前 `files.upload` 使用 Base64 嵌入 JSON（增大约 1/3），服务器单次 Action HTTP 请求及受控 root 执行器请求最大均为 12 MiB，上传 Action 合约、文件处理函数以及 Web 检查共同限定为 8 MiB。今后如需上传大型文件，应新增受认证与 CSRF 保护的流式/分块传输和原子提交机制，而不是简单增加常量或放宽接口请求上限。
