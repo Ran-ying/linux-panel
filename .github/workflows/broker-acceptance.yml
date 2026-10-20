@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "scripts/update-worker.sh"
+      - "platform/privileged/file-transfer.js"
+      - "tests/file-transfer.test.js"
       - "platform/state-store.js"
       - "platform/update-controller.js"
       - "platform/update-actions.js"
