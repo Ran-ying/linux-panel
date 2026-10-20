@@ -4,7 +4,7 @@ import {collectDroppedItems,collectSelectedFiles} from '../file-drop-upload.js';
 const props=defineProps({initialData:Object,listAction:String,operations:Object,csrf:String});
 const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
-const busy=ref(false),error=ref(''),message=ref(''),uploadInput=ref(null);
+const busy=ref(false),error=ref(''),message=ref(''),uploadInput=ref(null),uploadDirectoryInput=ref(null);
 const actionDialog=ref(null),accounts=ref(null),accountsLoading=ref(false),accountsError=ref('');
 let notificationTimer;
 const dragging=ref(false),operation=ref(null),entryName=ref('');
@@ -209,6 +209,8 @@ function dateParts(value){
     <div class="file-toolbar">
       <button type="button" class="panel-control-primary" :disabled="busy || !canWrite" @click="uploadInput.click()">上传文件</button>
       <input ref="uploadInput" class="file-upload-input" type="file" multiple aria-label="上传文件" :disabled="busy || !canWrite" @change="upload" />
+      <button type="button" :disabled="busy || !canWrite" @click="uploadDirectoryInput.click()">上传文件夹</button>
+      <input ref="uploadDirectoryInput" class="file-upload-input" type="file" webkitdirectory multiple aria-label="上传文件夹选择" :disabled="busy || !canWrite" @change="upload" />
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('file')">新建文件</button>
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('directory')">新建文件夹</button>
     </div>
