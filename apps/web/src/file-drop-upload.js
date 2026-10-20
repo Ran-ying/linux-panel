@@ -1,107 +1,136 @@
-// Browser-side drop enumeration. Capture DataTransferItem handles while the
-// drop event is active: some browsers hide dataTransfer.items after the event.
+// Read dropped files & directories in a browser without sending any local paths
+// to the server. All directory entries are captured during the drop event.
+// Prefer modern File System Access handles when available; older browsers
+// retain the webkitGetAsEntry traversal and ordinary File fallback.
 export const MAX_DROP_ENTRIES=3000;
 export const MAX_DROP_DEPTH=32;
 
 export function safeRelativePath(input){
   if(typeof input!=='string'||!input||input.length>2048||
-    input.startsWith('/')||input.includes('\\')||input.includes('\0'))throw Error('拖入内容包含无效路径');
+    input.startsWith('/')||input.includes('\\')||input.includes('\0'))
+    throw Error('拖入内容包含无效路径');
   const segments=input.split('/');
   if(segments.some(part=>!part||part==='.'||part==='..'||part.length>255||
     /[\u0000-\u001f\u007f]/.test(part)))
     throw Error('拖入内容包含无效文件名或目录层级');
   return input;
 }
-function entryPath(prefix,name){return safeRelativePath(prefix?prefix+'/'+name:name);}
-function callbackFile(entry){
+function childPath(prefix,name){return safeRelativePath(prefix?prefix+'/'+name:name);}
+function readWebkitFile(entry){
   return new Promise((resolve,reject)=>entry.file(resolve,reject));
 }
-function callbackEntries(reader){
+function readWebkitBatch(reader){
   return new Promise((resolve,reject)=>reader.readEntries(resolve,reject));
 }
+const unavailableMessage=(cause)=>{
+  const name=cause?.name;
+  return name==='NotFoundError'||name==='NotReadableError'
+    ?'浏览器无法读取此文件或文件夹，请确认文件在本机可用并重试'
+    :'浏览器读取失败：'+(cause?.message||'未知错误');
+};
+
 export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDepth=MAX_DROP_DEPTH}={}){
-  const entries=[],seen=new Set();
-  async function add(item){
-    if(entries.length>=maxEntries)throw Error('拖入项目过多，请分批上传（最多 '+maxEntries+' 项）');
-    if(seen.has(item.relativePath))throw Error('拖入内容包含重复的文件路径');
-    seen.add(item.relativePath);entries.push(item);
+  const results=[],seen=new Set();
+  function add(item){
+    if(results.length>=maxEntries)
+      throw Error('拖入项目过多，请分批上传（最多 '+maxEntries+' 项）');
+    if(seen.has(item.relativePath))
+      throw Error('拖入内容包含重复的文件路径');
+    seen.add(item.relativePath);
+    results.push(item);
+  }
+  function errorItem(path,cause){
+    add({type:'error',relativePath:path,message:unavailableMessage(cause)});
   }
   async function traverse(source,prefix='',depth=0){
     if(depth>maxDepth)throw Error('文件夹嵌套层级过深，请分批上传');
+    const path=childPath(prefix,source.name);
     if(source.type==='file'){
-      const name=source.name??source.file?.name;
-      const path=entryPath(prefix,name);
-      const file=source.file?await source.file:source.handle?await source.handle.getFile():await callbackFile(source.entry);
-      if(!file)throw Error('无法读取拖入文件 '+path);
-      await add({type:'file',relativePath:path,file});
+      try{
+        const file=source.file?await source.file:
+          source.handle?await source.handle.getFile():await readWebkitFile(source.entry);
+        if(!file)throw Error('读取结果为空');
+        add({type:'file',relativePath:path,file});
+      }catch(cause){
+        errorItem(path,cause);
+      }
       return;
     }
-    if(source.type==='directory'){
-      const path=entryPath(prefix,source.name);
-      await add({type:'directory',relativePath:path});
-      if(source.handle){
+    if(source.type!=='directory')throw Error('不支持的拖入项目');
+    add({type:'directory',relativePath:path});
+    if(source.handle){
+      try{
         for await(const child of source.handle.values()){
           await traverse(child.kind==='directory'
             ?{type:'directory',name:child.name,handle:child}
-            :{type:'file',name:child.name,file:await child.getFile()},path,depth+1);
+            :{type:'file',name:child.name,handle:child},path,depth+1);
         }
-      }else{
-        const reader=source.entry.createReader();
-        // Chromium returns large folders in multiple batches; read until empty.
-        let batches=0;
-        while(true){
-          if(++batches>maxEntries)throw Error('目录读取次数过多，已中止');
-          const children=await callbackEntries(reader);
-          if(!children?.length)break;
-          for(const child of children){
-            await traverse(child.isDirectory
-              ?{type:'directory',name:child.name,entry:child}
-              :{type:'file',name:child.name,entry:child},path,depth+1);
+      }catch(cause){
+        // A missing directory or an unreadable cloud-placeholder should not
+        // discard already traversed siblings. Keep a distinct error record.
+        errorItem(path+'/（读取失败）',cause);
+      }
+    }else{
+      let reader;
+      try{reader=source.entry.createReader();}
+      catch(cause){errorItem(path+'/（读取失败）',cause);return;}
+      let count=0;
+      while(true){
+        let children;
+        try{
+          if(++count>maxEntries)throw Error('目录枚举超过最大次数');
+          children=await readWebkitBatch(reader);
+        }catch(cause){
+          errorItem(path+'/（读取失败）',cause);
+          break;
+        }
+        if(!children?.length)break;
+        for(const child of children){
+          await traverse(child.isDirectory
+            ?{type:'directory',name:child.name,entry:child}
+            :{type:'file',name:child.name,entry:child},path,depth+1);
         }
       }
     }
-  }
   }
   for(const source of sources)await traverse(source);
-  return entries;
+  return results;
 }
+
 export function collectDroppedItems(transfer){
-  if(!transfer) return Promise.resolve([]);
+  if(!transfer)return Promise.resolve([]);
   const items=Array.from(transfer.items||[]);
-  const sources=[],handlePromises=[];
-  if(items.length){
-    for(const item of items){
-      if(item.kind!=='file')continue;
-      const entry=typeof item.webkitGetAsEntry==='function'?item.webkitGetAsEntry():null;
-      if(entry){
-        sources.push(entry.isDirectory
-          ?{type:'directory',name:entry.name,entry}
-          :{type:'file',name:entry.name,entry});
-      }else if(typeof item.getAsFileSystemHandle==='function'){
-        // Call while inside the user-initiated drop, before any await.
-        const fallback=item.getAsFile?.();
-        let handlePromise;
-        try{handlePromise=item.getAsFileSystemHandle();}
-        catch{handlePromise=null;}
-        handlePromises.push(Promise.resolve(handlePromise).catch(()=>null).then(handle=>
-          handle??(fallback?{kind:'file',name:fallback.name,file:fallback}:null)));
-      }else{
-        const file=item.getAsFile?.();
-        if(file)sources.push({type:'file',name:file.name,file});
+  const captures=[],fallbacks=[];
+  for(const item of items){
+    if(item.kind!=='file')continue;
+    // Capture entry, fallback File and start getAsFileSystemHandle *synchronously*
+    // before the user-gesture drop event ends. Await afterward.
+    let entry=null,file=null,handle=null;
+    try{entry=item.getAsEntry?.()??item.webkitGetAsEntry?.()??null;}
+    catch{/* unsupported legacy API */}
+    try{file=item.getAsFile?.()??null;}
+    catch{/* directory or inaccessible file */}
+    try{handle=item.getAsFileSystemHandle?.()??null;}
+    catch{/* not supported outside a secure context */}
+    if(!entry&&!file&&!handle)continue;
+    if(file)fallbacks.push(file);
+    captures.push(Promise.resolve(handle).catch(()=>null).then(resolved=>{
+      if(resolved){
+        return resolved.kind==='directory'
+          ?{type:'directory',name:resolved.name,handle:resolved}
+          :{type:'file',name:resolved.name,handle:resolved};
       }
-    }
+      if(entry)return entry.isDirectory
+        ?{type:'directory',name:entry.name,entry}
+        :{type:'file',name:entry.name,entry};
+      return file?{type:'file',name:file.name,file}:null;
+    }));
   }
-  if(!sources.length&&!handlePromises.length){
-    for(const file of Array.from(transfer.files||[])){
-      sources.push({type:'file',name:file.name,file});
-    }
+  if(!captures.length){
+    for(const file of Array.from(transfer.files||[]))
+      captures.push(Promise.resolve({type:'file',name:file.name,file}));
   }
-  return Promise.all(handlePromises).then(handles=>walkDropSources([
-    ...sources,...handles.filter(Boolean).map(handle=>handle.kind==='directory'
-      ?{type:'directory',name:handle.name,handle}
-      :handle.file?{type:'file',name:handle.name,file:handle.file}
-        :{type:'file',name:handle.name,handle})
-  ]));
+  return Promise.all(captures).then(sources=>walkDropSources(sources.filter(Boolean)));
 }
 export function collectSelectedFiles(files){
   return Array.from(files||[]).map(file=>({
