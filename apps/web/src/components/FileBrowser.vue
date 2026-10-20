@@ -1,7 +1,7 @@
 <script setup>
 import {ref,watch,onUnmounted,computed,nextTick} from 'vue';
 import {collectDroppedItems,collectSelectedFiles} from '../file-drop-upload.js';
-import {ensureDirectory,uploadFile} from '../file-transfer.js';
+import {ensureDirectory,runUploadPlan,uploadFile} from '../file-transfer.js';
 const props=defineProps({initialData:Object,listAction:String,operations:Object,csrf:String});
 const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
@@ -85,7 +85,7 @@ function uploadItems(collected){
       items:fileEntries.map(entry=>({name:entry.relativePath,loaded:0,total:entry.file.size,
         percent:entry.file.size?0:100,status:'pending'}))
     };
-    const failed=[],blocked=[];
+    const failed=[];
     let uploadedFiles=0,createdFolders=0;
     const base=listing.value.path;
     let storage=null;
@@ -95,45 +95,36 @@ function uploadItems(collected){
       uploadProgress.value.loaded=loaded;
       uploadProgress.value.percent=totalBytes?Math.min(100,Math.round(loaded*100/totalBytes)):100;
     };
+    const absolute=relative=>(base==='/'?'':base)+'/'+relative;
     try{
-      for(const entry of entries){
-        const relative=entry.relativePath;
-        // A directory that failed to be created must never cause uploads into
-        // an unrelated path or force auto-creation of its missing descendants.
-        if(blocked.some(folder=>relative.startsWith(folder+'/'))){
-          failed.push(relative+'：父目录创建失败');
-          const skipped=uploadProgress.value.items.find(candidate=>candidate.name===relative);
-          if(skipped)skipped.status='error';
-          uploadProgress.value.completed++;uploadProgress.value.failed++;
-          continue;
-        }
-        try{
-          if(entry.type==='error')throw Error(entry.message||'无法读取拖入文件');
-          const path=(base==='/'?'':base)+'/'+relative;
-          if(entry.type==='directory'){
-            await ensureDirectory({path,csrf:props.csrf,signal:controller.signal});
-            uploadProgress.value.folders++;createdFolders++;
-          }else if(entry.type==='file'){
-            const item=uploadProgress.value.items.find(candidate=>candidate.name===relative);
-            if(item)item.status='uploading';
-            await uploadFile({file:entry.file,path,csrf:props.csrf,storage,signal:controller.signal,
-              onProgress:progress=>{
-                if(!item)return;
-                item.loaded=progress.loaded;item.total=progress.total;
-                item.percent=progress.total?Math.round(progress.loaded*100/progress.total):100;
-                recompute();
-              }});
-            if(item){item.status='done';item.loaded=item.total;item.percent=100;recompute();}
-            uploadProgress.value.files++;uploadedFiles++;
-          }
-        }catch(cause){
-          if(cause.name==='AbortError')throw cause;
-          const item=uploadProgress.value.items.find(candidate=>candidate.name===relative);
-          if(item)item.status='error';
-          failed.push(relative+'：'+(cause.message||'上传失败'));
-          uploadProgress.value.failed++;
-          if(entry.type==='directory')blocked.push(relative);
-        }finally{uploadProgress.value.completed++;}
+      const plan=await runUploadPlan({entries,signal:controller.signal,
+        createDirectory:async relative=>{
+          await ensureDirectory({path:absolute(relative),csrf:props.csrf,signal:controller.signal});
+          uploadProgress.value.folders++;createdFolders++;
+          uploadProgress.value.completed++;
+        },
+        upload:async(entry,limiter)=>{
+          const item=uploadProgress.value.items.find(candidate=>candidate.name===entry.relativePath);
+          if(item)item.status='uploading';
+          await uploadFile({file:entry.file,path:absolute(entry.relativePath),csrf:props.csrf,storage,
+            signal:controller.signal,limiter,
+            onProgress:progress=>{
+              if(!item)return;
+              item.loaded=progress.loaded;item.total=progress.total;
+              item.percent=progress.total?Math.round(progress.loaded*100/progress.total):100;
+              recompute();
+            }});
+          if(item){item.status='done';item.loaded=item.total;item.percent=100;recompute();}
+          uploadProgress.value.files++;uploadedFiles++;
+          uploadProgress.value.completed++;
+        }});
+      for(const result of plan.results){
+        if(result.ok)continue;
+        uploadProgress.value.completed++;
+        const item=uploadProgress.value.items.find(candidate=>candidate.name===result.entry.relativePath);
+        if(item)item.status='error';
+        uploadProgress.value.failed++;
+        failed.push(result.entry.relativePath+'：'+(result.error?.message||'上传失败'));
       }
     }finally{
       try{await list(base);}finally{uploadProgress.value=null;}

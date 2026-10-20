@@ -48,7 +48,7 @@ files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied�
 
 文件管理支持一次拖入**多个文件、一个或多个整个文件夹以及混合内容**。前端优先使用浏览器的 `DataTransferItem.webkitGetAsEntry`（回退到 `getAsFileSystemHandle` / `DataTransfer.files`）递归读取目录，反复调用 `readEntries` 直到读空以支持分批枚举；保留顶层文件夹、嵌套子文件夹及空目录。普通「上传文件」文件选择器继续支持多选。
 
-每个目录用 `POST /api/files/directories` 建立或合并，每个文件用分块接口顺序写入。沿用登录、CSRF、目录写权限和路径边界。上传过程中显示总进度、单文件进度及成功/失败摘要。路径段过滤相对路径逃逸和控制字符，最多处理 3000 项，最大嵌套 32 层。某个目录创建失败将跳过其子树，其他独立文件继续处理；若有失败提供具体项目列表（前五项）。成功和失败后均刷新当前目录以显示实际状态。
+每个目录用 `POST /api/files/directories` 建立或合并，文件分块并发上传。沿用登录、CSRF、目录写权限和路径边界。上传过程中显示总进度、单文件进度及成功/失败摘要。路径段过滤相对路径逃逸和控制字符，最多处理 3000 项，最大嵌套 32 层。某个目录创建失败将跳过其子树，其他独立文件继续处理；若有失败提供具体项目列表（前五项）。成功和失败后均刷新当前目录以显示实际状态。
 
 同名**普通文件直接覆盖**。同名**真实目录合并**：保留目录里已有的其他内容，同名文件按覆盖写入。符号链接目录不合并，避免顺着链接写到别处。浏览器不具备读取目录的 API 时仍可拖放普通多文件，是否支持整个文件夹取决于浏览器。此改动不提升文件管理的权限，也不把上传暴露给 MCP。
 
@@ -65,8 +65,8 @@ files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied�
 | --- | --- | --- |
 | POST | `/api/files/uploads` | `{path,size,uploadId?}` 开始或续传。返回 `uploadId`、已接收 `offset`、`chunkSize` |
 | GET | `/api/files/uploads/:uploadId` | 查询已接收字节。页面刷新后，用同一路径、大小和修改时间找回 `uploadId` 再继续 |
-| PATCH | `/api/files/uploads/:uploadId` | `Content-Type: application/octet-stream`，`Upload-Offset` 与 `Content-Length`。单次最多 1 MiB，按偏移写入暂存文件 |
-| POST | `/api/files/uploads/:uploadId/complete` | 长度与声明一致后，在目标目录生成临时文件并 `rename` 覆盖同名普通文件 |
+| PATCH | `/api/files/uploads/:uploadId` | `Content-Type: application/octet-stream`，`Upload-Offset` 与 `Content-Length`。单次最多 1 MiB。对齐的分块可以乱序并发写入；紧接已连续前缀的分块仍可补上中断时留下的半块 |
+| POST | `/api/files/uploads/:uploadId/complete` | 已接收范围从 0 连续覆盖到声明长度后，在目标目录生成临时文件并 `rename` 覆盖同名普通文件。有空洞时返回 409，暂存保留 |
 | DELETE | `/api/files/uploads/:uploadId` | 放弃并删除暂存 |
 | POST | `/api/files/directories` | 目录已存在则合并；已存在的普通文件返回 409；符号链接目录拒绝 |
 | POST | `/api/files/downloads` | `{path}` 发放一次性下载凭证，响应里没有长期路径 |
@@ -76,9 +76,11 @@ files.list 返回 accessMode:root/user 及 writeAccess:allowed/readonly/denied�
 
 - 单次分块 1 MiB。Fastify 全局 `bodyLimit` 仍是 32 KiB；只有这条 PATCH 放宽到 1 MiB。execute 路由仍是 12 MiB，只服务原来的 Base64 `files.upload`。
 - 单个文件最大 64 GiB。未完成会话最多 32 个，空闲 24 小时后删除；每个成功分块会顺延过期时间，避免慢速大文件传一半被清掉。
+- 浏览器默认同时进行 3 个分块（多个文件和同一文件的多个分块共用这个上限）。服务端同时写入的分块最多 4 个，超过返回 429，客户端会重试。root 套接字仍最多 4 条连接，所以浏览器并发停在 3，给提交和状态查询留一条。
+- 连续前缀写在 `partial`。比前缀更靠后的对齐分块写在 `chunks/<offset>`，不把暂存文件撑出空洞。重复上传同一块会成功但保留先到的字节。提交前会等正在写的分块结束，并确认没有空洞；`offset` 仍是从 0 开始的连续长度，`receivedBytes` 包含已经落盘的乱序分块。
 - 暂存不放在用户目录里。普通身份写 `/var/lib/linux-panel/upload-staging`（开发时在 state 文件旁边）。root 执行器写 `/var/lib/linux-panel-upload-staging`。提交时把暂存文件拷到目标目录的临时名再原子改名，这样跨文件系统也不会先截断旧文件。
 - 写入路径按词法展开后，任何一级是符号链接都拒绝。覆盖同名符号链接时替换链接本身，不跟随到目标。下载与文本读取一样解析到真实普通文件。
-- 偏移不一致返回 409，并带上服务器当前 `offset`。网络中断后客户端先查询再从该偏移继续，不从头重传。
+- 和已接收范围交叉的分块返回 409，并带上当前连续 `offset`。网络中断后客户端先查询再补缺块，不从头重传。
 - 写操作需要登录和 CSRF。下载 GET 需要登录。MCP 不提供这些接口。
 - 已启用 root 执行器时，分块和下载字节经套接字版本 2 送到 `files.transfer`，不会在 root 通道离线时退回普通账户。旧的 root 包没有这个 handler，需要随面板更新安装新的固定 root 包后，root 模式下的上传下载才会可用。
 

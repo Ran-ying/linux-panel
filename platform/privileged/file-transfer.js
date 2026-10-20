@@ -8,6 +8,7 @@ export const TRANSFER_CHUNK=1024*1024;
 export const TRANSFER_MAX_BYTES=64*1024*1024*1024;
 export const UPLOAD_TTL_MS=24*60*60*1000;
 export const MAX_UPLOAD_SESSIONS=32;
+export const MAX_INFLIGHT_CHUNKS=4;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const fail=(message,statusCode=400)=>Object.assign(new Error(message),{statusCode});
 export function filePath(path){
@@ -157,14 +158,17 @@ export const FILE_TRANSFER_SCHEMA={
 
 export function createFileTransfer({
   privileged=false,uploadDir,maxBytes=TRANSFER_MAX_BYTES,ttlMs=UPLOAD_TTL_MS,chunkSize=TRANSFER_CHUNK,
-  maxSessions=MAX_UPLOAD_SESSIONS
+  maxSessions=MAX_UPLOAD_SESSIONS,maxInflight=MAX_INFLIGHT_CHUNKS
 }={}){
   if(!uploadDir)throw fail('未配置上传暂存目录',500);
   const boundedMax=Math.min(maxBytes,TRANSFER_MAX_BYTES);
   const boundedChunk=Math.min(chunkSize,TRANSFER_CHUNK);
+  const inflightLimit=Math.max(1,Math.min(maxInflight,MAX_INFLIGHT_CHUNKS));
   const root=join(uploadDir,privileged?'root':'user');
   const sessions=join(root,'sessions');
   const tails=new Map();
+  const lanes=new Map();
+  let activeWrites=0;
   function guard(){
     if(privileged){if(process.getuid?.()!==0)throw fail('root 执行器必须以 root 运行',503);return;}
     if(process.getuid?.()===0)throw fail('文件操作必须以面板普通服务账户运行',503);
@@ -175,7 +179,23 @@ export function createFileTransfer({
   }
   function sessionPaths(uploadId){
     const id=sessionId(uploadId),dir=join(sessions,id);
-    return {id,dir,meta:join(dir,'meta.json'),partial:join(dir,'partial')};
+    return {id,dir,meta:join(dir,'meta.json'),partial:join(dir,'partial'),chunks:join(dir,'chunks')};
+  }
+  function lane(uploadId){
+    let state=lanes.get(uploadId);
+    if(!state){
+      state={inflight:0,committing:false,aborting:false,reservations:[],waiters:[]};
+      lanes.set(uploadId,state);
+    }
+    return state;
+  }
+  function wake(state){
+    const waiters=state.waiters.splice(0);
+    for(const resolve of waiters)resolve();
+  }
+  function overlapsReservation(state,offset,length){
+    const end=offset+length;
+    return state.reservations.some(range=>offset<range.end&&end>range.offset);
   }
   function exclusive(uploadId,operation){
     const previous=tails.get(uploadId)??Promise.resolve();
@@ -214,10 +234,91 @@ export function createFileTransfer({
     finally{await handle.close();}
     await fs.rename(temp,paths.meta);
   }
-  async function received(paths){
+  async function partialSize(paths){
     const stats=await fs.stat(paths.partial);
     if(!stats.isFile())throw fail('上传暂存文件无效',500);
     return stats.size;
+  }
+  async function listChunks(paths){
+    let names=[];
+    try{names=await fs.readdir(paths.chunks);}catch(error){if(error.code!=='ENOENT')throw error;return [];}
+    const chunks=[];
+    for(const name of names){
+      if(!/^\d+$/.test(name))continue;
+      const stats=await fs.stat(join(paths.chunks,name));
+      if(!stats.isFile()||stats.size<1)continue;
+      const offset=Number(name);
+      if(!Number.isSafeInteger(offset))continue;
+      chunks.push({offset,length:stats.size});
+    }
+    chunks.sort((left,right)=>left.offset-right.offset);
+    return chunks;
+  }
+  function coverage(prefix,chunks){
+    let cursor=prefix,receivedBytes=prefix;
+    for(const chunk of chunks){
+      const end=chunk.offset+chunk.length;
+      if(end<=cursor)continue;
+      receivedBytes+=chunk.offset>=cursor?chunk.length:end-cursor;
+      if(chunk.offset<=cursor)cursor=end;
+    }
+    return {offset:cursor,receivedBytes};
+  }
+  async function describe(meta){
+    return coverage(await partialSize(meta.paths),await listChunks(meta.paths));
+  }
+  function progress(meta,info){
+    return {uploadId:meta.uploadId,path:meta.path,offset:info.offset,receivedBytes:info.receivedBytes,
+      size:meta.size,chunkSize:boundedChunk,expiresAt:meta.expiresAt};
+  }
+  function alignedChunk(offset,length,size){
+    return offset%boundedChunk===0&&(length===boundedChunk||offset+length===size);
+  }
+  function classify(offset,length,prefix,chunks,size){
+    const end=offset+length;
+    if(end<=prefix)return 'present';
+    for(const chunk of chunks){
+      const chunkEnd=chunk.offset+chunk.length;
+      if(end<=chunk.offset||offset>=chunkEnd)continue;
+      if(offset===chunk.offset&&length===chunk.length)return 'present';
+      return 'conflict';
+    }
+    if(offset<prefix)return 'conflict';
+    if(offset===prefix)return 'append';
+    if(offset>prefix&&alignedChunk(offset,length,size))return 'side';
+    return 'conflict';
+  }
+  async function writeFully(handle,chunk,position){
+    let wrote=0;
+    while(wrote<chunk.length){
+      const {bytesWritten}=await handle.write(chunk,wrote,chunk.length-wrote,position+wrote);
+      if(!bytesWritten)throw fail('分块写入中断',500);
+      wrote+=bytesWritten;
+    }
+  }
+  async function consume(stream,length,write){
+    let got=0;
+    for await(const piece of stream){
+      const chunk=Buffer.isBuffer(piece)?piece:Buffer.from(piece);
+      if(!chunk.length)continue;
+      if(got+chunk.length>length)throw fail('分块超过声明长度',400);
+      await write(chunk,got);
+      got+=chunk.length;
+    }
+    if(got!==length)throw fail('分块长度不完整',400);
+  }
+  async function touch(meta){
+    await exclusive(meta.uploadId,async()=>{
+      const now=new Date();
+      const expiresAt=new Date(now.getTime()+ttlMs).toISOString();
+      await writeMeta({version:1,uploadId:meta.uploadId,path:meta.path,size:meta.size,
+        createdAt:meta.createdAt,updatedAt:now.toISOString(),expiresAt},meta.paths);
+      meta.updatedAt=now.toISOString();
+      meta.expiresAt=expiresAt;
+    });
+  }
+  function conflict(info,message='上传偏移与服务器已接收长度不一致'){
+    return Object.assign(fail(message,409),{offset:info.offset,receivedBytes:info.receivedBytes});
   }
   async function sweep(){
     let names=[];
@@ -242,8 +343,7 @@ export function createFileTransfer({
     if(uploadId){
       const meta=await readMeta(uploadId);
       if(meta.path!==destination.path||meta.size!==size)throw fail('上传会话与文件不匹配',409);
-      return {uploadId:meta.uploadId,path:meta.path,offset:await received(meta.paths),size:meta.size,
-        chunkSize:boundedChunk,expiresAt:meta.expiresAt};
+      return progress(meta,await describe(meta));
     }
     const live=await sweep();
     if(live>=maxSessions)throw fail('未完成的上传过多，请稍后再试',429);
@@ -256,72 +356,128 @@ export function createFileTransfer({
     const created=await fs.open(paths.partial,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
     await created.close();
     await writeMeta(meta,paths);
-    return {uploadId:id,path:destination.path,offset:0,size,chunkSize:boundedChunk,expiresAt:meta.expiresAt};
+    return progress(meta,{offset:0,receivedBytes:0});
   }
   async function status({uploadId}={}){
     const meta=await readMeta(uploadId);
-    return {uploadId:meta.uploadId,path:meta.path,offset:await received(meta.paths),size:meta.size,
-      chunkSize:boundedChunk,expiresAt:meta.expiresAt};
+    return progress(meta,await describe(meta));
   }
   async function write({uploadId,offset,length}={},stream){
     if(!Number.isInteger(offset)||offset<0||!Number.isInteger(length)||length<1||length>boundedChunk)
       throw fail('分块偏移或长度无效');
-    return exclusive(uploadId,async()=>{
-      let meta;
+    const state=lane(sessionId(uploadId));
+    for(;;){
+      if(state.committing||state.aborting){await discard(stream);throw fail('上传已结束',409);}
+      if(!overlapsReservation(state,offset,length))break;
+      await new Promise(resolve=>state.waiters.push(resolve));
+    }
+    if(activeWrites>=inflightLimit){await discard(stream);throw fail('并发分块过多，请稍后再试',429);}
+    activeWrites++;
+    state.inflight++;
+    const reservation={offset,end:offset+length};
+    state.reservations.push(reservation);
+    let meta;
+    try{
       try{meta=await readMeta(uploadId);}
       catch(error){await discard(stream);throw error;}
-      const current=await received(meta.paths);
-      if(offset!==current||offset+length>meta.size){
+      if(offset+length>meta.size){
         await discard(stream);
-        throw Object.assign(fail(offset!==current?'上传偏移与服务器已接收长度不一致':'上传超出声明的文件大小',offset!==current?409:400),
-          {offset:current});
+        throw fail('上传超出声明的文件大小',400);
       }
-      const handle=await fs.open(meta.paths.partial,'r+');
-      let got=0;
-      try{
-        for await(const piece of stream){
-          const chunk=Buffer.isBuffer(piece)?piece:Buffer.from(piece);
-          if(got+chunk.length>length)throw fail('分块超过声明长度',400);
-          await handle.write(chunk,0,chunk.length,offset+got);
-          got+=chunk.length;
-        }
-        if(got!==length)throw fail('分块长度不完整',400);
-        await handle.sync();
-      }catch(error){
+      const prefix=await partialSize(meta.paths);
+      const chunks=await listChunks(meta.paths);
+      const kind=classify(offset,length,prefix,chunks,meta.size);
+      const info=coverage(prefix,chunks);
+      if(kind==='present'){await discard(stream);return progress(meta,info);}
+      if(kind!=='append'&&kind!=='side'){await discard(stream);throw conflict(info);}
+      if(kind==='append'){
+        const handle=await fs.open(meta.paths.partial,constants.O_RDWR|constants.O_NOFOLLOW);
+        try{
+          await consume(stream,length,(chunk,got)=>writeFully(handle,chunk,offset+got));
+          await handle.sync();
+        }catch(error){await handle.close();throw error;}
         await handle.close();
-        throw error;
+      }else{
+        await fs.mkdir(meta.paths.chunks,{recursive:true,mode:0o700});
+        const temp=join(meta.paths.chunks,offset+'-'+randomUUID()+'.part');
+        const handle=await fs.open(temp,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
+        try{
+          await consume(stream,length,(chunk,got)=>writeFully(handle,chunk,got));
+          await handle.sync();
+        }catch(error){
+          await handle.close();
+          await fs.unlink(temp).catch(()=>{});
+          throw error;
+        }
+        await handle.close();
+        try{await fs.rename(temp,join(meta.paths.chunks,String(offset)));}
+        catch(error){await fs.unlink(temp).catch(()=>{});throw error;}
       }
-      await handle.close();
-      const now=new Date();
-      const expiresAt=new Date(now.getTime()+ttlMs).toISOString();
-      await writeMeta({version:1,uploadId:meta.uploadId,path:meta.path,size:meta.size,
-        createdAt:meta.createdAt,updatedAt:now.toISOString(),expiresAt},meta.paths);
-      return {uploadId,offset:offset+length,size:meta.size};
-    });
+      await touch(meta);
+      return progress(meta,await describe(meta));
+    }finally{
+      state.reservations=state.reservations.filter(range=>range!==reservation);
+      state.inflight--;
+      activeWrites--;
+      wake(state);
+    }
+  }
+  async function logicalReader(meta){
+    const prefix=await partialSize(meta.paths);
+    const chunks=await listChunks(meta.paths);
+    const partial=await fs.open(meta.paths.partial,constants.O_RDONLY|constants.O_NOFOLLOW);
+    const handles=new Map();
+    return {prefix,chunks,
+      async read(buffer,position){
+        if(position<prefix){
+          const {bytesRead}=await partial.read(buffer,0,Math.min(buffer.length,prefix-position),position);
+          return bytesRead;
+        }
+        const chunk=chunks.find(item=>position>=item.offset&&position<item.offset+item.length);
+        if(!chunk)throw fail('上传尚未完成',409);
+        let handle=handles.get(chunk.offset);
+        if(!handle){
+          handle=await fs.open(join(meta.paths.chunks,String(chunk.offset)),constants.O_RDONLY|constants.O_NOFOLLOW);
+          handles.set(chunk.offset,handle);
+        }
+        const {bytesRead}=await handle.read(buffer,0,Math.min(buffer.length,chunk.offset+chunk.length-position),position-chunk.offset);
+        return bytesRead;
+      },
+      async close(){
+        await partial.close();
+        await Promise.all([...handles.values()].map(handle=>handle.close()));
+      }};
   }
   async function commit({uploadId}={}){
-    return exclusive(uploadId,async()=>{
-      const meta=await readMeta(uploadId);
-      const size=await received(meta.paths);
-      if(size!==meta.size)throw fail('上传尚未完成',409);
-      const input=await fs.open(meta.paths.partial,'r');
+    const id=sessionId(uploadId);
+    const state=lane(id);
+    if(state.committing||state.aborting)throw fail('上传已结束',409);
+    state.committing=true;
+    let published=false;
+    try{
+      while(state.inflight>0)await new Promise(resolve=>state.waiters.push(resolve));
+      const meta=await readMeta(id);
+      const info=await describe(meta);
+      if(info.offset!==meta.size||info.receivedBytes!==meta.size)throw conflict(info,'上传尚未完成');
+      const reader=await logicalReader(meta);
       try{
-        const published=await installRegularFile(meta.path,size,async(buffer,position)=>{
-          const {bytesRead}=await input.read(buffer,0,buffer.length,position);
-          return bytesRead;
-        });
-        await input.close();
-        await removeSession(uploadId);
-        return published;
-      }catch(error){await input.close();throw error;}
-    });
+        const result=await installRegularFile(meta.path,meta.size,reader.read);
+        await reader.close();
+        await removeSession(id);
+        lanes.delete(id);
+        published=true;
+        return result;
+      }catch(error){await reader.close();throw error;}
+    }finally{if(!published)state.committing=false;}
   }
   async function abort({uploadId}={}){
-    return exclusive(uploadId,async()=>{
-      sessionId(uploadId);
-      await removeSession(uploadId);
-      return {uploadId,aborted:true};
-    });
+    const id=sessionId(uploadId);
+    const state=lane(id);
+    state.aborting=true;
+    while(state.inflight>0)await new Promise(resolve=>state.waiters.push(resolve));
+    await removeSession(id);
+    lanes.delete(id);
+    return {uploadId:id,aborted:true};
   }
   async function mkdir({path}={}){
     return ensureRealDirectory(path);

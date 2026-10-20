@@ -44,7 +44,7 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --disable
 
 根端仅接受固定注册表中的 Action，独立 Ajv 验证同一份输入 Schema；未知操作、额外参数和非 web 通道拒绝。不解释 Shell，不接收动态源码或模块路径。版本 1 请求最多 12 MiB，响应客户端最多 8 MiB，最多四个同时连接。客户端 30 秒空闲超时；文件系统操作不可保证被取消，超时后应重新读取确认结果，尤其是大目录删除。
 
-文件分块使用版本 2：JSON 头一行（最多 16 KiB），写分块时后面紧跟最多 1 MiB 原始字节；读分块时响应 JSON 后同样紧跟声明长度的字节。头和二进制都不进入审计。旧 root 包不认识 `files.transfer`，更新面板代码后还要安装匹配的固定 root 包，否则 root 模式下的上传下载失败，并且不会退回普通账户。
+文件分块使用版本 2：JSON 头一行（最多 16 KiB），写分块时后面紧跟最多 1 MiB 原始字节；读分块时响应 JSON 后同样紧跟声明长度的字节。头和二进制都不进入审计。浏览器默认同时上传 3 个分块；这条套接字同时最多 4 个连接，服务端同时最多接受 4 个分块写入。对齐分块可以乱序到达，提交时必须没有空洞。旧 root 包不认识 `files.transfer`，或者只接受顺序分块；更新面板代码后还要安装匹配的固定 root 包，否则 root 模式下的上传下载失败，并且不会退回普通账户。
 
 Action 元数据显式指定 privileged.channels。ActionEngine 只在客户端已配置且当前通道在声明中时调用 root；客户端再次检查受信任适配器的 authenticated/userId/channel。新写 Action 应使用 executionPolicy:privileged，仍须可信上下文；仅有 permission 字符串、exposure 或 UI 声明不授予 root。
 
