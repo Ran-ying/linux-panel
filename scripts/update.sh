@@ -28,7 +28,21 @@ git merge --ff-only origin/main || die 'Non-fast-forward refused; restore servic
 npm ci --no-audit --no-fund
 npm install --prefix extensions/mcp --omit=dev --no-audit --no-fund --no-package-lock
 npm run check
-npm test
+# npm ci is run as root, but actual Web and MCP Actions run as linuxpanel.
+# Tests that execute system.info and terminal.execute must run as this ordinary
+# account. Make dependencies readable *before* testing; the normal full
+# permission normalization after the frontend build remains in place.
+chown -R root:linuxpanel /opt/linux-panel
+chmod -R -- g+rX,g-w,o-w /opt/linux-panel
+# The parent root shell might have sourced the production panel.env. Preserve
+# neither its PANEL_* settings (notably PANEL_PUBLIC_ORIGIN) nor NODE_ENV:
+# test OAuth fixtures intentionally use a loopback origin and disposable state.
+# env -i also prevents root-only HOME/NPM_CONFIG from influencing test results.
+runuser -u linuxpanel -- env -i \
+  HOME=/var/lib/linux-panel \
+  PATH=/opt/node24/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  NODE_ENV=test \
+  /opt/node24/bin/npm test
 npm run build:web
 # npm ci recreates runtime files. Restore the same Web-group visibility that
 # a fresh install establishes; do not rely on the operator's default umask.
