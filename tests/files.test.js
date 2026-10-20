@@ -65,7 +65,11 @@ test('file listing, text revisions, UTF-8 bounds, uploads and HTTP write guards'
   const uploaded=await app.inject({method:'POST',url:endpoint,headers,payload});
   assert.equal(uploaded.statusCode,200,uploaded.body);
   assert.deepEqual(await readFile(uploadPath),bytes);
-  assert.equal((await app.inject({method:'POST',url:endpoint,headers,payload})).statusCode,409);
+  const replacement=Buffer.alloc(32,7);
+  const again=await app.inject({method:'POST',url:endpoint,headers,
+    payload:{input:{path:uploadPath,contentBase64:replacement.toString('base64')}}});
+  assert.equal(again.statusCode,200,again.body);
+  assert.deepEqual(await readFile(uploadPath),replacement);
   const loaded=await readText({path});
   const saved=await app.inject({method:'POST',url:'/api/actions/files.write/execute',headers,
     payload:{input:{path,content:'http-edited',revision:loaded.revision}}});

@@ -1,6 +1,7 @@
 <script setup>
 import {ref,watch,onUnmounted,computed,nextTick} from 'vue';
 import {collectDroppedItems,collectSelectedFiles} from '../file-drop-upload.js';
+import {ensureDirectory,uploadFile} from '../file-transfer.js';
 const props=defineProps({initialData:Object,listAction:String,operations:Object,csrf:String});
 const emit=defineEmits(['path-change','listing-change','unauthorized']);
 const listing=ref(props.initialData),address=ref(props.initialData.path),editor=ref(null),content=ref(''),dirty=ref(false);
@@ -54,10 +55,9 @@ function save(){return task(async()=>{
   const result=await request(props.operations.write,{path:editor.value.path,content:content.value,revision:editor.value.revision});
   editor.value={...editor.value,...result};dirty.value=false;await list(listing.value.path);return '已保存';
 });}
-function base64(buffer){
-  const bytes=new Uint8Array(buffer);let value='';
-  for(let i=0;i<bytes.length;i+=16384)value+=String.fromCharCode(...bytes.subarray(i,i+16384));
-  return btoa(value);
+function formatBytes(value){
+  if(value<1000000)return (value/1000).toLocaleString(undefined,{maximumFractionDigits:1})+' KB';
+  return (value/1000000).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MB';
 }
 function upload(event){
   const files=Array.from(event.target.files||[]);
@@ -77,10 +77,24 @@ function uploadItems(collected){
   return task(async()=>{
     const entries=await collected;
     if(!entries.length)throw Error('未读取到拖入的文件或文件夹；请使用“上传文件夹”选择目录，或确认浏览器允许读取本地文件');
-    uploadProgress.value={completed:0,total:entries.length,files:0,folders:0,failed:0};
+    const fileEntries=entries.filter(entry=>entry.type==='file');
+    const totalBytes=fileEntries.reduce((sum,entry)=>sum+(entry.file?.size||0),0);
+    uploadProgress.value={
+      loaded:0,total:totalBytes,percent:totalBytes?0:100,
+      completed:0,totalItems:entries.length,failed:0,files:0,folders:0,
+      items:fileEntries.map(entry=>({name:entry.relativePath,loaded:0,total:entry.file.size,
+        percent:entry.file.size?0:100,status:'pending'}))
+    };
     const failed=[],blocked=[];
     let uploadedFiles=0,createdFolders=0;
     const base=listing.value.path;
+    let storage=null;
+    try{storage=globalThis.sessionStorage;}catch{storage=null;}
+    const recompute=()=>{
+      const loaded=uploadProgress.value.items.reduce((sum,item)=>sum+item.loaded,0);
+      uploadProgress.value.loaded=loaded;
+      uploadProgress.value.percent=totalBytes?Math.min(100,Math.round(loaded*100/totalBytes)):100;
+    };
     try{
       for(const entry of entries){
         const relative=entry.relativePath;
@@ -88,6 +102,8 @@ function uploadItems(collected){
         // an unrelated path or force auto-creation of its missing descendants.
         if(blocked.some(folder=>relative.startsWith(folder+'/'))){
           failed.push(relative+'：父目录创建失败');
+          const skipped=uploadProgress.value.items.find(candidate=>candidate.name===relative);
+          if(skipped)skipped.status='error';
           uploadProgress.value.completed++;uploadProgress.value.failed++;
           continue;
         }
@@ -95,17 +111,25 @@ function uploadItems(collected){
           if(entry.type==='error')throw Error(entry.message||'无法读取拖入文件');
           const path=(base==='/'?'':base)+'/'+relative;
           if(entry.type==='directory'){
-            await request(props.operations.create,{path,type:'directory'});
+            await ensureDirectory({path,csrf:props.csrf,signal:controller.signal});
             uploadProgress.value.folders++;createdFolders++;
           }else if(entry.type==='file'){
-            if(entry.file.size>8*1024*1024)throw Error('单文件超过 8 MiB 上限');
-            await request(props.operations.upload,{
-              path,contentBase64:base64(await entry.file.arrayBuffer())
-            });
+            const item=uploadProgress.value.items.find(candidate=>candidate.name===relative);
+            if(item)item.status='uploading';
+            await uploadFile({file:entry.file,path,csrf:props.csrf,storage,signal:controller.signal,
+              onProgress:progress=>{
+                if(!item)return;
+                item.loaded=progress.loaded;item.total=progress.total;
+                item.percent=progress.total?Math.round(progress.loaded*100/progress.total):100;
+                recompute();
+              }});
+            if(item){item.status='done';item.loaded=item.total;item.percent=100;recompute();}
             uploadProgress.value.files++;uploadedFiles++;
           }
         }catch(cause){
           if(cause.name==='AbortError')throw cause;
+          const item=uploadProgress.value.items.find(candidate=>candidate.name===relative);
+          if(item)item.status='error';
           failed.push(relative+'：'+(cause.message||'上传失败'));
           uploadProgress.value.failed++;
           if(entry.type==='directory')blocked.push(relative);
@@ -122,6 +146,23 @@ function uploadItems(collected){
     return entries.length===1&&entries[0].type==='file'
       ?'上传完成'
       :'上传完成：'+uploadedFiles+' 个文件、'+createdFolders+' 个文件夹';
+  });
+}
+async function download(entry){
+  if(entry.type!=='file')return;
+  return task(async()=>{
+    const response=await fetch('/api/files/downloads',{
+      method:'POST',signal:controller.signal,
+      headers:{'Content-Type':'application/json','X-Panel-CSRF':props.csrf},
+      body:JSON.stringify({path:join(entry.name)})
+    });
+    const body=await response.json().catch(()=>({}));
+    if(response.status===401)emit('unauthorized');
+    if(!response.ok)throw Error(body.error||'无法下载');
+    const link=document.createElement('a');
+    link.href='/api/files/downloads/'+encodeURIComponent(body.token);
+    link.download=entry.name;
+    document.body.appendChild(link);link.click();link.remove();
   });
 }
 function beginCreate(type){
@@ -215,10 +256,27 @@ function dateParts(value){
       <button type="button" :disabled="busy || !canWrite" @click="beginCreate('directory')">新建文件夹</button>
     </div>
     <p v-if="!canWrite" class="notice file-access-notice" role="status">{{ listing.writeAccess==='readonly'?'当前目录所在文件系统只读。':'面板服务账户没有当前目录的写入权限。' }}请打开可写目录后新建或上传文件。</p>
-    <div v-if="dragging" class="file-drop-hint">松开以上传多个文件或整个文件夹，保留目录结构</div>
-    <p v-if="uploadProgress" class="muted small" role="status">
-      正在上传 {{ uploadProgress.completed }} / {{ uploadProgress.total }} 项，已上传 {{ uploadProgress.files }} 个文件、创建 {{ uploadProgress.folders }} 个文件夹{{ uploadProgress.failed?'，失败 '+uploadProgress.failed+' 项':'' }}
-    </p>
+    <div v-if="dragging" class="file-drop-hint">松开以上传。同名文件会覆盖，同名文件夹会合并</div>
+    <div v-if="uploadProgress" class="file-upload-progress" role="status" aria-live="polite">
+      <div class="file-upload-summary">
+        <span>总进度 {{ formatBytes(uploadProgress.loaded) }} / {{ formatBytes(uploadProgress.total) }}</span>
+        <span>{{ uploadProgress.percent }}% · {{ uploadProgress.completed }} / {{ uploadProgress.totalItems }} 项</span>
+      </div>
+      <div class="file-upload-track" role="progressbar" aria-label="上传总进度"
+        :aria-valuenow="uploadProgress.percent" aria-valuemin="0" aria-valuemax="100">
+        <div class="file-upload-fill" :style="{width:uploadProgress.percent+'%'}"></div>
+      </div>
+      <div class="file-upload-list">
+        <div v-for="item in uploadProgress.items" :key="item.name" class="file-upload-file">
+          <span class="file-upload-name">{{ item.name }}</span>
+          <span>{{ item.status==='error'?'失败':item.status==='done'?'完成':item.percent+'%' }}</span>
+          <div class="file-upload-track" role="progressbar" :aria-label="item.name"
+            :aria-valuenow="item.percent" aria-valuemin="0" aria-valuemax="100">
+            <div class="file-upload-fill" :style="{width:item.percent+'%'}"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <dialog v-if="operation" ref="actionDialog" class="file-action-dialog"
       aria-labelledby="file-dialog-title" @close="operation=null">
       <form v-if="operation.kind==='create'" class="file-dialog-body" @submit.prevent="submitEntry">
@@ -306,6 +364,7 @@ function dateParts(value){
               <span class="file-time">{{ dateParts(entry.modifiedAt).time }}</span>
             </time><span v-else>—</span></td>
             <td><div class="file-row-actions">
+              <button v-if="entry.type==='file'" type="button" :disabled="busy" :aria-label="'下载 '+entry.name" @click="download(entry)">下载</button>
               <button type="button" :disabled="busy || !canWrite" :aria-label="'重命名 '+entry.name" @click="beginRename(entry)">重命名</button>
               <button type="button" :disabled="busy || !canWrite" :aria-label="'删除 '+entry.name" @click="beginDelete(entry)">删除</button>
             </div></td>

@@ -4,7 +4,7 @@ import {TerminalSessions} from '../../../platform/terminal.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ActionRegistry } from '../../../core/action-registry.js';
 import { ActionEngine } from '../../../core/action-engine.js';
@@ -19,6 +19,7 @@ import { panelContentSecurityPolicy } from '../../../platform/http-security.js';
 import { createUpdateController } from '../../../platform/update-controller.js';
 import { registerUpdateActions } from '../../../platform/update-actions.js';
 import { createListenerController, registerListenerActions, listenerDefaults, validateListener } from '../../../platform/listener.js';
+import { registerFileTransferRoutes } from '../../../platform/file-transfer-routes.js';
 
 const badRequest = message => Object.assign(new Error(message), { statusCode: 400 });
 const forbidden = message => Object.assign(new Error(message), { statusCode: 403 });
@@ -79,6 +80,7 @@ export async function createApp({
   modules.loaded.push({ id:'panel', name:'面板维护', version:'0.5.0' });
   const commands = new ActionCommands(store);
   const engine = new ActionEngine(registry, {commands,privilegedClient});
+  registerFileTransferRoutes(app, {auth, store, privilegedClient, uploadDir: join(dirname(statePath), 'upload-staging')});
   const presentations = await loadWebPresentations(modulesPath, modules.loaded, registry);
   const secure = publicOrigin.startsWith('https://');
   // Optional transport extensions are a separate lifecycle from business Actions.

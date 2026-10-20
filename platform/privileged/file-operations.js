@@ -1,17 +1,14 @@
 import * as fs from 'node:fs/promises';
 import {constants} from 'node:fs';
-import {resolve,dirname,join,isAbsolute} from 'node:path';
+import {dirname,join} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {fail,filePath,installRegularFile,mapFileError} from './file-transfer.js';
 const exec=promisify(execFile);
 
 export const TEXT_LIMIT=1024*1024,UPLOAD_LIMIT=8*1024*1024;
-const fail=(message,statusCode=400)=>Object.assign(new Error(message),{statusCode});
-export function filePath(path){
-  if(typeof path!=='string' || !isAbsolute(path) || path.includes('\0'))throw fail('请填写绝对路径');
-  return resolve(path);
-}
+export {filePath};
 export function createFileOperations({privileged=false}={}) {
 function ordinaryUser(){
   if(privileged){if(process.getuid?.()!==0)throw fail('root 执行器必须以 root 运行',503);return;}
@@ -106,13 +103,16 @@ async function writeTextImpl({path,content,revision:expected}){
   return {path,revision:revision(buffer),size:buffer.length,modifiedAt:next.mtime.toISOString()};
 }
 async function uploadFileImpl({path,contentBase64}){
-  ordinaryUser();path=filePath(path);
+  ordinaryUser();
+  if(typeof contentBase64!=='string')throw fail('上传内容不是有效的 Base64');
   const buffer=Buffer.from(contentBase64,'base64');
   if(buffer.length>UPLOAD_LIMIT)throw fail('上传文件超过 8 MiB',413);
   if(buffer.toString('base64')!==contentBase64)throw fail('上传内容不是有效的 Base64');
-  try{await fs.writeFile(path,buffer,{flag:'wx',mode:0o644});}
-  catch(error){if(error.code==='EEXIST')throw fail('同名文件已存在，请更换名称',409);throw error;}
-  return {path,size:buffer.length};
+  return installRegularFile(path,buffer.length,async(chunk,position)=>{
+    const count=Math.min(chunk.length,buffer.length-position);
+    buffer.copy(chunk,0,position,position+count);
+    return count;
+  });
 }
 
 async function createEntryImpl({path,type}){
@@ -147,16 +147,7 @@ async function deleteEntryImpl({path}){
 function expose(operation){
   return async input=>{
     try{return await operation(input);}
-    catch(error){
-      if(error.statusCode)throw error;
-      const codes={ENOENT:[404,'文件或目录不存在'],ENOTDIR:[400,'路径不是目录'],EISDIR:[400,'路径指向目录'],
-        EACCES:[403,'执行账户没有访问此文件或目录的权限，或目录被服务隔离'],EPERM:[403,'执行账户没有执行此文件操作的权限'],
-        EROFS:[403,'当前目录所在文件系统只读，可能受面板服务隔离限制'],ENOSPC:[507,'磁盘空间不足'],ELOOP:[400,'无法解析符号链接'],
-        EEXIST:[409,'同名文件或目录已存在'],ENOTEMPTY:[409,'目标目录不是空目录'],
-        ENAMETOOLONG:[400,'路径或名称过长'],EINVAL:[400,'文件操作参数无效'],EBUSY:[409,'文件或挂载点正在使用'],EXDEV:[409,'不支持跨文件系统操作']};
-      const [status,message]=codes[error.code] ?? [500,'文件操作失败'];
-      throw fail(message,status);
-    }
+    catch(error){mapFileError(error);}
   };
 }
 async function chmodEntryImpl({path,mode}){
