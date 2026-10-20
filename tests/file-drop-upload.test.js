@@ -69,8 +69,49 @@ test('plain DataTransfer.files fallback and multi-file picker are supported',asy
     ['alpha.txt','beta.txt']);
   assert.deepEqual(collectSelectedFiles(picked).map(x=>x.relativePath),
     ['alpha.txt','beta.txt']);
-  assert.equal(collectSelectedFiles([{...file('nested.txt'),
-    webkitRelativePath:'folder/nested.txt'}])[0].relativePath,'folder/nested.txt');
+  assert.deepEqual(collectSelectedFiles([{...file('nested.txt'),
+    webkitRelativePath:'folder/nested.txt'}]).map(x=>[x.type,x.relativePath]),
+    [['directory','folder'],['file','folder/nested.txt']]);
+});
+test('a stale FileSystemFileEntry is an isolated per-file error, not a failed folder batch',async()=>{
+  const missing={name:'cloud-placeholder.txt',isFile:true,isDirectory:false,
+    file:(ok,error)=>error(Object.assign(Error('A requested file or directory could not be found at the time an operation was processed.'),{name:'NotFoundError'}))};
+  const folder=directory('assets',[missing,fileEntry('healthy.txt'),directory('empty',[])]);
+  const results=await collectDroppedItems({items:[{kind:'file',webkitGetAsEntry:()=>folder}]});
+  assert.deepEqual(results.map(x=>[x.type,x.relativePath]),[
+    ['directory','assets'],['error','assets/cloud-placeholder.txt'],
+    ['file','assets/healthy.txt'],['directory','assets/empty']]);
+  assert.match(results[1].message,/浏览器无法读取/);
+});
+test('modern directory handle fails and falls back to WebKit directory entry',async()=>{
+  const folder=directory('recovery',[fileEntry('ok.txt')]);
+  const handle={kind:'directory',name:'recovery',async *values(){
+    throw Object.assign(Error('not found'),{name:'NotFoundError'});
+  }};
+  const results=await collectDroppedItems({items:[{kind:'file',webkitGetAsEntry:()=>folder,
+    getAsFileSystemHandle:()=>Promise.resolve(handle)}]});
+  assert.deepEqual(results.map(x=>x.relativePath),['recovery','recovery/ok.txt']);
+});
+test('modern file handle missing falls back to captured ordinary File',async()=>{
+  const value=file('unavailable.txt');
+  const handle={kind:'file',name:value.name,async getFile(){
+    throw Object.assign(Error('not found'),{name:'NotFoundError'});
+  }};
+  const results=await collectDroppedItems({items:[{kind:'file',
+    webkitGetAsEntry:()=>null,getAsFile:()=>value,
+    getAsFileSystemHandle:()=>Promise.resolve(handle)}]});
+  assert.deepEqual(results.map(x=>x.type),['file']);
+  assert.equal(results[0].file,value);
+});
+test('directory picker creates each parent directory just once',()=>{
+  const values=[
+    {...file('a.txt'),webkitRelativePath:'album/2026/a.txt'},
+    {...file('b.txt'),webkitRelativePath:'album/2026/b.txt'},
+    {...file('c.txt'),webkitRelativePath:'album/c.txt'}
+  ];
+  assert.deepEqual(collectSelectedFiles(values).map(x=>[x.type,x.relativePath]),[
+    ['directory','album'],['directory','album/2026'],
+    ['file','album/2026/a.txt'],['file','album/2026/b.txt'],['file','album/c.txt']]);
 });
 test('invalid relative paths, duplicates, oversized batches and depth fail closed',async()=>{
   for(const path of ['/etc/passwd','../escape','a/../escape','x\\y','a//b','a/.','x\u0000a','']){
