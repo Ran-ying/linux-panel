@@ -1322,7 +1322,7 @@ try {
         assert.deepEqual(items.map(i=>i.tag),['BUTTON','INPUT','BUTTON']);
         assert.deepEqual(items.filter(i=>i.tag==='BUTTON').map(i=>i.label),['上一级','打开目录']);
         assert.ok(items.every(i=>Math.abs(i.height-items[0].height)<1 && Math.abs(i.top-items[0].top)<1),'three equal-height controls stay on one row');
-        assert.deepEqual(await browser.locator('.file-toolbar>button').allTextContents(),['上传文件','新建文件','新建文件夹']);
+        assert.deepEqual(await browser.locator('.file-toolbar>button').allTextContents(),['上传文件','上传文件夹','新建文件','新建文件夹']);
         assert.equal(await browser.locator('.file-toolbar.panel-control-capsule').count(),0,
           'file creation/upload are standalone commands, not a grouped segmented capsule');
         assert.equal(await browser.getByText('可将文件拖入此处上传',{exact:true}).count(),0);
@@ -1334,7 +1334,7 @@ try {
         await browser.getByRole('textbox',{name:'目录路径',exact:true}).fill(lockedFixture);
         await browser.getByRole('button',{name:'打开目录',exact:true}).click();
         await browser.getByText('面板服务账户没有当前目录的写入权限。请打开可写目录后新建或上传文件。',{exact:true}).waitFor();
-        for(const label of ['上传文件','新建文件','新建文件夹'])assert.equal(await browser.getByRole('button',{name:label,exact:true}).isDisabled(),true);
+        for(const label of ['上传文件','上传文件夹','新建文件','新建文件夹'])assert.equal(await browser.getByRole('button',{name:label,exact:true}).isDisabled(),true);
         await browser.getByRole('textbox',{name:'目录路径',exact:true}).fill(fileFixture);
         await browser.getByRole('button',{name:'打开目录',exact:true}).click();
         await browser.getByRole('button',{name:'note.txt',exact:true}).click();
@@ -1480,6 +1480,8 @@ try {
           ]}});
           element.dispatchEvent(event);
         },width);
+        assert.equal(await browser.locator('input[type="file"][webkitdirectory]').count(),1,
+          'native folder chooser fallback must exist');
         await browser.getByText('上传完成：4 个文件、3 个文件夹',{exact:true}).waitFor();
         assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'top.txt'),'utf8'),'top-'+width);
         assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'nested','deep.txt'),'utf8'),'deep-'+width);
