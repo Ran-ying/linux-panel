@@ -75,6 +75,7 @@ export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDe
             :{type:'file',name:child.name,handle:child},path,depth+1);
         }
       }catch(cause){
+        if(/^(拖入内容|拖入项目过多|文件夹嵌套层级过深)/.test(cause?.message||''))throw cause;
         // A legacy entry can rescue a modern handle that wasn't usable.
         // Only restart enumeration when nothing was traversed, avoiding
         // duplicate uploads after a partially successful traversal.
