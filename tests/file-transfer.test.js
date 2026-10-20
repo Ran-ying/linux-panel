@@ -75,6 +75,32 @@ test('chunked upload resumes after a new process and a torn chunk',async t=>{
   await assert.rejects(resumed.status({uploadId:session.uploadId}),{statusCode:404});
 });
 
+test('concurrent upload-session creation cannot sweep another new session or exceed the limit',async t=>{
+  const {folder,transfer}=await fixture(t,{chunkSize:4,maxSessions:8});
+  const contents=Array.from({length:8},(_,index)=>Buffer.from('data-'+index));
+  const started=await Promise.all(contents.map((bytes,index)=>
+    transfer.open({path:join(folder,'parallel-'+index+'.bin'),size:bytes.length})));
+  assert.equal(new Set(started.map(item=>item.uploadId)).size,8);
+  for(const session of started){
+    const status=await transfer.status({uploadId:session.uploadId});
+    assert.equal(status.offset,0);
+    assert.equal(status.receivedBytes,0);
+  }
+  await assert.rejects(
+    transfer.open({path:join(folder,'extra.bin'),size:1}),
+    {statusCode:429}
+  );
+  // This test exercises parallel session OPEN, not parallel chunk writes:
+  // the independent maxInflight=4 guard is tested separately.
+  for(const [index,session] of started.entries()){
+    const content=contents[index];
+    for(let offset=0;offset<content.length;offset+=4)
+      await put(transfer,session.uploadId,offset,content.subarray(offset,Math.min(offset+4,content.length)));
+    await transfer.commit({uploadId:session.uploadId});
+    assert.deepEqual(await readFile(join(folder,'parallel-'+index+'.bin')),content);
+  }
+});
+
 test('same-named files are overwritten and directories merge without dropping existing files',async t=>{
   const {folder,transfer}=await fixture(t);
   const dir=join(folder,'folder');

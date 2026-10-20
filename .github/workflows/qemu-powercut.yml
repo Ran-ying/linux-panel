@@ -8,6 +8,8 @@ on:
       - ".github/workflows/qemu-powercut.yml"
       - "platform/state-store.js"
       - "scripts/update-worker.sh"
+      - "platform/privileged/file-transfer.js"
+      - "tests/file-transfer.test.js"
   workflow_dispatch:
 
 permissions:
