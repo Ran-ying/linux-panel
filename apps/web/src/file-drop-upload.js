@@ -100,7 +100,7 @@ export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDe
 export function collectDroppedItems(transfer){
   if(!transfer)return Promise.resolve([]);
   const items=Array.from(transfer.items||[]);
-  const captures=[],fallbacks=[];
+  const captures=[];
   for(const item of items){
     if(item.kind!=='file')continue;
     // Capture entry, fallback File and start getAsFileSystemHandle *synchronously*
@@ -113,7 +113,6 @@ export function collectDroppedItems(transfer){
     try{handle=item.getAsFileSystemHandle?.()??null;}
     catch{/* not supported outside a secure context */}
     if(!entry&&!file&&!handle)continue;
-    if(file)fallbacks.push(file);
     captures.push(Promise.resolve(handle).catch(()=>null).then(resolved=>{
       if(resolved){
         return resolved.kind==='directory'
@@ -133,7 +132,20 @@ export function collectDroppedItems(transfer){
   return Promise.all(captures).then(sources=>walkDropSources(sources.filter(Boolean)));
 }
 export function collectSelectedFiles(files){
-  return Array.from(files||[]).map(file=>({
-    type:'file',relativePath:safeRelativePath(file.webkitRelativePath||file.name),file
-  }));
+  const entries=[],directories=new Set();
+  for(const file of Array.from(files||[])){
+    const path=safeRelativePath(file.webkitRelativePath||file.name);
+    const names=path.split('/');
+    for(let i=1;i<names.length;i++){
+      const folder=names.slice(0,i).join('/');
+      if(!directories.has(folder)){
+        directories.add(folder);
+        entries.push({type:'directory',relativePath:folder});
+      }
+    }
+    entries.push({type:'file',relativePath:path,file});
+    if(entries.length>MAX_DROP_ENTRIES)
+      throw Error('选择的项目过多，请分批上传（最多 '+MAX_DROP_ENTRIES+' 项）');
+  }
+  return entries;
 }
