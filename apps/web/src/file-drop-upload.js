@@ -47,8 +47,15 @@ export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDe
     const path=childPath(prefix,source.name);
     if(source.type==='file'){
       try{
-        const file=source.file?await source.file:
-          source.handle?await source.handle.getFile():await readWebkitFile(source.entry);
+        let file;
+        if(source.handle){
+          try{file=await source.handle.getFile();}
+          catch(cause){
+            if(source.entry)file=await readWebkitFile(source.entry);
+            else if(source.fallbackFile)file=source.fallbackFile;
+            else throw cause;
+          }
+        }else file=source.file?await source.file:await readWebkitFile(source.entry);
         if(!file)throw Error('读取结果为空');
         add({type:'file',relativePath:path,file});
       }catch(cause){
@@ -58,7 +65,9 @@ export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDe
     }
     if(source.type!=='directory')throw Error('不支持的拖入项目');
     add({type:'directory',relativePath:path});
+    let useLegacy=!source.handle;
     if(source.handle){
+      const before=results.length;
       try{
         for await(const child of source.handle.values()){
           await traverse(child.kind==='directory'
@@ -66,11 +75,14 @@ export async function walkDropSources(sources,{maxEntries=MAX_DROP_ENTRIES,maxDe
             :{type:'file',name:child.name,handle:child},path,depth+1);
         }
       }catch(cause){
-        // A missing directory or an unreadable cloud-placeholder should not
-        // discard already traversed siblings. Keep a distinct error record.
-        errorItem(path+'/（读取失败）',cause);
+        // A legacy entry can rescue a modern handle that wasn't usable.
+        // Only restart enumeration when nothing was traversed, avoiding
+        // duplicate uploads after a partially successful traversal.
+        if(source.entry&&results.length===before)useLegacy=true;
+        else errorItem(path+'/（读取失败）',cause);
       }
-    }else{
+    }
+    if(useLegacy){
       let reader;
       try{reader=source.entry.createReader();}
       catch(cause){errorItem(path+'/（读取失败）',cause);return;}
@@ -116,8 +128,8 @@ export function collectDroppedItems(transfer){
     captures.push(Promise.resolve(handle).catch(()=>null).then(resolved=>{
       if(resolved){
         return resolved.kind==='directory'
-          ?{type:'directory',name:resolved.name,handle:resolved}
-          :{type:'file',name:resolved.name,handle:resolved};
+          ?{type:'directory',name:resolved.name,handle:resolved,entry}
+          :{type:'file',name:resolved.name,handle:resolved,entry,fallbackFile:file};
       }
       if(entry)return entry.isDirectory
         ?{type:'directory',name:entry.name,entry}
