@@ -1490,6 +1490,32 @@ try {
         assert.equal(await readFile(join(fileFixture,'batch-a-'+width+'.txt'),'utf8'),'batch-a');
         assert.equal(await readFile(join(fileFixture,'batch-b-'+width+'.txt'),'utf8'),'batch-b');
 
+        // One stale browser file handle must not discard the rest of a folder.
+        await browser.evaluate((element,width)=>{
+          const good={name:'healthy.txt',isFile:true,isDirectory:false,
+            file:callback=>callback(new File(['healthy'],'healthy.txt'))};
+          const missing={name:'missing-cloud-file.txt',isFile:true,isDirectory:false,
+            file:(callback,error)=>error(new DOMException(
+              'A requested file or directory could not be found at the time an operation was processed.','NotFoundError'))};
+          const folder={name:'partial-folder-'+width,isDirectory:true,isFile:false,
+            createReader(){
+              let next=0;return {readEntries(callback){
+                if(next++)callback([]);
+                else callback([missing,good]);
+              }};
+            }};
+          const event=new Event('drop',{bubbles:true,cancelable:true});
+          Object.defineProperty(event,'dataTransfer',{value:{items:[
+            {kind:'file',webkitGetAsEntry:()=>folder}
+          ]}});
+          element.dispatchEvent(event);
+        },width);
+        await browser.getByText('部分上传完成：1 个文件、1 个文件夹；1 项失败',{exact:true}).waitFor();
+        await browser.getByRole('alert').filter({hasText:'partial-folder-'+width+'/missing-cloud-file.txt'}).waitFor();
+        assert.equal(await readFile(join(fileFixture,'partial-folder-'+width,'healthy.txt'),'utf8'),'healthy');
+        await assert.rejects(readFile(join(fileFixture,'partial-folder-'+width,'missing-cloud-file.txt')),{code:'ENOENT'});
+
+
         await browser.getByRole('button',{name:'new-dir-'+width+'/',exact:true}).click();
         await browser.getByRole('button',{name:'新建文件',exact:true}).click();
         await browser.getByRole('dialog',{name:'新建文件',exact:true}).getByRole('textbox',{name:'名称',exact:true}).fill('child.txt');
