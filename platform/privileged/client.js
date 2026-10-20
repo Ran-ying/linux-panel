@@ -62,6 +62,7 @@ export class PrivilegedActionClient {
           if(value.ok!==true){
             const error=failure(value.error||'root 操作失败',value.statusCode||500);
             if(Number.isInteger(value.offset))error.offset=value.offset;
+            if(Number.isInteger(value.receivedBytes))error.receivedBytes=value.receivedBytes;
             done(error);
             return;
           }

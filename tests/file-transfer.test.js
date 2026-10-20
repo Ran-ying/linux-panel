@@ -9,7 +9,7 @@ import {once} from 'node:events';
 import {File} from 'node:buffer';
 import {createFileTransfer,parseByteRange} from '../platform/privileged/file-transfer.js';
 import {ByteQueue} from '../platform/privileged/socket-frame.js';
-import {uploadFile as uploadChunks,ensureDirectory} from '../apps/web/src/file-transfer.js';
+import {uploadFile as uploadChunks,ensureDirectory,runUploadPlan} from '../apps/web/src/file-transfer.js';
 import {uploadFile} from '../modules/files/fs.js';
 import {createApp} from '../apps/api/src/create-app.js';
 import {StateStore} from '../platform/state-store.js';
@@ -165,7 +165,7 @@ test('HTTP upload is authenticated, chunked, resumable and does not audit paths 
   const mismatch=await app.inject({method:'PATCH',url:'/api/files/uploads/'+uploadId,headers:{
     ...headers,'content-type':'application/octet-stream','upload-offset':'0'
   },payload:Buffer.from('ZZ')});
-  assert.equal(mismatch.statusCode,409);
+  assert.equal(mismatch.statusCode,200,mismatch.body);
   assert.equal(mismatch.json().offset,2);
   await app.close();
   const restarted=await createApp(options);
@@ -241,8 +241,8 @@ test('browser uploader slices chunks, resumes and does not read the whole file',
     if(options.method==='PATCH'){
       const bytes=Buffer.from(await options.body.arrayBuffer());
       sent.push([...bytes]);
-      offset+=bytes.length;
-      return {status:200,ok:true,json:async()=>({offset})};
+      const at=Number(options.headers['Upload-Offset']);
+      return {status:200,ok:true,json:async()=>({offset:at+bytes.length})};
     }
     if(String(url).endsWith('/complete'))return {status:200,ok:true,json:async()=>({path:'/tmp/piece.bin',size:7})};
     throw Error('unexpected '+url);
@@ -250,8 +250,9 @@ test('browser uploader slices chunks, resumes and does not read the whole file',
   const progress=[];
   storage.value='stale';
   await uploadChunks({file,path:'/tmp/piece.bin',csrf:'token',storage,fetchImpl,onProgress:value=>progress.push(value.loaded)});
-  assert.deepEqual(sent,[[1,2,3],[4,5,6],[7]]);
-  assert.deepEqual(progress,[0,3,6,7]);
+  assert.deepEqual(sent.map(chunk=>chunk.join(',')).sort(),['1,2,3','4,5,6','7']);
+  assert.equal(progress[0],0);
+  assert.equal(progress.at(-1),7);
   assert.equal(storage.value,null);
   offset=4;
   storage.value='11111111-1111-4111-8111-111111111111';
@@ -261,7 +262,7 @@ test('browser uploader slices chunks, resumes and does not read the whole file',
     return fetchImpl(url,options);
   };
   await uploadChunks({file,path:'/tmp/piece.bin',csrf:'token',storage,fetchImpl:fetchResume});
-  assert.deepEqual(sent,[[5,6,7]]);
+  assert.deepEqual(sent,[[5,6],[7]]);
   await ensureDirectory({path:'/tmp/folder',csrf:'token',fetchImpl:async()=>({status:200,ok:true,json:async()=>({path:'/tmp/folder',created:false})})});
 });
 
@@ -296,4 +297,100 @@ test('privileged socket streams binary chunks and a ranged read without a JSON b
   raw.destroy();
   await client.execute({id:'files.create',privileged:{channels:['web']}},{path:join(folder,'plain.txt'),type:'file'},caller);
   assert.equal(await readFile(join(folder,'plain.txt'),'utf8'),'');
+});
+
+test('out-of-order and concurrent chunks commit only when the file has no holes',async t=>{
+  const {folder,transfer}=await fixture(t,{chunkSize:4});
+  const path=join(folder,'wide.bin');
+  const bytes=Buffer.from('abcdefghij');
+  const session=await transfer.open({path,size:bytes.length});
+  await put(transfer,session.uploadId,4,bytes.subarray(4,8));
+  const early=await transfer.status({uploadId:session.uploadId});
+  assert.equal(early.offset,0);
+  assert.equal(early.receivedBytes,4);
+  await assert.rejects(transfer.commit({uploadId:session.uploadId}),error=>{
+    assert.equal(error.statusCode,409);assert.equal(error.message,'上传尚未完成');return true;
+  });
+  await Promise.all([
+    put(transfer,session.uploadId,8,bytes.subarray(8)),
+    put(transfer,session.uploadId,0,bytes.subarray(0,4))
+  ]);
+  const duplicate=await put(transfer,session.uploadId,0,Buffer.from('XXXX'));
+  assert.equal(duplicate.offset,bytes.length);
+  assert.equal(duplicate.receivedBytes,bytes.length);
+  assert.deepEqual(await readFile((await transfer.commit({uploadId:session.uploadId})).path),bytes);
+});
+
+test('in-flight chunk limit rejects another write and commit waits for the active chunk',async t=>{
+  const {folder,transfer}=await fixture(t,{chunkSize:4,maxInflight:1});
+  const path=join(folder,'slow.bin');
+  const bytes=Buffer.from('abcdefgh');
+  const session=await transfer.open({path,size:bytes.length});
+  let push=null;
+  const started=new Promise(resolve=>{
+    const blocked=new Readable({read(){if(!push){push=chunk=>this.push(chunk);resolve();}}});
+    transfer.write({uploadId:session.uploadId,offset:0,length:4},blocked).then(result=>{
+      assert.equal(result.offset,4);
+    });
+  });
+  await started;
+  await assert.rejects(put(transfer,session.uploadId,4,bytes.subarray(4)),{statusCode:429});
+  const commit=transfer.commit({uploadId:session.uploadId});
+  push(bytes.subarray(0,4));
+  push(null);
+  await assert.rejects(commit,error=>{
+    assert.equal(error.statusCode,409);assert.equal(error.message,'上传尚未完成');return true;
+  });
+  await put(transfer,session.uploadId,4,bytes.subarray(4));
+  assert.deepEqual(await readFile((await transfer.commit({uploadId:session.uploadId})).path),bytes);
+});
+
+test('browser keeps several chunks of one file in flight',async()=>{
+  const data=Uint8Array.from({length:9},(_,index)=>index+1);
+  const file=new File([data],'wide.bin',{lastModified:3});
+  let inflight=0,max=0;
+  const fetchImpl=async(url,options={})=>{
+    if(url==='/api/files/uploads'&&options.method==='POST')
+      return {status:200,ok:true,json:async()=>({uploadId:'11111111-1111-4111-8111-111111111111',offset:0,receivedBytes:0,size:9,chunkSize:3})};
+    if(options.method==='PATCH'){
+      inflight++;max=Math.max(max,inflight);
+      await new Promise(resolve=>setTimeout(resolve,20));
+      inflight--;
+      const at=Number(options.headers['Upload-Offset']);
+      const length=options.body.size;
+      return {status:200,ok:true,json:async()=>({offset:at+length,receivedBytes:at+length})};
+    }
+    if(String(url).endsWith('/complete'))return {status:200,ok:true,json:async()=>({size:9})};
+    throw Error('unexpected '+url);
+  };
+  await uploadChunks({file,path:'/tmp/wide.bin',csrf:'token',fetchImpl,concurrency:2});
+  assert.equal(max,2);
+});
+
+test('folder upload continues sibling files when a parent directory fails',async()=>{
+  const created=[],uploaded=[];
+  let inflight=0,max=0;
+  const entries=[
+    {type:'directory',relativePath:'a'},
+    {type:'directory',relativePath:'a/b'},
+    {type:'file',relativePath:'a/b/c.txt'},
+    {type:'file',relativePath:'alone.txt'},
+    {type:'file',relativePath:'other.txt'}
+  ];
+  const plan=await runUploadPlan({entries,concurrency:2,
+    createDirectory:async relative=>{
+      created.push(relative);
+      if(relative==='a')throw Error('mkdir failed');
+    },
+    upload:async(entry,limiter)=>limiter(async()=>{
+      inflight++;max=Math.max(max,inflight);
+      await new Promise(resolve=>setTimeout(resolve,20));
+      inflight--;
+      uploaded.push(entry.relativePath);
+    })});
+  assert.deepEqual(created,['a']);
+  assert.deepEqual(uploaded.sort(),['alone.txt','other.txt']);
+  assert.equal(max,2);
+  assert.equal(plan.results.find(result=>result.entry.relativePath==='a/b/c.txt').skipped,true);
+  assert.equal(plan.results.find(result=>result.entry.relativePath==='a/b').ok,false);
 });

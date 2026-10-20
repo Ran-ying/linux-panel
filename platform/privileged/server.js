@@ -84,6 +84,7 @@ export async function startPrivilegedServer({socketPath,groupId,handlers=createP
       audit({event:'privileged.execute',action:handlers.has(action)?action:'unknown',ok:false,statusCode});
       const payload={ok:false,error:message,statusCode};
       if(Number.isInteger(error.offset))payload.offset=error.offset;
+      if(Number.isInteger(error.receivedBytes))payload.receivedBytes=error.receivedBytes;
       finish(payload).catch(()=>socket.destroy());
     });
   });

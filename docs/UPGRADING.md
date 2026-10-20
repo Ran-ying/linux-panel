@@ -2,7 +2,7 @@
 
 文件管理的上传和下载改为 1 MiB 分块流，支持断点续传和 HTTP Range。同名文件覆盖，同名目录合并。全局请求体限制没有放宽到整文件大小。若前面有 Nginx，需要在 `/api/files/` 上允许约 2 MiB 请求体并关闭请求缓冲；仓库模板已更新，已经部署的 vhost 要由管理员自行合并，面板不会改 Nginx。
 
-已启用 root 执行器的机器，在普通面板更新之外，还要让固定 root 包包含新的 `files.transfer`。已迁移的更新 Broker 会在下一次可信 main 部署里同步该包；尚未迁移的机器仍要显式重装 root 执行器。root 通道在线但 handler 过旧时，上传不会退回普通账户。详见 [FILES.md](FILES.md) 和 [PRIVILEGED.md](PRIVILEGED.md)。
+已启用 root 执行器的机器，在普通面板更新之外，还要让固定 root 包包含新的 `files.transfer`。已迁移的更新 Broker 会在下一次可信 main 部署里同步该包；尚未迁移的机器仍要显式重装 root 执行器。root 通道在线但 handler 过旧时，上传不会退回普通账户。并发上传会乱序提交分块；旧的 `files.transfer` 只接受紧挨已接收末尾的下一块，遇到更新后的面板会拒绝这些分块，而不是退回普通账户。详见 [FILES.md](FILES.md) 和 [PRIVILEGED.md](PRIVILEGED.md)。
 
 # 自动升级受控 root handler（需要一次初始迁移，2026-10-16）
 

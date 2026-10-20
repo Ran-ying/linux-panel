@@ -92,7 +92,8 @@ export function registerFileTransferRoutes(app,{auth,store,privilegedClient,uplo
       return await invoke(request,{op:'write',uploadId:request.params.uploadId,offset,length},request.body);
     }catch(error){
       if(error.statusCode===409&&Number.isInteger(error.offset))
-        return reply.code(409).send({error:error.message,offset:error.offset});
+        return reply.code(409).send({error:error.message,offset:error.offset,
+          ...(Number.isInteger(error.receivedBytes)?{receivedBytes:error.receivedBytes}:{})});
       throw error;
     }
   });
