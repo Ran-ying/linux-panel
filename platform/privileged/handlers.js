@@ -1,6 +1,7 @@
 import Ajv from 'ajv';
 import {FILE_CONTRACTS} from './file-contracts.js';
 import {createFileOperations} from './file-operations.js';
+import {FILE_TRANSFER_SCHEMA,createFileTransfer,rootUploadDir} from './file-transfer.js';
 import {CRON_CONTRACTS} from './cron-contracts.js';
 import {createCronOperations} from './cron-operations.js';
 import {NGINX_CONTRACTS} from './nginx-contracts.js';
@@ -18,11 +19,15 @@ import {createCertbotOperations} from './certbot-operations.js';
 import {createNginxRenewalReconfigure,NGINX_RECONFIGURE_CONTRACT} from './nginx-renewal-reconfigure.js';
 // Add reviewed built-in handlers here, then explicitly reinstall the root package.
 // Never discover/import modules from the checkout or a Web-writable directory.
-export function createPrivilegedHandlers({privileged=true}={}){
+export function createPrivilegedHandlers({privileged=true,uploadDir=rootUploadDir()}={}){
   const ajv=new Ajv({strict:false,allErrors:true}),operations=createFileOperations({privileged});
   const handlers=new Map(Object.entries(FILE_CONTRACTS).map(([name,contract])=>['files.'+name,{
     validate:ajv.compile(contract.inputSchema),execute:operations[name]
   }]));
+  const transfer=createFileTransfer({privileged,uploadDir});
+  handlers.set('files.transfer',{
+    channels:['web'],validate:ajv.compile(FILE_TRANSFER_SCHEMA),execute:(input,stream)=>transfer.dispatch(input,stream)
+  });
   const cron=createCronOperations();
   for(const [name,contract] of Object.entries(CRON_CONTRACTS))
     handlers.set('cron.'+name,{validate:ajv.compile(contract.inputSchema),execute:cron[name]});

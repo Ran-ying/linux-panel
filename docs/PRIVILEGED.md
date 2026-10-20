@@ -36,13 +36,15 @@ sudo bash /opt/linux-panel/scripts/install-privileged-executor.sh --disable
 
 ## 协议与调度
 
-一连接一请求/响应，UTF-8 JSON 加换行：
+一连接一请求/响应。版本 1 仍是一条 UTF-8 JSON 加换行：
 
 ```json
 {"version":1,"action":"files.chmod","input":{"path":"/etc/example.conf","mode":"0640"},"channel":"web"}
 ```
 
-根端仅接受固定注册表中的 Action，独立 Ajv 验证同一份输入 Schema；未知操作、额外参数和非 web 通道拒绝。不解释 Shell，不接收动态源码或模块路径。请求最多 12 MiB，响应客户端最多 8 MiB，最多四个同时连接。客户端 30 秒空闲超时；文件系统操作不可保证被取消，超时后应重新读取确认结果，尤其是大目录删除。
+根端仅接受固定注册表中的 Action，独立 Ajv 验证同一份输入 Schema；未知操作、额外参数和非 web 通道拒绝。不解释 Shell，不接收动态源码或模块路径。版本 1 请求最多 12 MiB，响应客户端最多 8 MiB，最多四个同时连接。客户端 30 秒空闲超时；文件系统操作不可保证被取消，超时后应重新读取确认结果，尤其是大目录删除。
+
+文件分块使用版本 2：JSON 头一行（最多 16 KiB），写分块时后面紧跟最多 1 MiB 原始字节；读分块时响应 JSON 后同样紧跟声明长度的字节。头和二进制都不进入审计。旧 root 包不认识 `files.transfer`，更新面板代码后还要安装匹配的固定 root 包，否则 root 模式下的上传下载失败，并且不会退回普通账户。
 
 Action 元数据显式指定 privileged.channels。ActionEngine 只在客户端已配置且当前通道在声明中时调用 root；客户端再次检查受信任适配器的 authenticated/userId/channel。新写 Action 应使用 executionPolicy:privileged，仍须可信上下文；仅有 permission 字符串、exposure 或 UI 声明不授予 root。
 
@@ -50,9 +52,9 @@ Action 元数据显式指定 privileged.channels。ActionEngine 只在客户端�
 
 ## 文件模块
 
-九个标准 Actions 共用 file-contracts.js 和 createFileOperations：list/read/write/upload/create/rename/delete/chmod/chown。只有独立根 handler 以 privileged:true 建立实现，普通模块实现拒绝 UID 0。list 返回 accessMode:root/user 和真实 writeAccess。
+九个标准 Actions 共用 file-contracts.js 和 createFileOperations：list/read/write/upload/create/rename/delete/chmod/chown。分块上传和 Range 下载另外使用固定 handler `files.transfer`（`file-transfer.js`，须列入 root 包 manifest）。只有独立根 handler 以 privileged:true 建立实现，普通模块实现拒绝 UID 0。list 返回 accessMode:root/user 和真实 writeAccess。
 
-MCP 只暴露普通 list/read；七个写 Action 仅在认证 Web 接口开放。保留 UTF-8/上传限制、revision 冲突、同名保护、删除/重命名根目录禁止、递归删除确认、保留 mode/uid/gid。目录和文件操作同样受真正只读挂载、不可变属性等系统限制，root 不能保证每个挂载点可写。
+MCP 只暴露普通 list/read；七个写 Action 和分块传输仅在认证 Web 接口开放。保留 UTF-8 限制、revision 冲突、删除/重命名根目录禁止、递归删除确认、保留 mode/uid/gid。`files.upload` 与分块提交都会覆盖同名普通文件，目录名冲突失败。目录和文件操作同样受真正只读挂载、不可变属性等系统限制，root 不能保证每个挂载点可写。
 
 chmod 接收三/四位八进制，不跟随链接；chown 接收用户名/UID 和组名/GID，至少一项，数值范围 0..4294967294，名称经固定 /usr/bin/getent argv 查询，不拼接 Shell。chown 对链接使用 lchown，GUI 随后执行 chmod 恢复用户选择的 mode；两个操作不构成事务，错误后列表会重新读取。
 

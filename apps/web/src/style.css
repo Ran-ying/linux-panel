@@ -644,6 +644,14 @@ table{min-width:500px}
 .file-row-actions{flex-wrap:nowrap}
 .file-dragging{outline:2px dashed var(--accent-bg);outline-offset:6px;border-radius:8px}
 .file-drop-hint{position:absolute;inset:0;z-index:2;display:grid;place-items:center;border-radius:8px;background:var(--panel-bg);color:var(--text-primary);pointer-events:none;opacity:.95}
+.file-upload-progress{display:grid;gap:8px;margin-top:12px}
+.file-upload-summary{display:flex;justify-content:space-between;gap:12px;font-size:.85rem;color:var(--text-detail)}
+.file-upload-track{height:8px;background:var(--border-rule);border-radius:var(--ui-pill-radius);overflow:hidden}
+.file-upload-fill{height:100%;width:0;background:var(--progress-accent)}
+.file-upload-list{display:grid;gap:8px;max-height:220px;overflow:auto}
+.file-upload-file{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;font-size:.85rem;color:var(--text-primary)}
+.file-upload-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-upload-file .file-upload-track{grid-column:1 / -1}
 @media(max-width:730px){.file-entry-form input{font-size:16px}}
 
 .action-card.minimal-action>.result{border-top:0;margin-top:12px;padding-top:0}

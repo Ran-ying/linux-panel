@@ -5,6 +5,8 @@
     "handlers.js",
     "file-contracts.js",
     "file-operations.js",
+    "file-transfer.js",
+    "socket-frame.js",
     "cron-contracts.js",
     "cron-operations.js",
     "nginx-contracts.js",

@@ -15,6 +15,24 @@ server {
     limit_req_status 429;
     server_tokens off;
 
+    # Chunked file transfer only. 1 MiB chunks fit in 2m; other routes stay at 32k.
+    location /api/files/ {
+        client_max_body_size 2m;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_pass http://127.0.0.1:4188;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header Connection "";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:4188;
         proxy_http_version 1.1;

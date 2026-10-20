@@ -14,7 +14,7 @@ export const FILE_CONTRACTS={
     outputSchema:object({path:string,content:string,revision,size:integer,modifiedAt:string})},
   write:{title:'保存文本文件',description:'保存不超过 1 MiB 的 UTF-8 文本，检查原版本并保留权限及属主。',
     inputSchema:object({path,content:{type:'string',maxLength:1024*1024},revision}),outputSchema:object({path:string,revision,size:integer,modifiedAt:string})},
-  upload:{title:'上传文件',description:'上传不超过 8 MiB 的文件，排他创建，不覆盖同名文件。',
+  upload:{title:'上传文件',description:'以 Base64 上传不超过 8 MiB 的文件并覆盖同名普通文件。大文件使用分块传输。',
     inputSchema:object({path,contentBase64:{type:'string',maxLength:Math.ceil(8*1024*1024/3)*4}}),outputSchema:object({path:string,size:integer})},
   create:{title:'新建文件或目录',description:'新建空文件或文件夹，同名失败。',inputSchema:object({path,type:{type:'string',enum:['file','directory']}}),outputSchema:object({path:string})},
   rename:{title:'重命名文件或目录',description:'同一目录内重命名并检查同名冲突。',inputSchema:object({path,newPath:path}),outputSchema:object({path:string})},
