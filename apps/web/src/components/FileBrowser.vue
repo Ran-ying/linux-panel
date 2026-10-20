@@ -76,7 +76,7 @@ function uploadItems(collected){
   if(!canWrite.value){error.value='当前目录不可写，请打开有写入权限的目录后上传';return;}
   return task(async()=>{
     const entries=await collected;
-    if(!entries.length)return;
+    if(!entries.length)throw Error('未读取到拖入的文件或文件夹；请使用“上传文件夹”选择目录，或确认浏览器允许读取本地文件');
     uploadProgress.value={completed:0,total:entries.length,files:0,folders:0,failed:0};
     const failed=[],blocked=[];
     let uploadedFiles=0,createdFolders=0;
@@ -92,6 +92,7 @@ function uploadItems(collected){
           continue;
         }
         try{
+          if(entry.type==='error')throw Error(entry.message||'无法读取拖入文件');
           const path=(base==='/'?'':base)+'/'+relative;
           if(entry.type==='directory'){
             await request(props.operations.create,{path,type:'directory'});
