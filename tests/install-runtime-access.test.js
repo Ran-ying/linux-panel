@@ -44,6 +44,20 @@ test('manual updater refuses any installed Broker and restores Web access after 
   assert.match(script,/chown -R root:linuxpanel \/opt\/linux-panel/);
 });
 
+test('manual updater runs runtime-dependent tests as unprivileged Web UID with clean env',()=>{
+  const script=read('../scripts/update.sh');
+  const install=script.indexOf('npm ci --no-audit --no-fund');
+  const earlyPermissions=script.indexOf('chmod -R -- g+rX,g-w,o-w /opt/linux-panel');
+  const tests=script.indexOf('runuser -u linuxpanel -- env -i');
+  const build=script.indexOf('npm run build:web');
+  assert.ok(install>=0 && earlyPermissions>install && tests>earlyPermissions && build>tests,
+    'dependencies must be readable to ordinary Web account before running tests');
+  assert.match(script,/NODE_ENV=test/);
+  assert.match(script,/HOME=\/var\/lib\/linux-panel/);
+  assert.match(script,/\/opt\/node24\/bin\/npm test/);
+  assert.doesNotMatch(script,/^npm test$/m,'root execution of runtime-sensitive tests must be forbidden');
+});
+
 test('privileged Broker does not enlarge root capabilities to chmod updater files',()=>{
   const worker=read('../scripts/update-worker.sh');
   assert.match(worker,/as_updater chmod -R -- g\+rX,g-w,o-w "\$d"/);
