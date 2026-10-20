@@ -13,6 +13,8 @@ test('real root executor manages isolated /etc and /root fixtures including mode
   await fs.chown(runtime,0,65534);await fs.chmod(runtime,0o750);
   await fs.copyFile(new URL('../platform/privileged/client.js',import.meta.url),join(runtime,'client.mjs'));
   await fs.copyFile(new URL('../platform/privileged/socket-frame.js',import.meta.url),join(runtime,'socket-frame.js'));
+  await fs.copyFile(new URL('../platform/privileged/file-transfer.js',import.meta.url),join(runtime,'file-transfer.js'));
+  await fs.chmod(join(runtime,'file-transfer.js'),0o644);
   await fs.chmod(join(runtime,'client.mjs'),0o644);
   await fs.chmod(join(runtime,'socket-frame.js'),0o644);
   await fs.writeFile(join(runtime,'package.json'),'{"type":"module"}\n',{mode:0o644});
