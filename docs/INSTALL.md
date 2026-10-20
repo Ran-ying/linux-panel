@@ -241,11 +241,11 @@ sudo systemctl enable --now linux-panel.service
 
 ### 6.1.1 可选：Nginx 分块上传与下载代理优化
 
-Linux Panel 的文件管理支持分块上传、断点续传和 Range 下载。浏览器将上传文件分为**每块 1 MiB** 的请求发送到 \`/api/files/\`，并非一次提交完整文件。**下述 Nginx 优化不是首次安装的强制条件**：现有 Nginx 默认 1 MiB 请求体限制通常能容纳恰好 1 MiB 的块，原有 \`location /\` 转发也可能直接工作。如果公网实际上传表现正常，可以先保留现状。
+Linux Panel 的文件管理支持分块上传、断点续传和 Range 下载。浏览器将上传文件分为**每块 1 MiB** 的请求发送到 `/api/files/`，并非一次提交完整文件。**下述 Nginx 优化不是首次安装的强制条件**：现有 Nginx 默认 1 MiB 请求体限制通常能容纳恰好 1 MiB 的块，原有 `location /` 转发也可能直接工作。如果公网实际上传表现正常，可以先保留现状。
 
-若需要为分块传输留余量、减少请求缓冲或改善慢速网络下的上传稳定性，可由管理员在**面板域名的 HTTPS \`server { … }\` 块内**，与现有 \`location /\` **同级**添加以下独立 \`location\`（**不要**把整段写到现有 \`location /\` 内，也不必删除原有代理规则）：
+若需要为分块传输留余量、减少请求缓冲或改善慢速网络下的上传稳定性，可由管理员在**面板域名的 HTTPS `server { … }` 块内**，与现有 `location /` **同级**添加以下独立 `location`（**不要**把整段写到现有 `location /` 内，也不必删除原有代理规则）：
 
-\`\`\`nginx
+```nginx
 # 可选优化：只针对分块上传/下载路径，不放宽整个网站的请求体上限
 location /api/files/ {
     client_max_body_size 2m;
@@ -265,24 +265,24 @@ location /api/files/ {
     proxy_read_timeout 300s;
     proxy_send_timeout 300s;
 }
-\`\`\`
+```
 
-使用其他内部监听地址或端口时，把 \`proxy_pass\` 改为**实际后端监听地址**。上例假设 TLS 在 Nginx 终止，公网 Origin 为 HTTPS；若另有上游代理/CDN，也需要核对该层的请求大小、超时和转发规则。不要把不受信任的客户端 \`X-Forwarded-For\` 直接透传为可信来源。仓库完整参考配置位于 [Nginx 示例](../deployment/nginx/linux-panel.conf.example) 和 [公网模板](../deployment/nginx/linux-panel-public.conf.template)。
+使用其他内部监听地址或端口时，把 `proxy_pass` 改为**实际后端监听地址**。上例假设 TLS 在 Nginx 终止，公网 Origin 为 HTTPS；若另有上游代理/CDN，也需要核对该层的请求大小、超时和转发规则。不要把不受信任的客户端 `X-Forwarded-For` 直接透传为可信来源。仓库完整参考配置位于 [Nginx 示例](../deployment/nginx/linux-panel.conf.example) 和 [公网模板](../deployment/nginx/linux-panel-public.conf.template)。
 
 三个主要参数的作用：
 
-- \`client_max_body_size 2m\`：为 1 MiB 上传块留出请求大小余量；**不需要**设置成最大文件容量。
-- \`proxy_request_buffering off\`：尽量边接收边转发，而不是先完整缓冲请求体；每块只有 1 MiB，因此并非所有环境都会有明显性能差异。
-- \`proxy_read_timeout 300s\`：给上游每次读取响应数据更长的等待窗口；**不是**整个大文件必须在 300 秒内完成。
+- `client_max_body_size 2m`：为 1 MiB 上传块留出请求大小余量；**不需要**设置成最大文件容量。
+- `proxy_request_buffering off`：尽量边接收边转发，而不是先完整缓冲请求体；每块只有 1 MiB，因此并非所有环境都会有明显性能差异。
+- `proxy_read_timeout 300s`：给上游每次读取响应数据更长的等待窗口；**不是**整个大文件必须在 300 秒内完成。
 
 建议先备份自己的 Nginx 站点文件，在维护窗口编辑，再执行：
 
-\`\`\`bash
+```bash
 sudo nginx -t
 sudo systemctl reload nginx
-\`\`\`
+```
 
-\`nginx -t\` 失败时**不要重载**，先恢复配置；不需要重新安装或重启 Linux Panel。随后通过真正的 HTTPS 域名登录，在**有写入权限的测试目录**上传并下载一个超过 8 MiB 的测试文件，比较字节数或 SHA-256；如发生 HTTP 413，应检查所有代理层的请求体限制，502/504 则检查上游日志和超时。单纯访问 \`/api/auth/status\` 返回 200，**不能**证明文件传输全链路通过。
+`nginx -t` 失败时**不要重载**，先恢复配置；不需要重新安装或重启 Linux Panel。随后通过真正的 HTTPS 域名登录，在**有写入权限的测试目录**上传并下载一个超过 8 MiB 的测试文件，比较字节数或 SHA-256；如发生 HTTP 413，应检查所有代理层的请求体限制，502/504 则检查上游日志和超时。单纯访问 `/api/auth/status` 返回 200，**不能**证明文件传输全链路通过。
 
 参见 [文件管理：分块传输](FILES.md#分块上传断点续传与-range-下载2026-10-20) 与 [升级说明](UPGRADING.md)。面板安装器及更新脚本**不会自动编辑 Nginx**。
 
