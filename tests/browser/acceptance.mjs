@@ -1482,7 +1482,18 @@ try {
         },width);
         assert.equal(await browser.locator('input[type="file"][webkitdirectory]').count(),1,
           'native folder chooser fallback must exist');
-        await browser.getByText('上传完成：4 个文件、3 个文件夹',{exact:true}).waitFor();
+        try {
+          await browser.getByText('上传完成：4 个文件、3 个文件夹',{exact:true}).waitFor({timeout:12000});
+        } catch(error) {
+          const debug=await browser.evaluate(node=>({
+            status:node.querySelector('[role="status"]')?.textContent,
+            alerts:[...node.querySelectorAll('[role="alert"]')].map(n=>n.textContent),
+            notice:node.textContent.slice(-1400),
+            toolbar:[...node.querySelectorAll('.file-toolbar button')].map(n=>({text:n.textContent,disabled:n.disabled}))
+          }));
+          console.error('FOLDER_DROP_DIAGNOSTIC',JSON.stringify(debug));
+          throw error;
+        }
         assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'top.txt'),'utf8'),'top-'+width);
         assert.equal(await readFile(join(fileFixture,'drop-folder-'+width,'nested','deep.txt'),'utf8'),'deep-'+width);
         assert.ok((await stat(join(fileFixture,'drop-folder-'+width,'empty'))).isDirectory(),
