@@ -345,18 +345,24 @@ export function createFileTransfer({
       if(meta.path!==destination.path||meta.size!==size)throw fail('上传会话与文件不匹配',409);
       return progress(meta,await describe(meta));
     }
-    const live=await sweep();
-    if(live>=maxSessions)throw fail('未完成的上传过多，请稍后再试',429);
-    const id=randomUUID();
-    const paths=sessionPaths(id);
-    const now=new Date();
-    const meta={version:1,uploadId:id,path:destination.path,size,createdAt:now.toISOString(),
-      updatedAt:now.toISOString(),expiresAt:new Date(now.getTime()+ttlMs).toISOString()};
-    await fs.mkdir(paths.dir,{recursive:true,mode:0o700});
-    const created=await fs.open(paths.partial,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
-    await created.close();
-    await writeMeta(meta,paths);
-    return progress(meta,{offset:0,receivedBytes:0});
+    // A concurrent open() must never sweep another open()'s directory
+    // between mkdir and the first durable meta.json write. Serialize only
+    // session admission; upload chunks remain concurrent per their lane rules.
+    // This also makes the maxSessions check atomic within the worker process.
+    return exclusive('__create_sessions__',async()=>{
+      const live=await sweep();
+      if(live>=maxSessions)throw fail('未完成的上传过多，请稍后再试',429);
+      const id=randomUUID();
+      const paths=sessionPaths(id);
+      const now=new Date();
+      const meta={version:1,uploadId:id,path:destination.path,size,createdAt:now.toISOString(),
+        updatedAt:now.toISOString(),expiresAt:new Date(now.getTime()+ttlMs).toISOString()};
+      await fs.mkdir(paths.dir,{recursive:true,mode:0o700});
+      const created=await fs.open(paths.partial,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
+      await created.close();
+      await writeMeta(meta,paths);
+      return progress(meta,{offset:0,receivedBytes:0});
+    });
   }
   async function status({uploadId}={}){
     const meta=await readMeta(uploadId);
